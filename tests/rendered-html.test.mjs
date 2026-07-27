@@ -47,22 +47,23 @@ test("starter preview is removed and design safeguards remain", async () => {
   assert.doesNotMatch(layout, /Starter Project|codex-preview|_sites-preview/);
 });
 
-test("카페 소속과 추정 정보가 장식 없이 구분된다", async () => {
+test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", async () => {
   const [css, receipt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.receipt--confirmed \.intro\s*\{[^}]*border-left:\s*2px solid/);
   assert.match(css, /\.receipt--guess \.intro\s*\{[^}]*border-left:\s*2px dashed/);
-  assert.match(css, /\.receipt__identity::before/);
-  assert.match(receipt, /비빈 파트너 소속/);
-  assert.match(receipt, /원두도감 소속/);
+  assert.match(css, /\.receipt\s*\{[^}]*--ticket-notch-y:\s*138px;[^}]*radial-gradient\(circle 11px at 0 var\(--ticket-notch-y\), transparent 98%, #010101\)/s);
+  assert.doesNotMatch(css, /\.receipt__identity::before|\.receipt__affiliation/);
+  assert.match(receipt, /<b>\{confirmed \? "비빈 파트너" : "원두도감"\}<\/b>/);
+  assert.doesNotMatch(receipt, /소속|receipt__affiliation/);
+  assert.doesNotMatch(receipt, /<div className="dashed-rule" \/>\s*<div className="receipt__identity">/);
   assert.match(receipt, /상호명과 위치로 자동 추정한 정보입니다/);
   assert.match(receipt, /className=\{`receipt-action save-button/);
   assert.match(receipt, /className="receipt-action text-button"/);
   assert.doesNotMatch(receipt, /className="stamp"|비빈이 다녀갔습니다|\{confirmed \? "확정"/);
 });
-
 test("공유 링크와 새로고침이 살아 있다", async () => {
   // 03_기능_명세 §1 — "공유·뒤로가기·새로고침이 전부 정상 동작해야 합니다."
   // 카페 하나를 링크로 공유할 수 있어야 브랜드 확산이 일어납니다.

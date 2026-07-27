@@ -28,7 +28,7 @@ export function Receipt({
       <header className="receipt__topline">
         <span className="brand-lockup">
           <CodexMark size={18} />
-          <b>원두도감</b>
+          <b>{confirmed ? "비빈 파트너" : "원두도감"}</b>
         </span>
         <button className="icon-button" type="button" onClick={onClose} aria-label="영수증 닫기">
           ×
@@ -43,12 +43,7 @@ export function Receipt({
         <span className="receipt__serial">NO.{serial}</span>
       </p>
 
-      <div className="dashed-rule" />
-
-      <div className={`receipt__identity ${confirmed ? "is-partner" : "is-codex"}`}>
-        <p className="receipt__affiliation">
-          {confirmed ? "비빈 파트너 소속" : "원두도감 소속"}
-        </p>
+      <div className="receipt__identity">
         <h1 className="receipt__name">{cafe.name}</h1>
         <p className="romanized">{cafe.romanized}</p>
       </div>

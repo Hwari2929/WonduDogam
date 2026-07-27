@@ -814,16 +814,29 @@ a:focus-visible,
   background: var(--paper);
   color: var(--ink);
   --tear: 7px;
+  animation: print 900ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+}
+.codex {
   mask:
     radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2)
       100% repeat-x,
     radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% /
       calc(var(--tear) * 2) 100% repeat-x;
   mask-composite: intersect;
-  animation: print 900ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
 }
-
-
+.receipt {
+  --ticket-notch-y: 138px;
+  mask:
+    radial-gradient(circle 11px at 0 var(--ticket-notch-y), transparent 98%, #010101) 0 0 / 100%
+      100% no-repeat,
+    radial-gradient(circle 11px at 100% var(--ticket-notch-y), transparent 98%, #010101) 0 0 /
+      100% 100% no-repeat,
+    radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2)
+      100% repeat-x,
+    radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% /
+      calc(var(--tear) * 2) 100% repeat-x;
+  mask-composite: intersect;
+}
 .receipt__topline {
   display: flex;
   align-items: center;
@@ -873,49 +886,9 @@ a:focus-visible,
 }
 
 .receipt__identity {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
   margin: 18px -20px 0;
   padding: 20px 30px 18px;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px dashed var(--rule);
   background: var(--paper-edge);
-}
-.receipt__identity::before,
-.receipt__identity::after {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--paper);
-  transform: translateY(-50%);
-}
-.receipt__identity::before {
-  left: -11px;
-}
-.receipt__identity::after {
-  right: -11px;
-}
-.receipt__identity > * {
-  position: relative;
-  z-index: 1;
-}
-.receipt__affiliation {
-  margin-bottom: 8px;
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  font-weight: 800;
-  letter-spacing: var(--ls-label-ko);
-}
-.receipt__identity.is-partner .receipt__affiliation {
-  color: var(--stamp);
-}
-.receipt__identity.is-codex .receipt__affiliation {
-  color: var(--bean);
 }
 .receipt__name {
   font-family: var(--font-display);
