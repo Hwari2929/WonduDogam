@@ -1653,6 +1653,42 @@ a:focus-visible,
   }
 }
 
+/* ── 카페 사진 자리 ── */
+.receipt__photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  margin: 16px 0 18px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bean) 7%, transparent), transparent 55%), var(--paper-edge);
+}
+.receipt__photo::before,
+.receipt__photo::after {
+  content: "";
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-color: color-mix(in srgb, var(--ink-faint) 55%, transparent);
+  pointer-events: none;
+}
+.receipt__photo::before { inset: 7px auto auto 7px; border-top: 1px solid; border-left: 1px solid; }
+.receipt__photo::after { inset: auto 7px 7px auto; border-right: 1px solid; border-bottom: 1px solid; }
+.receipt__photo img { width: min(42%, 132px); height: auto; filter: drop-shadow(0 8px 12px var(--shadow)); }
+.receipt__photo figcaption {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  display: grid;
+  justify-items: end;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+}
+.receipt__photo figcaption span { font-size: 9px; }
+.receipt__photo figcaption small { font-size: 8px; letter-spacing: 0; }
 /* ── 다중 도감 ── */
 .codex__collections {
   display: flex;

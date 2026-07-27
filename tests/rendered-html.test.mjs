@@ -57,6 +57,8 @@ test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", a
   assert.match(css, /\.receipt\s*\{[^}]*--ticket-notch-y:\s*138px;[^}]*radial-gradient\(circle 11px at 0 var\(--ticket-notch-y\), transparent 98%, #010101\)/s);
   assert.doesNotMatch(css, /\.receipt__identity::before|\.receipt__affiliation/);
   assert.match(receipt, /<b>\{confirmed \? "비빈 파트너" : "원두도감"\}<\/b>/);
+  assert.match(receipt, /className="receipt__photo"[\s\S]*bibean-inspecting\.png/);
+  assert.match(css, /\.receipt__photo\s*\{[^}]*aspect-ratio:\s*16 \/ 9/s);
   assert.doesNotMatch(receipt, /소속|receipt__affiliation/);
   assert.doesNotMatch(receipt, /<div className="dashed-rule" \/>\s*<div className="receipt__identity">/);
   assert.match(receipt, /상호명과 위치로 자동 추정한 정보입니다/);
