@@ -456,7 +456,10 @@ a:focus-visible,
   color: var(--ink-soft);
 }
 .map-marker--partner.is-active::after {
-  inset: -7px -7px 20px;
+  width: 48px;
+  height: 48px;
+  inset: 17px auto auto 50%;
+  transform: translate(-50%, -50%);
   color: var(--stamp);
 }
 
@@ -1583,6 +1586,28 @@ a:focus-visible,
 }
 
 /* 영수증은 애니메이션 없이 그냥 거기 놓여 있으면 됩니다. 기능 손실이 없습니다. */
+/* 비빈은 어느 자리에 있든 눌렀을 때만 짧게 탄성 있게 반응합니다. */
+.bibin {
+  cursor: pointer;
+  touch-action: manipulation;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+.bibin:focus-visible {
+  outline: 2px dashed var(--stamp);
+  outline-offset: 3px;
+}
+.bibin.is-boinging {
+  animation: bibin-boing 560ms cubic-bezier(.2, .82, .24, 1) both;
+}
+@keyframes bibin-boing {
+  0% { transform: translateY(0) scale(1); }
+  18% { transform: translateY(2px) scale(1.08, .9); }
+  44% { transform: translateY(-9px) scale(.94, 1.1) rotate(-2deg); }
+  68% { transform: translateY(0) scale(1.04, .96) rotate(1deg); }
+  84% { transform: translateY(-3px) scale(.99, 1.02); }
+  100% { transform: translateY(0) scale(1); }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

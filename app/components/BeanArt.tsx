@@ -1,3 +1,7 @@
+"use client";
+
+import { type KeyboardEvent, useRef } from "react";
+
 /**
  * 원두 조형 3종.
  *
@@ -115,15 +119,36 @@ export function Bibin({
   className?: string;
 }) {
   const paper = "var(--paper)";
+  const root = useRef<SVGSVGElement>(null);
+
+  const boing = () => {
+    const element = root.current;
+    if (!element) return;
+    element.classList.remove("is-boinging");
+    void element.getBoundingClientRect();
+    element.classList.add("is-boinging");
+  };
+
+  const onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    boing();
+  };
+
   return (
     <svg
-      className={className}
+      ref={root}
+      className={["bibin", className].filter(Boolean).join(" ")}
       width={size}
       height={(size * 44) / 40}
       viewBox="0 0 40 44"
-      role="img"
-      aria-label={moodLabel[mood]}
-      focusable="false"
+      role="button"
+      tabIndex={0}
+      aria-label={`${moodLabel[mood]} 눌러보기`}
+      focusable="true"
+      onClick={boing}
+      onKeyDown={onKeyDown}
+      onAnimationEnd={(event) => event.currentTarget.classList.remove("is-boinging")}
     >
       {/* 상황을 말하는 물건. 몸통에서 떨어뜨려 두어야 팔로 오해되지 않습니다. */}
       {mood === "proud" ? (

@@ -153,3 +153,26 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
   assert.match(receipt, /https:\/\/map\.kakao\.com/);
 });
+
+test("mock cafe ratio stays at two regular cafes per partner cafe", async () => {
+  const source = await readFile(new URL("../app/data/cafes.ts", import.meta.url), "utf8");
+  const cafeArray = source.slice(source.indexOf("export const cafes"), source.indexOf("export const partnerRegions"));
+  const partners = cafeArray.match(/partner:\s*true/g) ?? [];
+  const regulars = cafeArray.match(/partner:\s*false/g) ?? [];
+  assert.equal(partners.length, 6);
+  assert.equal(regulars.length, 12);
+  assert.equal(regulars.length, partners.length * 2);
+});
+
+test("partner selection ring remains circular and Bibin boings accessibly", async () => {
+  const [css, beanArt] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/BeanArt.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(css, /\.map-marker--partner\.is-active::after\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;/s);
+  assert.match(css, /@keyframes\s+bibin-boing/);
+  assert.match(beanArt, /role="button"/);
+  assert.match(beanArt, /tabIndex=\{0\}/);
+  assert.match(beanArt, /onClick=\{boing\}/);
+  assert.match(beanArt, /event\.key !== "Enter" && event\.key !== " "/);
+});
