@@ -171,15 +171,13 @@ export default function Home() {
   const sheet = useSheetDrag({ enabled: isSheet, onClose: closePanel });
 
   // 02 §7.3 — 한 화면에 비빈은 하나뿐. 급한 순서대로 자리를 넘겨줍니다.
-  const mascotSlot: "toast" | "empty" | "codex" | "signature" | null = notice
+  const mascotSlot: "toast" | "empty" | "codex" | null = notice
     ? "toast"
     : emptyResult
       ? "empty"
       : panelOpen && panel === "codex" && marks.length === 0
         ? "codex"
-        : panelOpen && panel === "receipt" && displayedCafe.partner
-          ? "signature"
-          : null;
+        : null;
 
   useEffect(() => {
     // 링크로 들어왔다면 프린트 연출은 건너뜁니다. 그건 첫 방문의 것이지,
@@ -306,7 +304,7 @@ export default function Home() {
               // 비빈의 말은 한 덩어리로 둡니다. 개수 줄과 나눠 놓으면 같은 사람이
               // 두 번 말하는 것처럼 읽힙니다 (02 §7.4).
               <div className="empty-state">
-                <Bibin mood="sheepish" size={38} />
+                <Bibin variant="map-lost" size={88} />
                 <p>
                   여긴 아직 아무것도 없네.
                   <br />
@@ -383,9 +381,7 @@ export default function Home() {
                 dateLabel={dateLabel}
                 timeLabel={timeLabel}
                 serial={String(hash(displayedCafe.id + dateLabel) % 10000).padStart(4, "0")}
-                isDailyPick={displayedCafe.id === dailyCafe.id}
                 saved={marks.some((mark) => mark.id === displayedCafe.id)}
-                showSignature={mascotSlot === "signature"}
                 onSave={onToggleMark}
                 onClose={closePanel}
               />
@@ -428,7 +424,7 @@ export default function Home() {
 
       {notice ? (
         <div className="toast" role="status">
-          <Bibin mood="proud" size={24} />
+          <Bibin variant="delighted" size={52} />
           {notice}
         </div>
       ) : null}

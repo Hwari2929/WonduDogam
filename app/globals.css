@@ -855,26 +855,51 @@ a:focus-visible,
   font-style: normal;
 }
 
-.eyebrow {
-  display: inline-block;
-  margin: 22px 0 8px;
+.receipt__identity {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 18px -20px 0;
+  padding: 20px 30px 18px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px dashed var(--rule);
+  background: var(--paper-edge);
+}
+.receipt__identity::before,
+.receipt__identity::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--paper);
+  transform: translateY(-50%);
+}
+.receipt__identity::before {
+  left: -11px;
+}
+.receipt__identity::after {
+  right: -11px;
+}
+.receipt__identity > * {
+  position: relative;
+  z-index: 1;
+}
+.receipt__affiliation {
+  margin-bottom: 8px;
   font-family: var(--font-mono);
-  font-size: var(--t-label);
-  font-weight: 700;
+  font-size: var(--t-micro);
+  font-weight: 800;
   letter-spacing: var(--ls-label-ko);
-  padding-left: var(--ls-label-ko);
 }
-/* 붉은색은 도장에만 씁니다 (02 §2.2). 확정/추정은 잉크 농도와 실선/점선으로
-   가르고, 인주는 협력업체 도장 하나에만 남겨야 그게 특별해집니다. */
-.eyebrow--confirmed {
+.receipt__identity.is-partner .receipt__affiliation {
+  color: var(--stamp);
+}
+.receipt__identity.is-codex .receipt__affiliation {
   color: var(--bean);
-  border-bottom: 1.5px solid currentColor;
 }
-.eyebrow--guess {
-  color: var(--ink-faint);
-  border-bottom: 1.5px dashed currentColor;
-}
-
 .receipt__name {
   font-family: var(--font-display);
   font-size: var(--t-display);
@@ -945,14 +970,10 @@ a:focus-visible,
   text-underline-offset: 4px;
 }
 
-/* 도장과 마스코트 서명이 붙어 하나의 닫는 단락이 됩니다. */
 .receipt__close {
-  display: grid;
-  justify-items: center;
-  gap: 14px;
-  padding: 6px 0 2px;
+  padding: 2px 0 0;
 }
-.receipt__close .guess-note {
+.guess-note {
   justify-self: stretch;
 }
 
@@ -1000,53 +1021,52 @@ a:focus-visible,
 
 .receipt__actions {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 12px;
-  align-items: center;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   margin-top: 20px;
 }
-.save-button {
-  justify-self: start;
-  padding: 10px 0;
-  border: 0;
-  border-bottom: 1.5px dashed var(--bean);
-  background: transparent;
-  color: var(--bean);
+.receipt-action {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper-edge);
+  color: var(--ink-soft);
+  font-size: var(--t-label);
   font-weight: 800;
-  text-align: left;
+  line-height: 1.35;
+  text-align: center;
+  text-decoration: none;
   cursor: pointer;
+  transition: transform 150ms var(--ease-paper), box-shadow 150ms ease, border-color 150ms ease;
+}
+.receipt-action:hover {
+  border-color: var(--bean);
+  box-shadow: 0 4px 10px var(--shadow);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+.receipt-action:active {
+  box-shadow: none;
+  transform: translateY(1px);
+}
+.save-button {
+  color: var(--bean);
 }
 .save-button span {
-  margin-right: 6px;
+  flex: 0 0 auto;
 }
 .save-button.is-saved {
-  border-bottom-style: solid;
+  border-color: var(--bean);
+  background: color-mix(in srgb, var(--bean) 8%, var(--paper-edge));
 }
 .text-button {
   color: var(--ink-soft);
-  font-size: var(--t-micro);
-  text-decoration: none;
-  white-space: nowrap;
 }
-.text-button:hover {
-  text-decoration: underline dotted;
-  text-underline-offset: 4px;
-}
-
-.receipt__footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--bean);
-  font-size: var(--t-micro);
-}
-.receipt__footer--plain {
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  letter-spacing: var(--ls-mono);
-}
-
 .dock-tab {
   position: absolute;
   z-index: 15;
@@ -1566,9 +1586,6 @@ a:focus-visible,
   .receipt__actions {
     grid-template-columns: 1fr;
   }
-  .text-button {
-    padding: 6px 0;
-  }
 
   .map-marker__name {
     display: none;
@@ -1588,12 +1605,25 @@ a:focus-visible,
 /* 영수증은 애니메이션 없이 그냥 거기 놓여 있으면 됩니다. 기능 손실이 없습니다. */
 /* 비빈은 어느 자리에 있든 눌렀을 때만 짧게 탄성 있게 반응합니다. */
 .bibin {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
   cursor: pointer;
   touch-action: manipulation;
-  transform-box: fill-box;
+  transform-box: border-box;
   transform-origin: center bottom;
 }
-.bibin:focus-visible {
+.bibin img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}.bibin:focus-visible {
   outline: 2px dashed var(--stamp);
   outline-offset: 3px;
 }

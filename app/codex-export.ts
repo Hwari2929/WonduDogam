@@ -303,13 +303,8 @@ export async function renderCodexImage(rows: ExportRow[], dateLabel: string): Pr
   ctx.restore();
 
   y += 62;
-  ctx.fillStyle = BEAN;
-  ctx.font = `12px ${BODY_FONT}`;
-  ctx.textAlign = "center";
-  ctx.fillText("비빈이 다녀갔습니다", WIDTH / 2, y);
-
-  y += 22;
   ctx.fillStyle = INK_FAINT;
+  ctx.textAlign = "center";
   ctx.font = `9px ${MONO_FONT}`;
   ctx.fillText("수도권 개인 카페 지도", WIDTH / 2, y);
 

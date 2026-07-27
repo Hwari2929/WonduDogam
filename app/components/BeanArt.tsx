@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent, useRef } from "react";
+import { useRef, useState } from "react";
 
 /**
  * 원두 조형 3종.
@@ -93,106 +93,66 @@ export function BeanStamp({ size = 34, className }: { size?: number; className?:
   );
 }
 
-export type BibinMood = "proud" | "sheepish" | "cheer";
+export type BibinVariant =
+  | "neutral"
+  | "map-reading"
+  | "map-lost"
+  | "squinting"
+  | "map-puzzled"
+  | "inspecting"
+  | "delighted"
+  | "surprised"
+  | "diary-writing";
 
-const moodLabel: Record<BibinMood, string> = {
-  proud: "도장을 든 비빈",
-  sheepish: "멋쩍어하는 비빈",
-  cheer: "비빈",
+const bibinPresets: Record<BibinVariant, { src: string; label: string }> = {
+  neutral: { src: "/mascot/bibean-neutral.png", label: "비빈" },
+  "map-reading": { src: "/mascot/bibean-map-reading.png", label: "지도를 읽는 비빈" },
+  "map-lost": { src: "/mascot/bibean-map-lost.png", label: "길을 잃은 비빈" },
+  squinting: { src: "/mascot/bibean-squinting.png", label: "눈을 찡그려 보는 비빈" },
+  "map-puzzled": { src: "/mascot/bibean-map-puzzled.png", label: "지도를 고민하는 비빈" },
+  inspecting: { src: "/mascot/bibean-inspecting.png", label: "유심히 살펴보는 비빈" },
+  delighted: { src: "/mascot/bibean-delighted.png", label: "신이 난 비빈" },
+  surprised: { src: "/mascot/bibean-surprised.png", label: "깜짝 놀란 비빈" },
+  "diary-writing": { src: "/mascot/bibean-diary-writing.png", label: "다이어리에 기록하는 비빈" },
 };
 
-/**
- * 마스코트 비빈. 화면에 **하나만** 그립니다 — 어느 것을 그릴지는
- * app/page.tsx 의 mascotSlot 이 정합니다.
- *
- * 팔다리는 그리지 않습니다. 등장 크기가 20~38px이라 팔을 넣으면 몸통 옆의
- * 얼룩으로만 읽히고, §7.1이 지키라는 크랙과 눈까지 흐려집니다. 표정은 눈으로,
- * 상황은 몸통에서 떨어진 물건 하나로 말합니다.
- */
+/** 제공된 PNG 프리셋을 상황에 맞춰 보여 주는 인터랙티브 마스코트. */
 export function Bibin({
-  mood = "cheer",
-  size = 26,
+  variant = "neutral",
+  size = 72,
   className,
 }: {
-  mood?: BibinMood;
+  variant?: BibinVariant;
   size?: number;
   className?: string;
 }) {
-  const paper = "var(--paper)";
-  const root = useRef<SVGSVGElement>(null);
+  const root = useRef<HTMLButtonElement>(null);
+  const [isBoinging, setIsBoinging] = useState(false);
+  const preset = isBoinging ? bibinPresets.surprised : bibinPresets[variant];
 
   const boing = () => {
     const element = root.current;
     if (!element) return;
+    setIsBoinging(true);
     element.classList.remove("is-boinging");
     void element.getBoundingClientRect();
     element.classList.add("is-boinging");
   };
 
-  const onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    boing();
-  };
-
   return (
-    <svg
+    <button
       ref={root}
       className={["bibin", className].filter(Boolean).join(" ")}
-      width={size}
-      height={(size * 44) / 40}
-      viewBox="0 0 40 44"
-      role="button"
-      tabIndex={0}
-      aria-label={`${moodLabel[mood]} 눌러보기`}
-      focusable="true"
+      style={{ width: size, height: size }}
+      type="button"
+      aria-label={`${preset.label} 눌러보기`}
       onClick={boing}
-      onKeyDown={onKeyDown}
-      onAnimationEnd={(event) => event.currentTarget.classList.remove("is-boinging")}
+      onAnimationEnd={(event) => {
+        setIsBoinging(false);
+        event.currentTarget.classList.remove("is-boinging");
+      }}
     >
-      {/* 상황을 말하는 물건. 몸통에서 떨어뜨려 두어야 팔로 오해되지 않습니다. */}
-      {mood === "proud" ? (
-        <rect
-          x="27.6"
-          y="2.4"
-          width="10.6"
-          height="9"
-          rx="1.4"
-          fill="none"
-          stroke="var(--stamp)"
-          strokeWidth="2"
-          transform="rotate(-7 32.9 6.9)"
-        />
-      ) : null}
-      {mood === "sheepish" ? (
-        <path d="M34 3.6c1.9 2.6 2.6 3.8 2.6 5a2.6 2.6 0 1 1-5.2 0c0-1.2.7-2.4 2.6-5Z" fill="currentColor" opacity=".7" />
-      ) : null}
-
-      <g transform="rotate(-14 20 22) translate(0 2)">
-        <BeanBody paper={paper} />
-        {mood === "proud" ? (
-          <g fill="none" stroke={paper} strokeWidth="2.1" strokeLinecap="round">
-            <path d="M11.5 17q2.3-3 4.6 0" />
-            <path d="M24.5 17q2.3-3 4.6 0" />
-          </g>
-        ) : mood === "sheepish" ? (
-          <>
-            <circle cx="13.9" cy="15.6" r="2.2" fill={paper} />
-            <path
-              d="M24.2 15.9q2.4-1.6 4.8 0"
-              fill="none"
-              stroke={paper}
-              strokeWidth="2.1"
-              strokeLinecap="round"
-            />
-          </>
-        ) : (
-          <>
-            <circle cx="13.9" cy="15.6" r="2.2" fill={paper} />
-            <circle cx="26.5" cy="15.6" r="2.2" fill={paper} />
-          </>
-        )}
-      </g>
-    </svg>
+      <img src={preset.src} alt="" width="512" height="512" draggable="false" />
+    </button>
   );
 }

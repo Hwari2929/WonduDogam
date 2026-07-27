@@ -110,7 +110,7 @@ export function Codex({
       {mode === "list" ? (
         marks.length === 0 ? (
           <div className="codex__empty">
-            {showMascot ? <Bibin mood="sheepish" size={40} /> : null}
+            {showMascot ? <Bibin variant="diary-writing" size={88} /> : null}
             <p>마음에 드는 곳을 뜯어서 여기 모아둬.</p>
             <button className="text-link" type="button" onClick={() => setMode("import")}>
               코드가 있다면 불러오기

@@ -47,18 +47,20 @@ test("starter preview is removed and design safeguards remain", async () => {
   assert.doesNotMatch(layout, /Starter Project|codex-preview|_sites-preview/);
 });
 
-test("확정 정보와 추정 정보가 시각적으로 구분된다", async () => {
-  // 결정서 §3 Q34 — "이건 선택이 아니라 필수입니다."
+test("카페 소속과 추정 정보가 장식 없이 구분된다", async () => {
   const [css, receipt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.receipt--confirmed \.intro\s*\{[^}]*border-left:\s*2px solid/);
   assert.match(css, /\.receipt--guess \.intro\s*\{[^}]*border-left:\s*2px dashed/);
-  assert.match(css, /\.receipt--guess \.intro\s*\{[^}]*color:\s*var\(--ink-faint\)/);
-  // 추정 카드에는 도장이 없고 각주가 붙습니다.
+  assert.match(css, /\.receipt__identity::before/);
+  assert.match(receipt, /비빈 파트너 소속/);
+  assert.match(receipt, /원두도감 소속/);
   assert.match(receipt, /상호명과 위치로 자동 추정한 정보입니다/);
-  assert.match(receipt, /confirmed \? \(\s*<div className="stamp"/);
+  assert.match(receipt, /className=\{`receipt-action save-button/);
+  assert.match(receipt, /className="receipt-action text-button"/);
+  assert.doesNotMatch(receipt, /className="stamp"|비빈이 다녀갔습니다|\{confirmed \? "확정"/);
 });
 
 test("공유 링크와 새로고침이 살아 있다", async () => {
@@ -130,13 +132,11 @@ test("내 도감이 비어 있어도 불러오기로 들어갈 수 있다", asyn
 });
 
 test("한 화면에 비빈은 하나뿐이다", async () => {
-  // 02 §7.3. 브랜드 마크(CodexMark)와 지도 도장(BeanStamp)에는 얼굴이 없으므로
-  // 마스코트로 세지 않습니다. 눈이 달린 <Bibin/> 만 mascotSlot 이 배분합니다.
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const mascots = page.match(/<Bibin\b/g) ?? [];
   assert.equal(mascots.length, 2, "토스트와 빈 결과 두 자리에서만 직접 그립니다");
   assert.match(page, /mascotSlot/);
-  assert.match(page, /showSignature=\{mascotSlot === "signature"\}/);
+  assert.doesNotMatch(page, /showSignature|"signature"/);
 });
 
 test("primary map stays a local SVG editorial atlas", async () => {
@@ -164,15 +164,26 @@ test("mock cafe ratio stays at two regular cafes per partner cafe", async () => 
   assert.equal(regulars.length, partners.length * 2);
 });
 
-test("partner selection ring remains circular and Bibin boings accessibly", async () => {
+test("partner selection ring remains circular and supplied PNG Bibin boings accessibly", async () => {
   const [css, beanArt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/BeanArt.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.map-marker--partner\.is-active::after\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;/s);
   assert.match(css, /@keyframes\s+bibin-boing/);
-  assert.match(beanArt, /role="button"/);
-  assert.match(beanArt, /tabIndex=\{0\}/);
-  assert.match(beanArt, /onClick=\{boing\}/);
-  assert.match(beanArt, /event\.key !== "Enter" && event\.key !== " "/);
+  assert.match(beanArt, /<button[\s\S]*type="button"[\s\S]*onClick=\{boing\}/);
+  assert.match(beanArt, /<img src=\{preset\.src\}/);
+  assert.match(beanArt, /isBoinging \? bibinPresets\.surprised/);
+  assert.match(beanArt, /\/mascot\/bibean-delighted\.png/);
+  await Promise.all([
+    "bibean-neutral.png",
+    "bibean-map-reading.png",
+    "bibean-map-lost.png",
+    "bibean-squinting.png",
+    "bibean-map-puzzled.png",
+    "bibean-inspecting.png",
+    "bibean-delighted.png",
+    "bibean-surprised.png",
+    "bibean-diary-writing.png",
+  ].map((name) => access(new URL(`../public/mascot/${name}`, import.meta.url))));
 });

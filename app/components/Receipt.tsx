@@ -1,37 +1,23 @@
 import type { MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
-import { Bibin, CodexMark } from "./BeanArt";
+import { CodexMark } from "./BeanArt";
 
-/**
- * 시그니처 영수증 카드 (02_디자인_시스템 §4).
- *
- * 확정 정보와 추정 정보를 눈으로 즉시 구분하는 것이 이 카드의 의무입니다
- * (결정서 §3 Q34 — "선택이 아니라 필수"). 그래서 두 종류의 카드는
- * 테두리(실선/점선), 소개 문장의 잉크 농도, 도장 유무, 항목 구성까지 다릅니다.
- *
- * T3 카드에 영업시간·취급원두 줄이 아예 없는 것도 같은 이유입니다.
- * 결정서 §4.2에 따라 그 자리는 카카오맵 버튼이 대신합니다.
- */
+/** 카페 정보를 한 장의 티켓처럼 보여 주는 상세 카드. */
 export function Receipt({
   cafe,
   dateLabel,
   timeLabel,
   serial,
-  isDailyPick,
   saved,
-  showSignature,
   onSave,
   onClose,
 }: {
   cafe: Cafe;
   dateLabel: string;
-  /** 마운트 전에는 null. 서버·클라이언트 시각이 어긋나 hydration이 깨지는 걸 막습니다. */
+  /** 마운트 전에는 null. 서버와 클라이언트 시각 차이로 hydration이 깨지는 일을 막습니다. */
   timeLabel: string | null;
   serial: string;
-  isDailyPick: boolean;
   saved: boolean;
-  /** 02 §7.3 — 화면에 비빈이 이미 있으면 서명을 접습니다. */
-  showSignature: boolean;
   onSave: (event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
 }) {
@@ -59,12 +45,14 @@ export function Receipt({
 
       <div className="dashed-rule" />
 
-      <p className={`eyebrow ${confirmed ? "eyebrow--confirmed" : "eyebrow--guess"}`}>
-        {isDailyPick ? "오늘의 영수증 · " : ""}
-        {confirmed ? "확정" : "추정"}
-      </p>
-      <h1 className="receipt__name">{cafe.name}</h1>
-      <p className="romanized">{cafe.romanized}</p>
+      <div className={`receipt__identity ${confirmed ? "is-partner" : "is-codex"}`}>
+        <p className="receipt__affiliation">
+          {confirmed ? "비빈 파트너 소속" : "원두도감 소속"}
+        </p>
+        <h1 className="receipt__name">{cafe.name}</h1>
+        <p className="romanized">{cafe.romanized}</p>
+      </div>
+
       <p className="intro">{confirmed ? cafe.intro : cafe.guess}</p>
 
       <div className="dashed-rule" />
@@ -103,7 +91,7 @@ export function Receipt({
 
       <div className="receipt__actions">
         <button
-          className={`save-button ${saved ? "is-saved" : ""}`}
+          className={`receipt-action save-button ${saved ? "is-saved" : ""}`}
           type="button"
           onClick={onSave}
           aria-pressed={saved}
@@ -112,7 +100,7 @@ export function Receipt({
           {saved ? "내 도감에 보관됨" : "내 도감에 뜯어두기"}
         </button>
         <a
-          className="text-button"
+          className="receipt-action text-button"
           href={`https://map.kakao.com/?q=${encodeURIComponent(cafe.name)}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -121,32 +109,16 @@ export function Receipt({
         </a>
       </div>
 
-      <div className="dashed-rule" />
-
-      {/* 도장과 서명이 붙어 하나의 닫는 단락이 됩니다 (02 §4.1의 배치). */}
-      <footer className="receipt__close">
-        {confirmed ? (
-          <div className="stamp" role="img" aria-label="비빈 로스팅 팩토리 협력업체 도장">
-            <span>협력</span>
-            <span>업체</span>
-          </div>
-        ) : (
-          <p className="guess-note">
-            ※ 상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.
-          </p>
-        )}
-
-        {confirmed && showSignature ? (
-          <p className="receipt__footer">
-            <Bibin mood="cheer" size={24} />
-            비빈이 다녀갔습니다
-          </p>
-        ) : (
-          <p className="receipt__footer receipt__footer--plain">
-            {confirmed ? "비빈이 다녀갔습니다" : "도감 미기재 항목"}
-          </p>
-        )}
-      </footer>
+      {!confirmed ? (
+        <>
+          <div className="dashed-rule" />
+          <footer className="receipt__close">
+            <p className="guess-note">
+              ※ 상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.
+            </p>
+          </footer>
+        </>
+      ) : null}
     </article>
   );
 }
