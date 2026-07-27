@@ -52,7 +52,7 @@ export function MapCanvas({
           <path key={`trunk-${index}`} className="terrain__road" d={d} />
         ))}
         {districts.map((d, index) => (
-          <path key={`district-${index}`} className="terrain__border" d={d} />
+          <path key={`district-${index}`} className={`terrain__district terrain__district--${index % 3}`} d={d} />
         ))}
         {tributaries.map((d, index) => (
           <path key={`stream-${index}`} className="terrain__stream" d={d} />

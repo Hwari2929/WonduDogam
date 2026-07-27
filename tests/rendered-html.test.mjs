@@ -138,3 +138,18 @@ test("한 화면에 비빈은 하나뿐이다", async () => {
   assert.match(page, /mascotSlot/);
   assert.match(page, /showSignature=\{mascotSlot === "signature"\}/);
 });
+
+test("primary map stays a local SVG editorial atlas", async () => {
+  const [surface, canvas, layout, receipt] = await Promise.all([
+    readFile(new URL("../app/components/MapSurface.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(surface, /<MapCanvas/);
+  assert.doesNotMatch(surface, /KakaoMap|readMapKey|useSyncExternalStore/);
+  assert.match(canvas, /className="map__terrain"/);
+  assert.match(canvas, /terrain__district/);
+  assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
+  assert.match(receipt, /https:\/\/map\.kakao\.com/);
+});

@@ -254,7 +254,6 @@ export default function Home() {
         activeId={panelOpen && panel === "receipt" ? displayedCafe.id : null}
         onSelect={openCafe}
         onInteract={dock}
-        onNotice={setNotice}
       />
 
       <header className="topbar">
