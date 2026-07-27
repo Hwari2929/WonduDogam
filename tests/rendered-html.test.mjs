@@ -169,6 +169,9 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.doesNotMatch(surface, /KakaoMap|readMapKey|useSyncExternalStore/);
   assert.match(canvas, /className="map__terrain"/);
   assert.match(canvas, /terrain__district/);
+  assert.match(canvas, /ZOOM_LEVELS = \[1, 1\.25, 1\.5, 2\]/);
+  assert.match(canvas, /className="map__zoom"/);
+  assert.match(canvas, /<Coffee size=\{12\}/);
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
   assert.match(receipt, /https:\/\/map\.kakao\.com/);
 });
@@ -188,7 +191,9 @@ test("selection ring remains circular and supplied PNG Bibin boings accessibly",
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/BeanArt.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(css, /\.map-marker\.is-active::after\s*\{[^}]*width:\s*46px;[^}]*height:\s*46px;[^}]*border-radius:\s*50%/s);
+  assert.match(css, /\.map-marker\.is-saved\.is-active \.map-marker__dot::after\s*\{[^}]*width:\s*46px;[^}]*height:\s*46px;/s);
+  assert.match(css, /@keyframes\s+marker-ring-spin/);
+  assert.match(css, /\.map-marker\.is-active::after\s*\{\s*content:\s*none/);
   assert.match(css, /@keyframes\s+bibin-boing/);
   assert.match(beanArt, /<button[\s\S]*type="button"[\s\S]*onClick=\{boing\}/);
   assert.match(beanArt, /<img src=\{preset\.src\}/);
