@@ -22,6 +22,8 @@
   --grain-opacity: 0.055;
   --grain-blend: multiply;
   --grain-invert: 0;
+  --map-wash-color: color-mix(in srgb, var(--desk) 18%, transparent);
+  --map-wash-filter: saturate(0.55) sepia(0.08) contrast(0.95);
 
   /* 타이포 — 정식 폰트는 라이선스 원문 확보 후(04_착수_검증), 지금은 시스템 폴백.
      모노 스택 끝에 한글 폰트를 두어 `영업시간` 같은 라벨이 굴림체로 떨어지지 않게 합니다. */
@@ -74,6 +76,8 @@
   --grain-opacity: 0.08;
   --grain-blend: screen;
   --grain-invert: 1;
+  --map-wash-color: color-mix(in srgb, var(--desk) 24%, transparent);
+  --map-wash-filter: saturate(0.5) brightness(0.76) contrast(0.92);
 }
 
 /* ══ 2. 바탕 ═══════════════════════════════════════════════════════ */
@@ -269,35 +273,17 @@ a:focus-visible,
   inset: 0;
 }
 
-/* 02 §2.3 대안 2 — 타일 자체에는 손대지 않고 우리 층에 저채도 막을 덮습니다.
-   saturation 블렌드가 --desk 의 낮은 채도를 타일에 옮기고, 그 위 옅은 종이색이
-   온도를 맞춥니다. 04 가 금지한 "타일에 필터" 가 아닙니다. */
+/* 타일 자체의 스타일은 건드리지 않고, 지도 전체를 투명한 테마 막으로 덮습니다.
+   옅은 색막과 backdrop-filter가 채도·대비만 낮추므로 지도 세부 정보는 계속 보입니다. */
 .map__wash {
   position: absolute;
-  /* 아래 26px 은 비워 둡니다 — 카카오 로고와 저작권 표기가 있는 자리라
-     덮거나 변형하면 약관에 저촉될 수 있습니다. */
-  inset: 0 0 26px;
+  inset: 0;
   z-index: 1;
   pointer-events: none;
+  background: var(--map-wash-color);
+  -webkit-backdrop-filter: var(--map-wash-filter);
+  backdrop-filter: var(--map-wash-filter);
 }
-.map__wash::before,
-.map__wash::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-.map__wash::before {
-  background: var(--desk);
-  mix-blend-mode: saturation;
-}
-.map__wash::after {
-  background: var(--desk);
-  opacity: 0.24;
-}
-[data-theme="dark"] .map__wash::after {
-  opacity: 0.55;
-}
-
 /* SDK 오버레이는 자기 좌표에 놓이므로 마커가 스스로 중심을 잡지 않습니다. */
 .map-marker--pinned {
   position: relative;
