@@ -1819,16 +1819,24 @@ a:focus-visible,
   .receipt__collection-list button { min-height: 44px; }
 }
 /* ── 지도 확대와 카페 아이콘 ── */
+.map { cursor: grab; touch-action: none; }
+.map.is-dragging { cursor: grabbing; }
 .map__viewport {
   --map-zoom: 1;
-  --map-origin-x: 50%;
-  --map-origin-y: 50%;
+  --map-pan-x: 0px;
+  --map-pan-y: 0px;
+  --map-inverse: 1;
   position: absolute;
   inset: 0;
-  transform: scale(var(--map-zoom));
-  transform-origin: var(--map-origin-x) var(--map-origin-y);
-  transition: transform 240ms cubic-bezier(.2, .75, .25, 1), transform-origin 240ms ease;
+  transform: translate3d(var(--map-pan-x), var(--map-pan-y), 0) scale(var(--map-zoom));
+  transform-origin: 0 0;
+  transition: transform 100ms cubic-bezier(.2, .75, .25, 1);
   will-change: transform;
+}
+.map.is-dragging .map__viewport { transition: none; }
+.map__places span {
+  transform: translate(-50%, -50%) scale(var(--map-inverse));
+  transform-origin: center;
 }
 .map-marker { transform: translate(-50%, -50%) scale(var(--marker-scale, 1)); }
 .map-marker--plain { width: 34px; height: 34px; }

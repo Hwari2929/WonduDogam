@@ -51,6 +51,7 @@ test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", a
   const [css, receipt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.receipt--confirmed \.intro\s*\{[^}]*border-left:\s*2px solid/);
   assert.match(css, /\.receipt--guess \.intro\s*\{[^}]*border-left:\s*2px dashed/);
@@ -159,19 +160,24 @@ test("한 화면에 비빈은 하나뿐이다", async () => {
 });
 
 test("primary map stays a local SVG editorial atlas", async () => {
-  const [surface, canvas, layout, receipt] = await Promise.all([
+  const [surface, canvas, layout, receipt, css] = await Promise.all([
     readFile(new URL("../app/components/MapSurface.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(surface, /<MapCanvas/);
   assert.doesNotMatch(surface, /KakaoMap|readMapKey|useSyncExternalStore/);
   assert.match(canvas, /className="map__terrain"/);
   assert.match(canvas, /terrain__district/);
-  assert.match(canvas, /ZOOM_LEVELS = \[1, 1\.25, 1\.5, 2\]/);
+  assert.match(canvas, /onWheel=\{onWheel\}/);
+  assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
+  assert.match(canvas, /MAX_ZOOM = 3/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{12\}/);
+  assert.match(css, /\.map__places span\s*\{[^}]*scale\(var\(--map-inverse\)\)/s);
+  assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
   assert.match(receipt, /https:\/\/map\.kakao\.com/);
 });
