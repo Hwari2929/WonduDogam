@@ -1,124 +1,1601 @@
-@import "tailwindcss";
+/* 원두도감 — 02_디자인_시스템 구현
+   화면은 책상이고, 카페는 그 위에 놓인 영수증 한 장이다. */
+
+/* ══ 1. 토큰 ═══════════════════════════════════════════════════════ */
 
 :root {
-  --desk: #dcd3c2; --desk-deep: #c9bfa9; --paper: #faf6ec; --paper-edge: #efe7d6;
-  --ink: #22201c; --ink-soft: #5c554b; --ink-faint: #766d60; --rule: #b7ab96;
-  --stamp: #a63a2e; --bean: #6b4a2f; --shadow: rgba(58, 46, 30, .18);
-  --t-display: 1.75rem; --t-title: 1.25rem; --t-body: .9375rem; --t-label: .8125rem; --t-micro: .6875rem;
+  /* 라이트 · 새 감열지 */
+  --desk: #dcd3c2;
+  --desk-deep: #c9bfa9;
+  --paper: #faf6ec;
+  --paper-edge: #efe7d6;
+
+  --ink: #22201c;
+  --ink-soft: #5c554b;
+  --ink-faint: #766d60; /* 문서값 #948A79 는 --paper 위에서 4.5:1 에 못 미쳐 낮춤 */
+  --rule: #b7ab96;
+
+  --stamp: #a63a2e; /* 협력업체 도장 전용. 에러·경고에 재사용 금지 */
+  --bean: #6b4a2f;
+  --shadow: rgba(58, 46, 30, 0.18);
+
+  --grain-opacity: 0.055;
+  --grain-blend: multiply;
+  --grain-invert: 0;
+
+  /* 타이포 — 정식 폰트는 라이선스 원문 확보 후(04_착수_검증), 지금은 시스템 폴백.
+     모노 스택 끝에 한글 폰트를 두어 `영업시간` 같은 라벨이 굴림체로 떨어지지 않게 합니다. */
+  --font-body: "SUIT", "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo",
+    "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --font-display: "Paperlogy", "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo",
+    "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "D2Coding", ui-monospace, "SFMono-Regular", Consolas, Menlo,
+    "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", monospace;
+
+  /* 다섯 개가 전부입니다. 새 크기 대신 여백이나 굵기를 쓰세요. */
+  --t-display: 1.75rem;
+  --t-title: 1.25rem;
+  --t-body: 0.9375rem;
+  --t-label: 0.8125rem;
+  --t-micro: 0.6875rem;
+
+  --ls-mono: 0.12em; /* 값·숫자 */
+  --ls-label: 0.32em; /* 라틴 라벨 */
+  --ls-label-ko: 0.5em; /* 한글은 더 벌려야 같은 인상 */
+  --ls-brand: 0.42em;
+
+  /* 지도 위에 뜬 것들이 모두 같은 여백선에 서야 화면이 정갈해집니다. */
+  --rail: 32px;
+  --gap: 12px;
+
+  /* 그림자는 두 단계뿐입니다. 종이가 책상에 놓인 높이와 손에 든 높이. */
+  --lift-1: 0 6px 18px var(--shadow);
+  --lift-2: 0 16px 34px var(--shadow);
+
+  --ease-paper: cubic-bezier(0.2, 0.86, 0.3, 1);
 }
+
 [data-theme="dark"] {
-  --desk: #100e0a; --desk-deep: #080705; --paper: #241e16; --paper-edge: #2e2619;
-  --ink: #e9dbc0; --ink-soft: #b0a088; --ink-faint: #9a896e; --rule: #4f4334;
-  --stamp: #cf6152; --bean: #dda86b; --shadow: rgba(0, 0, 0, .55);
+  /* 다크 · 서랍에서 3년 묵어 갈변한 감열지. 색 반전이 아니라 같은 물건의 다른 시간. */
+  --desk: #100e0a;
+  --desk-deep: #080705;
+  --paper: #241e16;
+  --paper-edge: #2e2619;
+
+  --ink: #e9dbc0; /* 회색·흰색이 아니라 갈황색. 여기서 흰 글자를 쓰면 종이가 사라집니다. */
+  --ink-soft: #b0a088;
+  --ink-faint: #9a896e;
+  --rule: #584a38;
+
+  --stamp: #cf6152;
+  --bean: #dda86b;
+  --shadow: rgba(0, 0, 0, 0.55);
+
+  --grain-opacity: 0.08;
+  --grain-blend: screen;
+  --grain-invert: 1;
 }
-* { box-sizing: border-box; }
-html, body { width: 100%; min-height: 100%; margin: 0; }
-body { overflow: hidden; background: var(--desk); color: var(--ink); font-family: SUIT, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; font-size: var(--t-body); }
-button, input { font: inherit; } button, a { -webkit-tap-highlight-color: transparent; } button { color: inherit; }
-button:focus-visible, input:focus-visible, .map:focus-visible { outline: 2px dashed var(--bean); outline-offset: 4px; }
-.skip-link { position: fixed; z-index: 100; top: -4rem; left: 1rem; padding: .75rem 1rem; background: var(--paper); color: var(--ink); }
-.skip-link:focus { top: 1rem; }
-.app-shell { position: relative; width: 100vw; height: 100svh; min-height: 620px; overflow: hidden; background: var(--desk); }
 
-.map { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(circle at 20% 72%, color-mix(in srgb, var(--bean) 9%, transparent) 0 12%, transparent 28%), radial-gradient(circle at 74% 18%, color-mix(in srgb, var(--paper) 42%, transparent) 0 9%, transparent 24%), linear-gradient(132deg, color-mix(in srgb, var(--desk-deep) 65%, var(--desk)) 0%, var(--desk) 68%); }
-.map::after { content: ""; position: absolute; inset: 0; opacity: .07; pointer-events: none; background: repeating-radial-gradient(circle at 18% 33%, var(--ink-soft) 0 1px, transparent 1px 5px); mix-blend-mode: multiply; }
-[data-theme="dark"] .map::after { opacity: .055; mix-blend-mode: screen; }
-.map__paper-grid { position: absolute; inset: -14%; transform: rotate(-4deg); opacity: .72; background: linear-gradient(90deg, transparent 49.7%, var(--rule) 50%, transparent 50.3%) 0 0 / 160px 160px, linear-gradient(0deg, transparent 49.7%, var(--rule) 50%, transparent 50.3%) 0 0 / 160px 160px, linear-gradient(31deg, transparent 49.6%, color-mix(in srgb, var(--rule) 75%, transparent) 50%, transparent 50.4%) 0 0 / 210px 210px, linear-gradient(148deg, transparent 49.6%, color-mix(in srgb, var(--rule) 65%, transparent) 50%, transparent 50.4%) 0 0 / 260px 260px; }
-.map__river { position: absolute; width: 116%; height: 8.5%; left: -8%; top: 45%; transform: rotate(-4deg); border-block: 1px solid color-mix(in srgb, var(--bean) 32%, transparent); background: color-mix(in srgb, var(--paper) 28%, transparent); box-shadow: 0 0 0 7px color-mix(in srgb, var(--paper) 8%, transparent); }
-.map__labels span { position: absolute; color: var(--ink-faint); font: 700 var(--t-label)/1 "Courier New", monospace; letter-spacing: .34em; }
-.label-seoul { left: 42%; top: 42%; } .label-incheon { left: 14%; top: 52%; } .label-suwon { left: 44%; top: 78%; } .label-seongnam { left: 65%; top: 72%; }
+/* ══ 2. 바탕 ═══════════════════════════════════════════════════════ */
 
-.topbar { position: absolute; z-index: 20; top: 0; left: 0; right: 0; height: 84px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 32px; background: linear-gradient(180deg, color-mix(in srgb, var(--desk) 92%, transparent), transparent); }
-.menu-button { width: 44px; height: 44px; display: grid; align-content: center; gap: 7px; padding: 10px 8px; border: 0; background: transparent; cursor: pointer; }
-.menu-button span { width: 24px; border-top: 1.5px solid currentColor; } .menu-button span:last-child { width: 16px; }
-.topbar__brand { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 9px; font-family: Paperlogy, "Arial Black", sans-serif; font-size: var(--t-title); font-weight: 800; letter-spacing: .42em; white-space: nowrap; }
-.topbar__brand small { grid-column: 2; color: var(--ink-faint); font: 700 var(--t-micro)/1 "Courier New", monospace; letter-spacing: .22em; }
-.topbar__actions { justify-self: end; display: flex; align-items: center; gap: 12px; }
-.theme-button, .marks-button { height: 38px; border: 0; border-bottom: 1px dashed var(--ink-soft); background: transparent; cursor: pointer; font: 700 var(--t-label)/1 "Courier New", monospace; }
-.theme-button span { color: var(--bean); margin-right: 6px; }
-.marks-button strong { display: inline-grid; min-width: 24px; height: 24px; place-items: center; margin-left: 5px; border: 1px solid var(--ink-soft); border-radius: 50%; }
-
-.search-panel { position: absolute; z-index: 30; top: 110px; left: 32px; width: min(360px, calc(100vw - 64px)); padding: 18px 20px 16px; background: color-mix(in srgb, var(--paper) 94%, transparent); box-shadow: 0 12px 35px var(--shadow); }
-.search-panel::before, .search-panel::after { content: ""; position: absolute; left: 0; width: 100%; height: 7px; background: radial-gradient(circle at 7px 0, transparent 6px, var(--paper) 6.5px) 0 0 / 14px 7px repeat-x; }
-.search-panel::before { top: -7px; transform: rotate(180deg); } .search-panel::after { bottom: -7px; }
-.search-panel label { display: block; margin-bottom: 8px; color: var(--ink-soft); font: 700 var(--t-label)/1.3 "Courier New", monospace; letter-spacing: .28em; }
-.search-line { display: flex; align-items: center; gap: 8px; }
-.search { width: 100%; padding: 5px 0 8px; border: 0; border-bottom: 1.5px solid var(--rule); border-radius: 0; outline: none; background: transparent; color: var(--ink); font-size: var(--t-title); }
-.search::placeholder { color: var(--ink-faint); }
-.search:focus { border-bottom-color: var(--bean); border-bottom-style: dashed; box-shadow: 0 2px 0 var(--bean); }
-.search-results { padding-top: 14px; } .search-results > p { margin: 0 0 8px; color: var(--ink-faint); font-size: var(--t-micro); }
-.search-results > button { width: 100%; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 10px 0; border: 0; border-top: 1px dashed var(--rule); background: transparent; text-align: left; cursor: pointer; }
-.search-results small { color: var(--ink-faint); font-size: var(--t-micro); } .search-results b { padding: 2px 4px; border: 1px solid var(--stamp); color: var(--stamp); font-size: var(--t-micro); transform: rotate(-4deg); }
-.search-results .widen-button { display: block; color: var(--bean); font-weight: 700; text-align: center; }
-
-.map-marker { position: absolute; z-index: 5; transform: translate(-50%, -50%); border: 0; cursor: pointer; }
-.map-marker--partner { min-width: 40px; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 11px 0 7px; border: 2px solid var(--stamp); border-radius: 22px; background: color-mix(in srgb, var(--paper) 92%, transparent); color: var(--stamp); box-shadow: 0 6px 16px var(--shadow); font-size: var(--t-label); font-weight: 800; white-space: nowrap; }
-.map-marker--partner .bean-mark { --bean: var(--stamp); } .map-marker--plain { width: 12px; height: 12px; border: 2px solid var(--ink-soft); border-radius: 50%; background: transparent; }
-.map-marker.is-active { z-index: 10; box-shadow: 0 0 0 6px color-mix(in srgb, var(--paper) 58%, transparent), 0 6px 16px var(--shadow); }
-.map-status { position: absolute; z-index: 10; left: 32px; bottom: 28px; display: flex; gap: 16px; color: var(--ink-soft); font: 700 var(--t-micro)/1 "Courier New", monospace; letter-spacing: .08em; }
-.map-status span { padding: 8px 10px; background: color-mix(in srgb, var(--desk) 88%, transparent); }
-
-.receipt-wrap { position: absolute; z-index: 25; top: 104px; right: clamp(24px, 5vw, 72px); width: min(410px, calc(100vw - 48px)); max-height: calc(100svh - 132px); overflow: auto; filter: drop-shadow(0 20px 28px var(--shadow)); scrollbar-width: none; }
-.receipt-wrap::-webkit-scrollbar { display: none; }
-.receipt { position: relative; min-height: 520px; padding: 24px 20px 30px; background: var(--paper); color: var(--ink); --tear: 7px; mask: radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2) 100% repeat-x, radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% / calc(var(--tear) * 2) 100% repeat-x; mask-composite: intersect; }
-.receipt::before { content: ""; position: absolute; inset: 0; opacity: .055; pointer-events: none; background: repeating-radial-gradient(circle at 30% 20%, var(--ink-soft) 0 1px, transparent 1px 4px); mix-blend-mode: multiply; }
-[data-theme="dark"] .receipt::before { opacity: .08; mix-blend-mode: screen; }
-.receipt--today { animation: print 900ms cubic-bezier(.16,.84,.44,1) both; }
-.receipt__topline, .drawer__header { display: flex; align-items: center; justify-content: space-between; }
-.brand-lockup { display: inline-flex; align-items: center; gap: 8px; font-family: Paperlogy, "Arial Black", sans-serif; font-size: var(--t-label); font-weight: 800; letter-spacing: .42em; }
-.icon-button { width: 36px; height: 36px; border: 0; background: transparent; color: var(--ink-soft); cursor: pointer; font: 400 var(--t-title)/1 "Courier New", monospace; }
-.receipt__issue { margin: 4px 0 16px 30px; color: var(--ink-faint); font: 400 var(--t-micro)/1.4 "Courier New", monospace; letter-spacing: .05em; }
-.dashed-rule { width: 100%; margin: 14px 0; border-top: 1px dashed var(--rule); }
-.eyebrow { margin: 24px 0 6px; color: var(--bean); font: 700 var(--t-label)/1 "Courier New", monospace; letter-spacing: .18em; }
-.receipt h1 { margin: 0; font-family: Paperlogy, "Arial Black", sans-serif; font-size: var(--t-display); line-height: 1.25; letter-spacing: -.02em; }
-.romanized { margin: 4px 0 0; color: var(--ink-faint); font: 700 var(--t-micro)/1.4 "Courier New", monospace; letter-spacing: .14em; }
-.intro { margin: 22px 0 24px; line-height: 1.65; word-break: keep-all; }
-.receipt__specs { margin: 0; } .receipt__specs > div { display: grid; grid-template-columns: 82px 1fr; gap: 14px; align-items: baseline; margin: 10px 0; }
-.receipt__specs dt { overflow: hidden; color: var(--ink-soft); font: 700 var(--t-label)/1.4 "Courier New", monospace; letter-spacing: .16em; white-space: nowrap; }
-.receipt__specs dt::after { content: "············"; margin-left: 6px; color: var(--rule); letter-spacing: 0; }
-.receipt__specs dd { margin: 0; line-height: 1.5; text-align: right; }
-.stamp { position: relative; width: 68px; height: 68px; display: grid; place-content: center; gap: 2px; margin: 18px 12px 4px auto; border: 2.5px solid var(--stamp); border-radius: 3px; color: var(--stamp); opacity: .88; transform: rotate(-7deg); animation: press 340ms cubic-bezier(.3,1.6,.5,1) 420ms both; font: 800 var(--t-label)/1.1 Paperlogy, sans-serif; letter-spacing: .18em; }
-.stamp::after { content: ""; position: absolute; inset: 4px; border: 1px solid currentColor; opacity: .55; }
-.guess-note { margin: 18px 0 4px; padding: 12px; border: 1px dashed var(--rule); color: var(--ink-faint); font-size: var(--t-micro); line-height: 1.55; }
-.receipt__actions { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-top: 22px; }
-.save-button, .text-button { border: 0; background: transparent; cursor: pointer; } .save-button { padding: 10px 0; border-bottom: 1.5px dashed var(--bean); color: var(--bean); font-weight: 800; text-align: left; }
-.save-button span { margin-right: 6px; } .save-button.is-saved { border-bottom-style: solid; } .text-button { color: var(--ink-soft); font-size: var(--t-micro); }
-.receipt__footer { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 28px 0 0; color: var(--ink-faint); font-size: var(--t-micro); }
-
-.bean-mark { position: relative; width: 26px; height: 32px; display: inline-block; flex: 0 0 auto; border: 2px solid var(--bean); border-radius: 55% 45% 52% 48%; background: var(--bean); transform: rotate(18deg); }
-.bean-mark i { position: absolute; width: 13px; height: 23px; left: 6px; top: 3px; border-left: 2px solid var(--paper); border-radius: 52%; transform: rotate(6deg); }
-.bean-mark--small { width: 18px; height: 22px; border-width: 1px; } .bean-mark--small i { width: 9px; height: 16px; left: 4px; top: 2px; border-left-width: 1.5px; }
-.receipt-tab { position: absolute; z-index: 15; right: 32px; bottom: 28px; padding: 12px 16px; border: 0; border-bottom: 1.5px dashed var(--bean); background: var(--paper); color: var(--bean); cursor: pointer; box-shadow: 0 12px 28px var(--shadow); font-weight: 800; }
-
-.drawer-layer { position: fixed; z-index: 60; inset: 0; } .drawer-scrim { position: absolute; inset: 0; border: 0; background: rgba(23, 18, 12, .34); cursor: default; }
-.drawer { position: relative; width: min(360px, 92vw); height: 100%; padding: 28px 24px; overflow: auto; background: var(--desk-deep); box-shadow: 18px 0 42px rgba(0, 0, 0, .22); animation: drawer-in 260ms ease-out both; }
-.drawer__tagline { margin: 5px 0 24px 26px; color: var(--ink-soft); }
-.drawer nav button { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border: 0; background: transparent; cursor: pointer; text-align: left; }
-.drawer nav strong { font: 700 var(--t-label)/1 "Courier New", monospace; }
-.drawer__setting { display: flex; align-items: center; justify-content: space-between; } .drawer__setting > span { color: var(--ink-soft); font: 700 var(--t-label)/1 "Courier New", monospace; letter-spacing: .28em; }
-.drawer__setting button { padding: 8px 0; border: 0; background: transparent; cursor: pointer; font-size: var(--t-label); }
-.drawer__links a { display: flex; align-items: flex-start; justify-content: space-between; padding: 12px 0; color: inherit; text-decoration: none; }
-.drawer__links small { display: block; margin-top: 4px; color: var(--ink-faint); font-size: var(--t-micro); }
-.drawer__foot { position: absolute; left: 24px; right: 24px; bottom: 24px; padding-top: 14px; border-top: 1px dashed var(--rule); color: var(--ink-faint); font: 400 var(--t-micro)/1.6 "Courier New", monospace; }
-.drawer__foot p { margin: 0; }
-.toast { position: fixed; z-index: 80; left: 50%; bottom: 32px; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--paper); box-shadow: 0 12px 30px var(--shadow); transform: translateX(-50%); animation: toast-in 220ms ease-out both; font-weight: 700; }
-
-@keyframes print { 0% { clip-path: inset(0 0 100% 0); transform: translateY(-6px); } 100% { clip-path: inset(0); transform: translateY(0); } }
-@keyframes press { 0% { transform: rotate(-7deg) scale(2.4); opacity: 0; } 62% { transform: rotate(-7deg) scale(.94); opacity: .95; } 100% { transform: rotate(-7deg) scale(1); opacity: .88; } }
-@keyframes drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-@keyframes toast-in { from { transform: translate(-50%, 12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-
-@media (max-width: 900px) {
-  .topbar { grid-template-columns: auto 1fr auto; padding: 0 18px; } .topbar__brand { justify-self: center; } .topbar__brand small, .theme-button { display: none; }
-  .search-panel { top: 88px; left: 18px; width: min(340px, calc(100vw - 36px)); } .receipt-wrap { right: 18px; width: min(390px, calc(100vw - 36px)); } .map-status { left: 18px; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
-@media (max-width: 640px) {
-  .app-shell { min-height: 560px; } .topbar { height: 70px; } .topbar__brand { font-size: var(--t-body); letter-spacing: .26em; } .topbar__brand .bean-mark { width: 20px; height: 25px; }
-  .marks-button { width: 40px; overflow: hidden; white-space: nowrap; color: transparent; } .marks-button strong { color: var(--ink); }
-  .search-panel { top: 78px; padding-block: 14px 12px; } .search-panel label { display: none; } .search { font-size: var(--t-body); }
-  .receipt-wrap { top: auto; right: 0; bottom: 0; width: 100%; max-height: 66svh; filter: drop-shadow(0 -14px 28px var(--shadow)); }
-  .receipt { min-height: 510px; padding-top: 20px; } .receipt__actions { grid-template-columns: 1fr; } .text-button { padding: 8px 0; text-align: left; }
-  .map-marker--partner span:not(.bean-mark) { display: none; } .map-marker--partner { width: 38px; min-width: 38px; height: 38px; padding: 0; justify-content: center; }
-  .map-status { display: none; } .receipt-tab { right: 18px; bottom: 22px; } .drawer__foot { position: static; margin-top: 48px; }
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+body {
+  overflow: hidden;
+  background: var(--desk);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+p,
+dd,
+figure,
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+ul {
+  list-style: none;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible,
+.map:focus-visible {
+  outline: 2px dashed var(--bean);
+  outline-offset: 4px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: -4rem;
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* 조판 유틸 — 라벨은 자간으로 벌리고, 마크업에는 공백을 넣지 않습니다.
+   `지 역`처럼 적으면 스크린리더가 음절을 따로 읽고 복사도 깨집니다. */
+.label-ko {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: var(--ls-label-ko);
+  /* 자간은 마지막 글자 뒤에도 붙습니다. 같은 값만큼 왼쪽을 밀어 광학 중심을 맞춥니다. */
+  padding-left: var(--ls-label-ko);
+}
+
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-style: normal;
+}
+
+.dashed-rule {
+  width: 100%;
+  margin: 14px 0;
+  border-top: 1px dashed var(--rule);
+}
+
+/* 지도 위에 뜬 종이 조각. 검색·상태·탭이 같은 재질이어야 따로 놀지 않습니다. */
+.plate {
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+}
+
+/* 글자만 있는 조작. 밑줄은 눌러야 나옵니다 — 평소에 깔려 있으면 입력란처럼 보입니다. */
+.text-link {
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--bean);
+  font-size: var(--t-label);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.text-link:hover:not(:disabled) {
+  text-decoration: underline dashed;
+  text-underline-offset: 5px;
+}
+.text-link:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.pill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--bean);
+  background: transparent;
+  color: var(--bean);
+  font-size: var(--t-label);
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.pill-button:hover:not(:disabled) {
+  background: var(--bean);
+  color: var(--paper);
+}
+.pill-button:disabled {
+  border-color: var(--rule);
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.app-shell {
+  position: relative;
+  width: 100vw;
+  height: 100svh;
+  overflow: hidden;
+  background: var(--desk);
+}
+
+/* ══ 3. 지도 — 책상 위에 펼쳐진 인쇄물 ════════════════════════════ */
+
+.map {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    /* 좌표 격자 */
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--rule) 30%, transparent) 0 1px,
+      transparent 1px 72px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--rule) 30%, transparent) 0 1px,
+      transparent 1px 72px
+    ),
+    radial-gradient(120% 90% at 50% 40%, var(--desk) 40%, var(--desk-deep) 100%);
+}
+
+.map__terrain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── 실제 카카오맵이 깔렸을 때 ────────────────────────────────────── */
+
+.map--live {
+  background: var(--desk);
+}
+.map__tiles {
+  position: absolute;
+  inset: 0;
+}
+
+/* 02 §2.3 대안 2 — 타일 자체에는 손대지 않고 우리 층에 저채도 막을 덮습니다.
+   saturation 블렌드가 --desk 의 낮은 채도를 타일에 옮기고, 그 위 옅은 종이색이
+   온도를 맞춥니다. 04 가 금지한 "타일에 필터" 가 아닙니다. */
+.map__wash {
+  position: absolute;
+  /* 아래 26px 은 비워 둡니다 — 카카오 로고와 저작권 표기가 있는 자리라
+     덮거나 변형하면 약관에 저촉될 수 있습니다. */
+  inset: 0 0 26px;
+  z-index: 1;
+  pointer-events: none;
+}
+.map__wash::before,
+.map__wash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.map__wash::before {
+  background: var(--desk);
+  mix-blend-mode: saturation;
+}
+.map__wash::after {
+  background: var(--desk);
+  opacity: 0.24;
+}
+[data-theme="dark"] .map__wash::after {
+  opacity: 0.55;
+}
+
+/* SDK 오버레이는 자기 좌표에 놓이므로 마커가 스스로 중심을 잡지 않습니다. */
+.map-marker--pinned {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+}
+
+.terrain__sea,
+.terrain__river,
+.terrain__stream,
+.terrain__border,
+.terrain__road {
+  vector-effect: non-scaling-stroke;
+}
+
+/* 물은 면으로 그립니다. 선으로 그리면 하구가 상류와 같은 굵기가 됩니다.
+   채움이 불투명해야 지천이 한강에 합류하는 자리가 겹쳐서 진해지지 않습니다. */
+.map {
+  --water: color-mix(in srgb, var(--bean) 15%, var(--desk));
+}
+/* 다크에서는 같은 비율이 훨씬 세게 보입니다 — 바다가 갈색 덩어리가 되지 않게 낮춥니다. */
+[data-theme="dark"] .map {
+  --water: color-mix(in srgb, var(--bean) 9%, var(--desk));
+}
+.terrain__sea,
+.terrain__river,
+.terrain__stream {
+  fill: var(--water);
+}
+.terrain__sea {
+  stroke: color-mix(in srgb, var(--ink-faint) 62%, transparent);
+  stroke-width: 1;
+}
+/* 경계는 아주 옅게. 스물한 개가 또렷하면 지도가 아니라 그물이 됩니다. */
+.terrain__border {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink-faint) 42%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2.5 3.5;
+}
+.terrain__road {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink-faint) 38%, transparent);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.terrain__road--minor {
+  stroke: color-mix(in srgb, var(--ink-faint) 22%, transparent);
+  stroke-width: 0.9;
+}
+
+/* 종이 결. 런타임 feTurbulence 대신 128px 타일을 반복시킵니다 (§4.3). */
+.map__grain,
+.receipt::before,
+.codex::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("/tex/grain-128.png") repeat;
+  background-size: 128px 128px;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  filter: invert(var(--grain-invert));
+}
+
+.map__places span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: var(--ls-label-ko);
+  padding-left: var(--ls-label-ko);
+  white-space: nowrap;
+}
+.map__places .map__sea-label {
+  color: color-mix(in srgb, var(--bean) 62%, transparent);
+}
+
+.map__scale {
+  position: absolute;
+  z-index: 8;
+  right: var(--rail);
+  bottom: 26px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--ls-mono);
+}
+.map__scale i {
+  width: 56px;
+  height: 6px;
+  border: 1px solid currentColor;
+  border-top: 0;
+}
+
+/* ── 마커 ── */
+
+.map-marker {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+/* 협력업체는 도장으로 찍힙니다. 클러스터에 흡수되지 않고 항상 위 레이어입니다. */
+.map-marker--partner {
+  z-index: 7;
+  color: var(--stamp);
+  filter: drop-shadow(0 4px 8px var(--shadow));
+}
+.map-marker--partner svg {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+}
+.map-marker__name {
+  margin-top: 5px;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  color: var(--ink);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* 일반 카페는 잉크 점. 이름도 상세 페이지도 없이 정직하게 점으로만 있습니다.
+   점은 9px이지만 누를 자리는 손가락에 맞춰 둡니다. */
+.map-marker--plain {
+  width: 30px;
+  height: 30px;
+  place-content: center;
+}
+.map-marker--plain::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 50%;
+}
+.map-marker--plain:hover::before {
+  background: var(--ink-soft);
+}
+
+.map-marker.is-active::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 1px dashed currentColor;
+  border-radius: 50%;
+  color: var(--ink-soft);
+}
+.map-marker--partner.is-active::after {
+  inset: -7px -7px 20px;
+  color: var(--stamp);
+}
+
+/* 조각 세 개가 아니라 쪽지 한 장. 흩어져 있으면 정보가 아니라 부스러기로 보입니다. */
+.map-status {
+  position: absolute;
+  z-index: 10;
+  left: var(--rail);
+  bottom: 26px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 13px;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--ls-mono);
+}
+.map-status span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.map-status span + span::before {
+  content: "·";
+  margin-right: 5px;
+  color: var(--rule);
+}
+.map-status__note {
+  color: var(--ink-faint);
+}
+
+/* 첫 진입에서 지도를 뒤로 물립니다. 클릭은 그대로 통과시켜야
+   "지도를 만지면 접힘"이 성립합니다. */
+.stage-veil {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--desk) 62%, transparent);
+  opacity: 0;
+  transition: opacity 520ms ease;
+}
+.stage-veil.is-on {
+  opacity: 1;
+}
+
+/* ══ 4. 상단 바 ════════════════════════════════════════════════════ */
+
+.topbar {
+  position: absolute;
+  z-index: 20;
+  inset: 0 0 auto;
+  height: 84px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 var(--rail);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--desk) 94%, transparent), transparent);
+}
+
+.menu-button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  align-content: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.menu-button span {
+  width: 22px;
+  border-top: 1.5px solid currentColor;
+  transition: width 160ms var(--ease-paper);
+}
+.menu-button span:last-child {
+  width: 14px;
+}
+.menu-button:hover span:last-child {
+  width: 22px;
+}
+
+.topbar__brand {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 9px;
+  color: var(--bean);
+}
+.topbar__brand b {
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: 800;
+  letter-spacing: var(--ls-brand);
+  padding-left: var(--ls-brand);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.topbar__brand small {
+  grid-column: 2;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  padding-left: 0.22em;
+}
+
+.topbar__actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 상시 점선 밑줄은 버튼을 기입란처럼 보이게 했습니다. 지금은 눌릴 자리만 밝힙니다. */
+.theme-button,
+.marks-button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color 140ms ease;
+}
+.theme-button:hover,
+.marks-button:hover {
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+}
+.theme-button span {
+  color: var(--bean);
+}
+.marks-button[aria-pressed="true"] {
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+}
+.marks-button strong {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--ink-soft);
+  border-radius: 50%;
+  font-size: var(--t-micro);
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+.marks-button[aria-pressed="true"] strong {
+  border-color: var(--bean);
+  background: var(--bean);
+  color: var(--paper);
+}
+
+/* ══ 5. 검색 — 영수증에는 사각 입력 필드가 없고 적어 넣는 빈 줄만 있습니다 ══ */
+
+.search-panel {
+  position: absolute;
+  z-index: 30;
+  top: 104px; /* 도크와 같은 선에서 시작해야 좌우가 나란해 보입니다. */
+  left: var(--rail);
+  width: min(360px, calc(100vw - var(--rail) * 2));
+  padding: 18px 20px 16px;
+  box-shadow: var(--lift-2);
+}
+/* 위아래로 뜯긴 쪽지 */
+.search-panel::before,
+.search-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 7px;
+  background: radial-gradient(circle at 7px 0, transparent 6px, var(--paper) 6.5px) 0 0 / 14px 7px
+    repeat-x;
+}
+.search-panel::before {
+  top: -7px;
+  transform: rotate(180deg);
+}
+.search-panel::after {
+  bottom: -7px;
+}
+
+.search-panel label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ink-soft);
+}
+.search-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-faint);
+}
+.search {
+  width: 100%;
+  padding: 5px 0 8px;
+  border: 0;
+  border-bottom: 1.5px solid var(--rule);
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--t-title);
+}
+.search::placeholder {
+  color: var(--ink-faint);
+}
+.search:focus {
+  border-bottom-color: var(--bean);
+  border-bottom-style: dashed;
+  box-shadow: 0 2px 0 var(--bean);
+}
+
+.search-results {
+  padding-top: 14px;
+}
+.search-results__count {
+  margin-bottom: 4px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+}
+.search-results__count i {
+  color: var(--ink-soft);
+  font-style: normal;
+}
+.search-results > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  margin-inline: -8px;
+  width: calc(100% + 16px);
+  border: 0;
+  border-top: 1px dashed var(--rule);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+/* 줄 전체가 눌린다는 걸 쉬는 상태에서도 알 수 있어야 합니다. */
+.search-results > button:hover {
+  background: var(--paper-edge);
+}
+.search-results small {
+  color: var(--ink-faint);
+  font-size: var(--t-micro);
+}
+
+.partner-badge {
+  padding: 2px 5px;
+  border: 1px solid var(--stamp);
+  color: var(--stamp);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  transform: rotate(-4deg);
+}
+
+/* 검색창 밑줄이 이미 구분선이라 여기 또 줄을 그으면 선이 두 개로 겹쳐 보입니다. */
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+  color: var(--bean);
+  text-align: center;
+}
+.empty-state p {
+  color: var(--ink-soft);
+}
+.widen-button {
+  border: 0;
+  background: transparent;
+  color: var(--bean);
+  font-size: var(--t-label);
+  font-weight: 700;
+  text-decoration: underline dashed;
+  text-underline-offset: 5px;
+  cursor: pointer;
+}
+
+/* ══ 6. 영수증 — 이 사이트가 기억될 단 하나의 요소 ══════════════════ */
+
+/* 도크 — 영수증과 내 도감이 같은 자리를 나눠 씁니다. */
+.dock {
+  --dock-top: 104px;
+  --dock-right: var(--rail);
+  --card-w: min(410px, calc(100vw - var(--rail) * 2));
+
+  position: absolute;
+  z-index: 25;
+  top: var(--dock-top);
+  right: var(--dock-right);
+  width: var(--card-w);
+  max-height: calc(100svh - var(--dock-top) - 28px);
+  overflow: auto;
+  scrollbar-width: none;
+  filter: drop-shadow(0 18px 26px var(--shadow));
+  transition: transform 640ms var(--ease-paper);
+}
+.dock::-webkit-scrollbar {
+  display: none;
+}
+
+/* 첫 진입: 도크 자리에서 화면 한가운데로 옮겨 놓았다가, 지도를 만지면
+   제자리로 돌아갑니다. 위치를 계산으로 잡아 두면 애니메이션이 transform 하나로 끝납니다.
+   하단 시트로 내려가는 폭에서는 이 계산이 아예 성립하지 않으므로(--dock-top: auto)
+   min-width 로 잘라 둡니다. 뒤에서 덮어쓰려 하면 계산이 무효가 되면서 transform 이
+   통째로 사라집니다. */
+@media (min-width: 768px) {
+  .dock.is-center {
+    transform: translate(
+      calc(var(--dock-right) + var(--card-w) / 2 - 50vw),
+      calc(50svh - var(--dock-top) - 50%)
+    );
+  }
+}
+
+.receipt,
+.codex {
+  position: relative;
+  padding: 24px 20px 28px;
+  background: var(--paper);
+  color: var(--ink);
+  --tear: 7px;
+  mask:
+    radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2)
+      100% repeat-x,
+    radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% /
+      calc(var(--tear) * 2) 100% repeat-x;
+  mask-composite: intersect;
+  animation: print 900ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+}
+
+
+.receipt__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--bean);
+}
+.brand-lockup b {
+  font-family: var(--font-display);
+  font-size: var(--t-label);
+  font-weight: 800;
+  letter-spacing: var(--ls-brand);
+  padding-left: var(--ls-brand);
+  color: var(--ink);
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--t-title);
+  line-height: 1;
+}
+
+.receipt__issue {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0 0 26px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-micro);
+  letter-spacing: var(--ls-mono);
+}
+.receipt__issue i {
+  margin-left: 10px;
+  font-style: normal;
+}
+
+.eyebrow {
+  display: inline-block;
+  margin: 22px 0 8px;
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: var(--ls-label-ko);
+  padding-left: var(--ls-label-ko);
+}
+/* 붉은색은 도장에만 씁니다 (02 §2.2). 확정/추정은 잉크 농도와 실선/점선으로
+   가르고, 인주는 협력업체 도장 하나에만 남겨야 그게 특별해집니다. */
+.eyebrow--confirmed {
+  color: var(--bean);
+  border-bottom: 1.5px solid currentColor;
+}
+.eyebrow--guess {
+  color: var(--ink-faint);
+  border-bottom: 1.5px dashed currentColor;
+}
+
+.receipt__name {
+  font-family: var(--font-display);
+  font-size: var(--t-display);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  word-break: keep-all;
+}
+.romanized {
+  margin-top: 4px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+/* 확정 정보와 추정 정보는 눈으로 즉시 구분되어야 합니다 (결정서 §3 Q34).
+   구분이 없으면 AI가 조립한 문장이 사실로 유통됩니다.
+   협력업체 소개는 실선에 진한 잉크, 추정 서술은 점선에 흐린 잉크. */
+.intro {
+  margin: 20px 0 22px;
+  padding-left: 13px;
+  word-break: keep-all;
+}
+.receipt--confirmed .intro {
+  border-left: 2px solid var(--bean);
+}
+.receipt--guess .intro {
+  border-left: 2px dashed var(--rule);
+  color: var(--ink-faint);
+}
+
+/* ── 점선 리더 ── 라벨과 값이 실제로 이어져야 영수증이 됩니다. */
+.receipt__specs .spec {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 11px 0;
+}
+.receipt__specs dt {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: var(--ls-label-ko);
+  white-space: nowrap;
+}
+.receipt__specs dt::after {
+  content: "";
+  flex: 1 1 auto;
+  min-width: 14px;
+  border-bottom: 1px dotted var(--rule);
+  transform: translateY(-0.3em);
+}
+.receipt__specs dd {
+  flex: 0 1 auto;
+  text-align: right;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+.receipt__specs dd a {
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+
+/* 도장과 마스코트 서명이 붙어 하나의 닫는 단락이 됩니다. */
+.receipt__close {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 6px 0 2px;
+}
+.receipt__close .guess-note {
+  justify-self: stretch;
+}
+
+.stamp {
+  position: relative;
+  width: 74px;
+  height: 74px;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+  margin: 0;
+  border: 2.5px solid var(--stamp);
+  border-radius: 3px;
+  color: var(--stamp);
+  opacity: 0.88;
+  transform: rotate(-7deg); /* 항상 같은 각도. 랜덤이면 장난이 되고, 고정이면 도구가 됩니다. */
+  animation: press 340ms cubic-bezier(0.3, 1.6, 0.5, 1) 420ms both;
+  font-family: var(--font-display);
+  font-size: var(--t-label);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.18em;
+  text-align: center;
+}
+.stamp span {
+  padding-left: 0.18em;
+}
+.stamp::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid currentColor;
+  opacity: 0.55;
+}
+
+.guess-note {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px dashed var(--rule);
+  color: var(--ink-faint);
+  font-size: var(--t-micro);
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.receipt__actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+.save-button {
+  justify-self: start;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1.5px dashed var(--bean);
+  background: transparent;
+  color: var(--bean);
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.save-button span {
+  margin-right: 6px;
+}
+.save-button.is-saved {
+  border-bottom-style: solid;
+}
+.text-button {
+  color: var(--ink-soft);
+  font-size: var(--t-micro);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.text-button:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+
+.receipt__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--bean);
+  font-size: var(--t-micro);
+}
+.receipt__footer--plain {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  letter-spacing: var(--ls-mono);
+}
+
+.dock-tab {
+  position: absolute;
+  z-index: 15;
+  right: var(--rail);
+  bottom: 64px;
+  padding: 12px 16px;
+  border: 0;
+  color: var(--bean);
+  font-size: var(--t-label);
+  font-weight: 800;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, transform 160ms var(--ease-paper);
+}
+.dock-tab:hover {
+  box-shadow: var(--lift-2);
+  transform: translateY(-2px);
+}
+
+/* ── 내 도감 — 뜯어둔 영수증이 겹쳐 쌓인 묶음 (02 §5) ── */
+
+.codex__empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 34px 0 30px;
+  color: var(--bean);
+  text-align: center;
+}
+.codex__empty p {
+  color: var(--ink-soft);
+}
+
+.codex__stack {
+  display: grid;
+  gap: 9px;
+  margin: 4px 0 2px;
+}
+/* 낱장이 살짝 겹쳐 보이도록 위쪽에 종이 그림자를 얹습니다. */
+.codex__slip {
+  position: relative;
+  padding: 12px 13px 11px;
+  background: var(--paper-edge);
+  box-shadow: 0 1px 0 var(--rule);
+}
+.codex__slip.is-unknown {
+  background: transparent;
+  border: 1px dashed var(--rule);
+  box-shadow: none;
+}
+.codex__slip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.codex__name {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.codex__name:hover:not(:disabled) {
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+.codex__name:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+.codex__drop {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  cursor: pointer;
+}
+.codex__drop:hover {
+  color: var(--stamp);
+}
+.codex__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--ink-faint);
+  font-size: var(--t-micro);
+}
+/* 영수증 여백에 손으로 적는 자리. 상자가 아니라 빈 줄입니다. */
+.codex__note {
+  width: 100%;
+  margin-top: 7px;
+  padding: 3px 0;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: var(--t-micro);
+  outline: none;
+}
+.codex__note::placeholder {
+  color: color-mix(in srgb, var(--ink-faint) 70%, transparent);
+}
+.codex__slip:hover .codex__note,
+.codex__note:focus {
+  border-bottom-color: var(--rule);
+}
+.codex__note:focus {
+  border-bottom-color: var(--bean);
+  color: var(--ink);
+}
+
+.codex__panel {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+.codex__hint {
+  color: var(--ink-faint);
+  font-size: var(--t-micro);
+  line-height: 1.65;
+  word-break: keep-all;
+}
+.codex__code {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed var(--rule);
+  background: var(--paper-edge);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  word-break: break-all;
+}
+.codex__code:focus {
+  border-color: var(--bean);
+}
+.codex__panel-actions {
+  display: flex;
+  gap: 16px;
+}
+.codex__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+.codex__actions .pill-button {
+  margin-right: auto;
+}
+
+.sheet-handle {
+  display: none;
+}
+
+/* ══ 7. 서랍 ═══════════════════════════════════════════════════════ */
+
+.drawer-layer {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+}
+.drawer-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(23, 18, 12, 0.34);
+  cursor: default;
+}
+.drawer {
+  position: relative;
+  width: min(360px, 92vw);
+  height: 100%;
+  padding: 28px 24px;
+  overflow: auto;
+  background: var(--desk-deep);
+  box-shadow: 18px 0 42px rgba(0, 0, 0, 0.22);
+  animation: drawer-in 260ms ease-out both;
+}
+.drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.drawer__tagline {
+  margin: 4px 0 22px 26px;
+  color: var(--ink-soft);
+  font-size: var(--t-label);
+}
+
+.drawer__nav button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.drawer__nav button:hover span {
+  text-decoration: underline dotted;
+  text-underline-offset: 5px;
+}
+.drawer__nav strong {
+  font-size: var(--t-label);
+  font-weight: 700;
+}
+
+.drawer__regions {
+  margin: 2px 0 10px;
+  padding: 12px 0 12px 14px;
+  border-left: 1px dashed var(--rule);
+  display: grid;
+  gap: 9px;
+}
+.drawer__regions li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink-soft);
+  font-size: var(--t-label);
+}
+.drawer__leader {
+  flex: 1 1 auto;
+  min-width: 12px;
+  border-bottom: 1px dotted var(--rule);
+  transform: translateY(-0.3em);
+}
+.drawer__regions small {
+  flex: 1 0 100%;
+  color: var(--ink-faint);
+  font-size: var(--t-micro);
+}
+
+.drawer__setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-soft);
+}
+.segmented {
+  display: flex;
+  gap: 14px;
+}
+/* 고른 쪽에 점선 상자를 두면 "아직 안 정해짐"으로 읽힙니다. 실선 밑줄이 결정입니다. */
+.segmented button {
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1.5px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: var(--t-label);
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+.segmented button:hover {
+  color: var(--ink-soft);
+}
+.segmented button[aria-pressed="true"] {
+  border-bottom-color: var(--bean);
+  color: var(--bean);
+  font-weight: 700;
+}
+
+.drawer__links a {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  text-decoration: none;
+}
+.drawer__links a:hover span {
+  text-decoration: underline dotted;
+  text-underline-offset: 5px;
+}
+.drawer__links small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-faint);
+  font-size: var(--t-micro);
+  text-decoration: none;
+}
+.drawer__links i {
+  color: var(--ink-faint);
+  font-style: normal;
+}
+
+.drawer__foot {
+  margin-top: 32px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  line-height: 1.7;
+}
+
+/* ══ 8. 알림 · 절취 ════════════════════════════════════════════════ */
+
+.toast {
+  position: fixed;
+  z-index: 80;
+  left: 50%;
+  bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  background: var(--paper);
+  color: var(--bean);
+  box-shadow: 0 12px 30px var(--shadow);
+  transform: translateX(-50%);
+  animation: toast-in 220ms ease-out both;
+  font-weight: 700;
+}
+
+/* 02 §6.3 — 북마크에 넣으면 카드 조각이 점선을 따라 뜯겨 서랍으로 들어갑니다. */
+.tear-ghost {
+  position: fixed;
+  z-index: 90;
+  padding: 6px 10px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  box-shadow: 0 8px 18px var(--shadow);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  --tear: 5px;
+  mask:
+    radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2)
+      100% repeat-x,
+    radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% /
+      calc(var(--tear) * 2) 100% repeat-x;
+  mask-composite: intersect;
+  animation: tear-off 320ms cubic-bezier(0.4, 0.1, 0.7, 1) both;
+}
+
+/* ══ 9. 모션 — 움직이는 건 셋뿐이고, 그 셋은 확실하게 움직입니다 ════ */
+
+@keyframes print {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-6px);
+  }
+  to {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+@keyframes press {
+  0% {
+    transform: rotate(-7deg) scale(2.4);
+    opacity: 0;
+  }
+  62% {
+    transform: rotate(-7deg) scale(0.94);
+    opacity: 0.95;
+  }
+  100% {
+    transform: rotate(-7deg) scale(1);
+    opacity: 0.88;
+  }
+}
+@keyframes tear-off {
+  from {
+    transform: translate(0, 0) rotate(0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) rotate(-9deg) scale(0.35);
+    opacity: 0;
+  }
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, 12px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+/* ══ 10. 반응형 ════════════════════════════════════════════════════ */
+
+@media (max-width: 1023px) {
+  :root {
+    --rail: 18px;
+  }
+  .topbar {
+    grid-template-columns: auto 1fr auto;
+  }
+  .topbar__brand {
+    justify-self: center;
+  }
+  .topbar__brand small,
+  .theme-button {
+    display: none;
+  }
+  .search-panel {
+    top: 90px;
+    width: min(340px, calc(100vw - var(--rail) * 2));
+  }
+  .dock {
+    --dock-top: 90px;
+    --card-w: min(380px, calc(100vw - var(--rail) * 2));
+  }
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    height: 70px;
+  }
+  .topbar__brand b {
+    font-size: var(--t-body);
+    letter-spacing: 0.26em;
+    padding-left: 0.26em;
+  }
+  .marks-button {
+    padding: 0 8px;
+  }
+  .marks-button__label {
+    display: none;
+  }
+  .search-panel {
+    top: 80px;
+    padding-block: 14px 12px;
+  }
+  .search-panel label {
+    display: none;
+  }
+  .search {
+    font-size: var(--t-body);
+  }
+
+  /* 하단 시트. 우측 패널이 아니라 손이 닿는 자리로 내려옵니다. */
+  .dock {
+    --dock-top: auto;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 68svh;
+    padding-top: 16px;
+    filter: drop-shadow(0 -14px 26px var(--shadow));
+  }
+  /* 모바일에서는 처음부터 시트 자리에서 프린트되고, 이후엔 끌기만 자리를 바꿉니다. */
+  .dock.is-center,
+  .dock.is-docked {
+    transform: translateY(var(--sheet-y, 0));
+    transition: transform 320ms var(--ease-paper);
+  }
+  .dock.is-peek {
+    --sheet-y: 42%;
+  }
+  .dock.is-dragging {
+    transition: none; /* 손가락을 따라와야 합니다 */
+  }
+
+  .sheet-handle {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: block;
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    margin: 0 auto 6px;
+    border: 0;
+    background: transparent;
+    cursor: grab;
+    touch-action: none; /* 끄는 동안 페이지가 같이 스크롤되지 않게 */
+  }
+  .sheet-handle::before {
+    content: "";
+    display: block;
+    width: 46px;
+    height: 5px;
+    margin: 0 auto;
+    border-radius: 3px;
+    background: var(--ink-faint);
+    /* 손잡이가 지도 위에 떠 있으므로 뒤에 책상색을 깔아야 보입니다. */
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--desk) 78%, transparent);
+  }
+  .dock.is-dragging .sheet-handle {
+    cursor: grabbing;
+  }
+  .receipt__actions {
+    grid-template-columns: 1fr;
+  }
+  .text-button {
+    padding: 6px 0;
+  }
+
+  .map-marker__name {
+    display: none;
+  }
+  .map-status,
+  .map__scale {
+    display: none;
+  }
+  .dock-tab {
+    bottom: 22px;
+  }
+  .stage-veil {
+    display: none;
+  }
+}
+
+/* 영수증은 애니메이션 없이 그냥 거기 놓여 있으면 됩니다. 기능 손실이 없습니다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

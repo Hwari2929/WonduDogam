@@ -30,6 +30,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# 예시 파일은 키가 없으므로 남겨 둡니다 — 어디에 무엇을 넣는지 알려주는 문서입니다.
+!.env.local.example
 
 # vercel
 .vercel

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
+import { themeBootScript } from "./theme";
 
 export async function generateMetadata(): Promise<Metadata> {
   const headerList = await headers();
@@ -33,6 +34,28 @@ export const viewport: Viewport = {
   ],
 };
 
+/**
+ * 카카오 앱키는 서버에서 읽습니다. 번들러마다 다른 `NEXT_PUBLIC_*` 인라이닝에
+ * 기대지 않고 <meta> 로 넘겨야 개발·Workers 양쪽에서 같은 방식으로 동작합니다.
+ */
+function readKakaoMapKey(): string | null {
+  const key = process.env.KAKAO_MAP_KEY ?? process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+  return key?.trim() ? key.trim() : null;
+}
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ko" suppressHydrationWarning><body>{children}</body></html>;
+  const kakaoMapKey = readKakaoMapKey();
+
+  return (
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        {/* 첫 페인트 전에 테마를 확정합니다. 늦으면 밝은 종이가 한 번 번쩍입니다. */}
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        {/* 카카오 자바스크립트 앱키. 도메인으로 제한되는 공개 키라 문서에 실려도
+            되지만, 없으면 태그 자체를 내보내지 않아 종이 지도로 돌아갑니다. */}
+        {kakaoMapKey ? <meta name="kakao-map-key" content={kakaoMapKey} /> : null}
+      </head>
+      <body>{children}</body>
+    </html>
+  );
 }
