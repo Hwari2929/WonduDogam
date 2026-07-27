@@ -87,8 +87,6 @@ export function Receipt({
         )}
       </dl>
 
-      <div className="dashed-rule" />
-
       <div className="receipt__actions">
         <button
           className={`receipt-action save-button ${saved ? "is-saved" : ""}`}
@@ -110,14 +108,11 @@ export function Receipt({
       </div>
 
       {!confirmed ? (
-        <>
-          <div className="dashed-rule" />
-          <footer className="receipt__close">
-            <p className="guess-note">
-              ※ 상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.
-            </p>
-          </footer>
-        </>
+        <footer className="receipt__close">
+          <p className="guess-note">
+            ※ 상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.
+          </p>
+        </footer>
       ) : null}
     </article>
   );

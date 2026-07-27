@@ -187,3 +187,21 @@ test("partner selection ring remains circular and supplied PNG Bibin boings acce
     "bibean-diary-writing.png",
   ].map((name) => access(new URL(`../public/mascot/${name}`, import.meta.url))));
 });
+test("Codex selection keeps the Codex open beside its cafe receipt", async () => {
+  const [page, codex, receipt, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /const \[codexPreviewId, setCodexPreviewId\]/);
+  assert.match(page, /onOpenCafe=\{openCafeFromCodex\}/);
+  assert.match(page, /className="dock__preview"[\s\S]*className="dock__codex"/);
+  const previewHandler = page.slice(page.indexOf("function openCafeFromCodex"), page.indexOf("function onToggleMark"));
+  assert.doesNotMatch(previewHandler, /navigate\(/);
+  assert.match(codex, /mark\.id === activeCafeId \? "is-active"/);
+  assert.match(css, /\.dock\.has-preview \.dock__pair\s*\{[^}]*grid-template-columns:/s);
+  assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.dock\.has-preview \.dock__codex\s*\{[^}]*display:\s*none/s);
+  assert.doesNotMatch(receipt, /<div className="dashed-rule" \/>\s*<div className="receipt__actions">/);
+  assert.doesNotMatch(codex, /<div className="dashed-rule" \/>\s*<div className="codex__actions">/);
+});

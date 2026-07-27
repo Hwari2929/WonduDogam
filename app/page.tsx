@@ -6,7 +6,7 @@ import { Codex } from "./components/Codex";
 import { Drawer } from "./components/Drawer";
 import { MapSurface } from "./components/MapSurface";
 import { Receipt } from "./components/Receipt";
-import { cafes } from "./data/cafes";
+import { cafes, type Cafe } from "./data/cafes";
 import { toggleMark, useMarks } from "./marks";
 import { applyTheme, useTheme } from "./theme";
 import { useSheetDrag } from "./useSheetDrag";
@@ -114,6 +114,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const marks = useMarks();
   const [notice, setNotice] = useState("");
+  const [codexPreviewId, setCodexPreviewId] = useState<string | null>(null);
   const timeLabel = useSyncExternalStore(neverChanges, readIssuedAt, () => null);
   const [tear, setTear] = useState<{ dx: number; dy: number; x: number; y: number; w: number; name: string } | null>(null);
 
@@ -136,6 +137,7 @@ export default function Home() {
   }, [dateLabel]);
 
   const displayedCafe = cafes.find((cafe) => cafe.id === selectedId) ?? dailyCafe;
+  const codexPreviewCafe = cafes.find((cafe) => cafe.id === codexPreviewId) ?? null;
   const partnerCount = cafes.filter((cafe) => cafe.partner).length;
 
   const matches = useMemo(() => {
@@ -160,6 +162,7 @@ export default function Home() {
 
   /** 첫 진입 중이면 한 번 접어 도크로 보내고, 이미 도크에 있으면 닫습니다. */
   const closePanel = useCallback(() => {
+    setCodexPreviewId(null);
     setPhase((current) => (current === "center" ? "docked" : "closed"));
     navigate("/");
   }, []);
@@ -204,26 +207,36 @@ export default function Home() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || sidebarOpen) return;
+      if (codexPreviewId) {
+        setCodexPreviewId(null);
+        return;
+      }
       closePanel();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [sidebarOpen, closePanel]);
+  }, [sidebarOpen, codexPreviewId, closePanel]);
 
   function openCafe(id: string) {
+    setCodexPreviewId(null);
     setPhase("docked");
     setQuery("");
     navigate(`/c/${encodeURIComponent(id)}`);
   }
 
   function openCodex() {
+    setCodexPreviewId(null);
     setPhase("docked");
     setSidebarOpen(false);
     navigate("/marks");
   }
 
-  function onToggleMark(event: React.MouseEvent<HTMLButtonElement>) {
-    const added = toggleMark(displayedCafe.id, dateLabel);
+  function openCafeFromCodex(id: string) {
+    setCodexPreviewId(id);
+  }
+
+  function onToggleMark(cafe: Cafe, event: React.MouseEvent<HTMLButtonElement>) {
+    const added = toggleMark(cafe.id, dateLabel);
     setNotice(added ? "영수증을 내 도감에 넣었어." : "서랍에서 꺼냈어.");
 
     // 02 §6.3 — 뜯어서 서랍으로. 조각 하나만 날려도 "절취"로 읽힙니다.
@@ -236,7 +249,7 @@ export default function Home() {
         w: origin.width,
         dx: target.left + target.width / 2 - (origin.left + origin.width / 2),
         dy: target.top + target.height / 2 - (origin.top + origin.height / 2),
-        name: displayedCafe.name,
+        name: cafe.name,
       });
     }
   }
@@ -249,7 +262,7 @@ export default function Home() {
 
       <MapSurface
         cafes={cafes}
-        activeId={panelOpen && panel === "receipt" ? displayedCafe.id : null}
+        activeId={panelOpen ? (panel === "receipt" ? displayedCafe.id : codexPreviewCafe?.id ?? null) : null}
         onSelect={openCafe}
         onInteract={dock}
       />
@@ -352,6 +365,7 @@ export default function Home() {
               effectivePhase === "center" ? "is-center" : "is-docked",
               isSheet ? `is-sheet is-${sheet.snap}` : "",
               sheet.dragging ? "is-dragging" : "",
+              panel === "codex" && codexPreviewCafe ? "has-preview" : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -366,14 +380,33 @@ export default function Home() {
               {...sheet.handleProps}
             />
             {panel === "codex" ? (
-              <Codex
-                marks={marks}
-                dateLabel={dateLabel}
-                showMascot={mascotSlot === "codex"}
-                onOpenCafe={openCafe}
-                onNotice={setNotice}
-                onClose={closePanel}
-              />
+              <div className="dock__pair">
+                {codexPreviewCafe ? (
+                  <div className="dock__preview">
+                    <Receipt
+                      key={codexPreviewCafe.id}
+                      cafe={codexPreviewCafe}
+                      dateLabel={dateLabel}
+                      timeLabel={timeLabel}
+                      serial={String(hash(codexPreviewCafe.id + dateLabel) % 10000).padStart(4, "0")}
+                      saved={marks.some((mark) => mark.id === codexPreviewCafe.id)}
+                      onSave={(event) => onToggleMark(codexPreviewCafe, event)}
+                      onClose={() => setCodexPreviewId(null)}
+                    />
+                  </div>
+                ) : null}
+                <div className="dock__codex">
+                  <Codex
+                    marks={marks}
+                    dateLabel={dateLabel}
+                    showMascot={mascotSlot === "codex"}
+                    activeCafeId={codexPreviewCafe?.id ?? null}
+                    onOpenCafe={openCafeFromCodex}
+                    onNotice={setNotice}
+                    onClose={closePanel}
+                  />
+                </div>
+              </div>
             ) : (
               <Receipt
                 key={displayedCafe.id}
@@ -382,7 +415,7 @@ export default function Home() {
                 timeLabel={timeLabel}
                 serial={String(hash(displayedCafe.id + dateLabel) % 10000).padStart(4, "0")}
                 saved={marks.some((mark) => mark.id === displayedCafe.id)}
-                onSave={onToggleMark}
+                onSave={(event) => onToggleMark(displayedCafe, event)}
                 onClose={closePanel}
               />
             )}

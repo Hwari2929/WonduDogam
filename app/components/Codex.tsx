@@ -16,6 +16,7 @@ export function Codex({
   marks,
   dateLabel,
   showMascot,
+  activeCafeId,
   onOpenCafe,
   onNotice,
   onClose,
@@ -23,6 +24,7 @@ export function Codex({
   marks: Mark[];
   dateLabel: string;
   showMascot: boolean;
+  activeCafeId: string | null;
   onOpenCafe: (id: string) => void;
   onNotice: (message: string) => void;
   onClose: () => void;
@@ -119,13 +121,21 @@ export function Codex({
         ) : (
           <ul className="codex__stack">
             {rows.map(({ mark, cafe }) => (
-              <li key={mark.id} className={`codex__slip ${cafe ? "" : "is-unknown"}`}>
+              <li
+                key={mark.id}
+                className={[
+                  "codex__slip",
+                  cafe ? "" : "is-unknown",
+                  mark.id === activeCafeId ? "is-active" : "",
+                ].filter(Boolean).join(" ")}
+              >
                 <div className="codex__slip-head">
                   <button
                     className="codex__name"
                     type="button"
                     onClick={() => cafe && onOpenCafe(mark.id)}
                     disabled={!cafe}
+                    aria-current={mark.id === activeCafeId ? "true" : undefined}
                   >
                     {cafe?.name ?? "알 수 없는 항목"}
                     {cafe?.partner ? <b className="partner-badge">협력</b> : null}
@@ -207,8 +217,6 @@ export function Codex({
           </div>
         </div>
       ) : null}
-
-      <div className="dashed-rule" />
 
       <div className="codex__actions">
         <button

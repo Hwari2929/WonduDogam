@@ -772,6 +772,23 @@ a:focus-visible,
   filter: drop-shadow(0 18px 26px var(--shadow));
   transition: transform 640ms var(--ease-paper);
 }
+
+.dock.has-preview {
+  --card-w: min(834px, calc(100vw - var(--rail) * 2));
+}
+.dock__pair {
+  min-width: 0;
+}
+.dock.has-preview .dock__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+.dock__preview,
+.dock__codex {
+  min-width: 0;
+}
 .dock::-webkit-scrollbar {
   display: none;
 }
@@ -971,6 +988,7 @@ a:focus-visible,
 }
 
 .receipt__close {
+  margin-top: 14px;
   padding: 2px 0 0;
 }
 .guess-note {
@@ -1111,6 +1129,10 @@ a:focus-visible,
   background: var(--paper-edge);
   box-shadow: 0 1px 0 var(--rule);
 }
+.codex__slip.is-active {
+  box-shadow: inset 3px 0 var(--bean), 0 1px 0 var(--rule);
+}
+
 .codex__slip.is-unknown {
   background: transparent;
   border: 1px dashed var(--rule);
@@ -1224,7 +1246,7 @@ a:focus-visible,
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  margin-top: 4px;
+  margin-top: 16px;
 }
 .codex__actions .pill-button {
   margin-right: auto;
@@ -1553,6 +1575,15 @@ a:focus-visible,
   }
   .dock.is-dragging {
     transition: none; /* 손가락을 따라와야 합니다 */
+  }
+  .dock.has-preview {
+    width: 100%;
+  }
+  .dock.has-preview .dock__pair {
+    display: block;
+  }
+  .dock.has-preview .dock__codex {
+    display: none;
   }
 
   .sheet-handle {
