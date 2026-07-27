@@ -1652,3 +1652,133 @@ a:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── 다중 도감 ── */
+.codex__collections {
+  display: flex;
+  gap: 7px;
+  margin: 14px -2px 12px;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.codex-tab {
+  --codex-color: var(--rule);
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--codex-color) 42%, var(--rule));
+  border-radius: 5px 5px 2px 2px;
+  background: color-mix(in srgb, var(--paper) 86%, var(--codex-color) 14%);
+  color: var(--ink-soft);
+  font-size: var(--t-micro);
+  cursor: pointer;
+}
+.codex-tab i {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--codex-color) 15%, transparent);
+  color: var(--codex-color);
+  font-family: var(--font-mono);
+  font-style: normal;
+  text-align: center;
+}
+.codex-tab.is-active {
+  border-color: var(--codex-color);
+  box-shadow: inset 0 -3px var(--codex-color);
+  color: var(--ink);
+}
+.codex-tab.is-active svg { color: var(--codex-color); }
+.codex-tab--add { border-style: dashed; background: transparent; color: var(--ink-faint); }
+
+.codex-maker { display: grid; gap: 15px; padding: 8px 0 4px; }
+.codex-maker label, .codex-maker fieldset { display: grid; gap: 7px; border: 0; color: var(--ink-soft); font-size: var(--t-micro); }
+.codex-maker legend { margin-bottom: 7px; }
+.codex-maker input {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid var(--rule);
+  background: var(--paper-edge);
+  color: var(--ink);
+  outline: none;
+}
+.codex-maker input:focus { border-color: var(--bean); }
+.codex-maker__choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.codex-color, .codex-icon-choice {
+  width: 34px;
+  height: 34px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.codex-color.is-selected { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+.codex-icon-choice { display: grid; place-items: center; border-radius: 5px; background: var(--paper-edge); color: var(--ink-soft); }
+.codex-icon-choice.is-selected { border-color: var(--bean); background: color-mix(in srgb, var(--bean) 12%, var(--paper)); color: var(--bean); }
+.codex__slip.is-active { box-shadow: inset 3px 0 var(--codex-color), 0 1px 0 var(--rule); }
+.codex-delete { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; border: 0; background: transparent; color: var(--ink-faint); font-size: var(--t-micro); cursor: pointer; }
+.codex-delete:hover { color: var(--stamp); }
+
+.receipt__save-panel {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  background: var(--paper-edge);
+}
+.receipt__save-panel > p { color: var(--ink-soft); font-size: var(--t-micro); }
+.receipt__collection-list { display: grid; gap: 6px; }
+.receipt__collection-list button {
+  --codex-color: var(--bean);
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 9px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.receipt__collection-list button.is-selected { border-color: var(--codex-color); box-shadow: inset 3px 0 var(--codex-color); color: var(--ink); }
+.receipt__collection-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: color-mix(in srgb, var(--codex-color) 14%, transparent); color: var(--codex-color); }
+.receipt__collection-list i { color: var(--codex-color); font-size: var(--t-micro); font-style: normal; }
+
+/* 카페의 등급 대신 사용자의 저장 여부만 지도에서 강조합니다. */
+.map-marker--plain::before { display: none; }
+.map-marker__dot {
+  display: grid;
+  place-items: center;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ink-soft);
+  border-radius: 50%;
+  background: transparent;
+  transition: width 140ms ease, height 140ms ease, transform 140ms ease;
+}
+.map-marker--plain:hover .map-marker__dot { background: var(--ink-soft); transform: scale(1.12); }
+.map-marker.is-saved { z-index: 7; color: var(--codex-color); }
+.map-marker.is-saved .map-marker__dot {
+  width: 29px;
+  height: 29px;
+  border: 2px solid color-mix(in srgb, var(--codex-color) 72%, var(--ink));
+  background: color-mix(in srgb, var(--codex-color) 86%, var(--paper));
+  color: #fffaf0;
+  box-shadow: 0 4px 10px var(--shadow), 0 0 0 3px color-mix(in srgb, var(--paper) 82%, transparent);
+}
+.map-marker.is-saved:hover .map-marker__dot { background: var(--codex-color); }
+.map-marker.is-saved .map-marker__name { color: var(--codex-color); }
+.map-marker__name i { margin-left: 4px; color: var(--codex-color); font-family: var(--font-mono); font-size: 9px; font-style: normal; }
+.map-marker.is-active::after { width: 46px; height: 46px; inset: 50% auto auto 50%; transform: translate(-50%, -50%); border-radius: 50%; color: var(--codex-color, var(--ink-soft)); }
+
+@media (max-width: 767px) {
+  .codex__collections { margin-right: -12px; }
+  .codex-tab { min-height: 40px; }
+  .receipt__collection-list button { min-height: 44px; }
+}

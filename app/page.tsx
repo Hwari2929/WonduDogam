@@ -7,7 +7,7 @@ import { Drawer } from "./components/Drawer";
 import { MapSurface } from "./components/MapSurface";
 import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
-import { toggleMark, useMarks } from "./marks";
+import { colorValue, setCafeInCollection, useCodex } from "./marks";
 import { applyTheme, useTheme } from "./theme";
 import { useSheetDrag } from "./useSheetDrag";
 
@@ -112,7 +112,8 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [query, setQuery] = useState("");
-  const marks = useMarks();
+  const { collections, marks } = useCodex();
+  const [activeCollectionId, setActiveCollectionId] = useState("default");
   const [notice, setNotice] = useState("");
   const [codexPreviewId, setCodexPreviewId] = useState<string | null>(null);
   const timeLabel = useSyncExternalStore(neverChanges, readIssuedAt, () => null);
@@ -151,6 +152,18 @@ export default function Home() {
   }, [query]);
 
   const emptyResult = query.trim().length > 0 && matches.length === 0;
+
+  const activeCollection = collections.find((collection) => collection.id === activeCollectionId) ?? collections[0];
+  const savedMarkers = useMemo(() => {
+    const result: Record<string, { color: string; icon: typeof collections[number]["icon"]; count: number; collectionName: string }> = {};
+    for (const mark of marks) {
+      const memberships = collections.filter((collection) => mark.collectionIds.includes(collection.id));
+      if (!memberships.length) continue;
+      const primary = memberships.find((collection) => collection.id === activeCollection?.id) ?? memberships[0];
+      result[mark.id] = { color: colorValue(primary.color), icon: primary.icon, count: memberships.length, collectionName: primary.name };
+    }
+    return result;
+  }, [marks, collections, activeCollection?.id]);
 
   /**
    * 주소에 카드가 적혀 있으면 그게 이깁니다. 링크로 들어왔거나 뒤로가기로 돌아온
@@ -191,6 +204,12 @@ export default function Home() {
     const timer = window.setTimeout(() => setPhase("center"), instant ? 0 : 400);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!collections.some((collection) => collection.id === activeCollectionId)) {
+      setActiveCollectionId(collections[0]?.id ?? "default");
+    }
+  }, [collections, activeCollectionId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -235,25 +254,16 @@ export default function Home() {
     setCodexPreviewId(id);
   }
 
-  function onToggleMark(cafe: Cafe, event: React.MouseEvent<HTMLButtonElement>) {
-    const added = toggleMark(cafe.id, dateLabel);
-    setNotice(added ? "영수증을 내 도감에 넣었어." : "서랍에서 꺼냈어.");
-
-    // 02 §6.3 — 뜯어서 서랍으로. 조각 하나만 날려도 "절취"로 읽힙니다.
+  function onToggleCollection(cafe: Cafe, collectionId: string, included: boolean, event: React.MouseEvent<HTMLButtonElement>) {
+    setCafeInCollection(cafe.id, collectionId, dateLabel, included);
+    const collection = collections.find((entry) => entry.id === collectionId);
+    setNotice(included ? `${collection?.name ?? "도감"}에 넣었어.` : `${collection?.name ?? "도감"}에서 꺼냈어.`);
     const target = marksButtonRef.current?.getBoundingClientRect();
-    if (added && target) {
+    if (included && target) {
       const origin = event.currentTarget.getBoundingClientRect();
-      setTear({
-        x: origin.left,
-        y: origin.top,
-        w: origin.width,
-        dx: target.left + target.width / 2 - (origin.left + origin.width / 2),
-        dy: target.top + target.height / 2 - (origin.top + origin.height / 2),
-        name: cafe.name,
-      });
+      setTear({ x: origin.left, y: origin.top, w: origin.width, dx: target.left + target.width / 2 - (origin.left + origin.width / 2), dy: target.top + target.height / 2 - (origin.top + origin.height / 2), name: cafe.name });
     }
   }
-
   return (
     <main className="app-shell" data-phase={effectivePhase}>
       <a className="skip-link" href="#dock">
@@ -263,6 +273,7 @@ export default function Home() {
       <MapSurface
         cafes={cafes}
         activeId={panelOpen ? (panel === "receipt" ? displayedCafe.id : codexPreviewCafe?.id ?? null) : null}
+        savedMarkers={savedMarkers}
         onSelect={openCafe}
         onInteract={dock}
       />
@@ -389,15 +400,19 @@ export default function Home() {
                       dateLabel={dateLabel}
                       timeLabel={timeLabel}
                       serial={String(hash(codexPreviewCafe.id + dateLabel) % 10000).padStart(4, "0")}
-                      saved={marks.some((mark) => mark.id === codexPreviewCafe.id)}
-                      onSave={(event) => onToggleMark(codexPreviewCafe, event)}
+                      collections={collections}
+                      selectedCollectionIds={marks.find((mark) => mark.id === codexPreviewCafe.id)?.collectionIds ?? []}
+                      onToggleCollection={(collectionId, included, event) => onToggleCollection(codexPreviewCafe, collectionId, included, event)}
                       onClose={() => setCodexPreviewId(null)}
                     />
                   </div>
                 ) : null}
                 <div className="dock__codex">
                   <Codex
+                    collections={collections}
                     marks={marks}
+                    activeCollectionId={activeCollection.id}
+                    onSelectCollection={setActiveCollectionId}
                     dateLabel={dateLabel}
                     showMascot={mascotSlot === "codex"}
                     activeCafeId={codexPreviewCafe?.id ?? null}
@@ -414,8 +429,9 @@ export default function Home() {
                 dateLabel={dateLabel}
                 timeLabel={timeLabel}
                 serial={String(hash(displayedCafe.id + dateLabel) % 10000).padStart(4, "0")}
-                saved={marks.some((mark) => mark.id === displayedCafe.id)}
-                onSave={(event) => onToggleMark(displayedCafe, event)}
+                collections={collections}
+                selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
+                onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
                 onClose={closePanel}
               />
             )}

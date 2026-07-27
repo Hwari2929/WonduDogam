@@ -66,7 +66,7 @@ export async function decodeMarks(code: string): Promise<Mark[]> {
   if (!Array.isArray(parsed.marks)) throw new Error("코드 안에 도감이 없어.");
   return parsed.marks
     .filter((mark): mark is Mark => !!mark && typeof (mark as Mark).id === "string")
-    .map((mark) => ({ id: mark.id, at: mark.at ?? "", note: typeof mark.note === "string" ? mark.note : "" }));
+    .map((mark) => ({ id: mark.id, at: mark.at ?? "", note: typeof mark.note === "string" ? mark.note : "", collectionIds: Array.isArray(mark.collectionIds) ? mark.collectionIds.filter((id): id is string => typeof id === "string") : [] }));
 }
 
 // ── 이미지 ────────────────────────────────────────────────────────────

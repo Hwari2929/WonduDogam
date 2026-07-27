@@ -123,13 +123,29 @@ test("내 도감 코드가 명세한 형식과 왕복을 지킨다", async () =>
 });
 
 test("내 도감이 비어 있어도 불러오기로 들어갈 수 있다", async () => {
-  // 기기를 막 바꾼 순간이 바로 코드가 필요한 순간입니다.
   const source = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
-  assert.match(source, /\{mode === "list" \? \(\s*<button[^>]*onClick=\{\(\) => setMode\("import"\)\}/);
-  // 덮어쓰기가 아니라 병합이어야 이쪽에서 뜯어둔 영수증이 살아남습니다.
+  assert.match(source, /onClick=\{\(\) => setMode\("import"\)\}>불러오기/);
   const marks = await readFile(new URL("../app/marks.ts", import.meta.url), "utf8");
   assert.match(marks, /export function mergeMarks/);
-  assert.match(marks, /const added = incoming\.filter\(\(mark\) => !known\.has\(mark\.id\)\)/);
+  assert.match(marks, /existing\.collectionIds/);
+});
+
+test("여러 도감과 저장 카페 강조가 같은 분류 체계를 쓴다", async () => {
+  const [marks, codex, receipt, map, css] = await Promise.all([
+    readFile(new URL("../app/marks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.equal((marks.match(/\{ id: "(?:clay|ochre|olive|forest|teal|indigo|plum|cocoa)"/g) ?? []).length, 8);
+  assert.equal((marks.match(/\{ id: "(?:bean|coffee|book-open|map-pin|star|heart|bookmark|compass)"/g) ?? []).length, 8);
+  assert.match(marks, /collectionIds: requested\.length[\s\S]*safeCollections\[0\]\.id/);
+  assert.match(codex, /createCollection/);
+  assert.match(receipt, /selectedCollectionIds/);
+  assert.match(map, /saved \? "is-saved"/);
+  assert.doesNotMatch(map, /cafe\.partner \? "map-marker--partner"/);
+  assert.match(css, /\.map-marker\.is-saved/);
 });
 
 test("한 화면에 비빈은 하나뿐이다", async () => {
@@ -165,12 +181,12 @@ test("mock cafe ratio stays at two regular cafes per partner cafe", async () => 
   assert.equal(regulars.length, partners.length * 2);
 });
 
-test("partner selection ring remains circular and supplied PNG Bibin boings accessibly", async () => {
+test("selection ring remains circular and supplied PNG Bibin boings accessibly", async () => {
   const [css, beanArt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/BeanArt.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(css, /\.map-marker--partner\.is-active::after\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;/s);
+  assert.match(css, /\.map-marker\.is-active::after\s*\{[^}]*width:\s*46px;[^}]*height:\s*46px;[^}]*border-radius:\s*50%/s);
   assert.match(css, /@keyframes\s+bibin-boing/);
   assert.match(beanArt, /<button[\s\S]*type="button"[\s\S]*onClick=\{boing\}/);
   assert.match(beanArt, /<img src=\{preset\.src\}/);
