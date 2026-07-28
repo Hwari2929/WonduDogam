@@ -408,16 +408,6 @@ a:focus-visible,
   cursor: pointer;
 }
 
-/* 협력업체는 도장으로 찍힙니다. 클러스터에 흡수되지 않고 항상 위 레이어입니다. */
-.map-marker--partner {
-  z-index: 7;
-  color: var(--stamp);
-  filter: drop-shadow(0 4px 8px var(--shadow));
-}
-.map-marker--partner svg {
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-}
 .map-marker__name {
   margin-top: 5px;
   padding: 2px 6px;
@@ -429,38 +419,11 @@ a:focus-visible,
   white-space: nowrap;
 }
 
-/* 일반 카페는 잉크 점. 이름도 상세 페이지도 없이 정직하게 점으로만 있습니다.
-   점은 9px이지만 누를 자리는 손가락에 맞춰 둡니다. */
+/* 누를 자리는 손가락에 맞춥니다. 점 자체는 아래 .map-marker__dot 이 그립니다. */
 .map-marker--plain {
   width: 30px;
   height: 30px;
   place-content: center;
-}
-.map-marker--plain::before {
-  content: "";
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid var(--ink-soft);
-  border-radius: 50%;
-}
-.map-marker--plain:hover::before {
-  background: var(--ink-soft);
-}
-
-.map-marker.is-active::after {
-  content: "";
-  position: absolute;
-  inset: -9px;
-  border: 1px dashed currentColor;
-  border-radius: 50%;
-  color: var(--ink-soft);
-}
-.map-marker--partner.is-active::after {
-  width: 48px;
-  height: 48px;
-  inset: 17px auto auto 50%;
-  transform: translate(-50%, -50%);
-  color: var(--stamp);
 }
 
 /* 조각 세 개가 아니라 쪽지 한 장. 흩어져 있으면 정보가 아니라 부스러기로 보입니다. */
@@ -731,6 +694,22 @@ a:focus-visible,
 }
 
 /* 검색창 밑줄이 이미 구분선이라 여기 또 줄을 그으면 선이 두 개로 겹쳐 보입니다. */
+/* ── 비빈 (일러스트 마스코트) ────────────────────────────────────── */
+
+.mascot {
+  display: block;
+  height: auto;
+  user-select: none;
+}
+
+/* 묵은 종이(#241E16) 위에서는 캐릭터의 짙은 외곽선이 배경에 먹혀 실루엣이
+   사라집니다. 얇은 중간톤 테두리로 형태만 되살립니다 — 밝은 테두리를 쓰면
+   종이에 인쇄된 그림이 아니라 오려 붙인 스티커로 보입니다. */
+[data-theme="dark"] .mascot {
+  filter: drop-shadow(1.5px 0 0 var(--ink-faint)) drop-shadow(-1.5px 0 0 var(--ink-faint))
+    drop-shadow(0 1.5px 0 var(--ink-faint)) drop-shadow(0 -1.5px 0 var(--ink-faint));
+}
+
 .empty-state {
   display: grid;
   justify-items: center;
@@ -968,37 +947,9 @@ a:focus-visible,
   justify-self: stretch;
 }
 
-.stamp {
-  position: relative;
-  width: 74px;
-  height: 74px;
-  display: grid;
-  place-content: center;
-  gap: 2px;
-  margin: 0;
-  border: 2.5px solid var(--stamp);
-  border-radius: 3px;
-  color: var(--stamp);
-  opacity: 0.88;
-  transform: rotate(-7deg); /* 항상 같은 각도. 랜덤이면 장난이 되고, 고정이면 도구가 됩니다. */
-  animation: press 340ms cubic-bezier(0.3, 1.6, 0.5, 1) 420ms both;
-  font-family: var(--font-display);
-  font-size: var(--t-label);
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: 0.18em;
-  text-align: center;
-}
-.stamp span {
-  padding-left: 0.18em;
-}
-.stamp::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border: 1px solid currentColor;
-  opacity: 0.55;
-}
+/* 협력업체 도장(.stamp)은 제거했습니다. 파트너 표시는 영수증 머리의 "비빈 파트너"
+   록업과 목록·지도의 뱃지가 맡습니다. 도장을 되살릴 일이 생기면 02 §4.4에 CSS가,
+   §6.2에 press 모션이 그대로 적혀 있습니다. */
 
 .guess-note {
   width: 100%;
@@ -1431,20 +1382,6 @@ a:focus-visible,
     transform: translateY(0);
   }
 }
-@keyframes press {
-  0% {
-    transform: rotate(-7deg) scale(2.4);
-    opacity: 0;
-  }
-  62% {
-    transform: rotate(-7deg) scale(0.94);
-    opacity: 0.95;
-  }
-  100% {
-    transform: rotate(-7deg) scale(1);
-    opacity: 0.88;
-  }
-}
 @keyframes tear-off {
   from {
     transform: translate(0, 0) rotate(0) scale(1);
@@ -1627,9 +1564,19 @@ a:focus-visible,
   object-fit: contain;
   pointer-events: none;
   user-select: none;
-}.bibin:focus-visible {
-  outline: 2px dashed var(--stamp);
+}
+/* 인주는 협력업체 도장 전용입니다 (02 §2.2). 포커스 링은 다른 곳과 같은 --bean. */
+.bibin:focus-visible {
+  outline: 2px dashed var(--bean);
   outline-offset: 3px;
+}
+
+/* 묵은 종이(#241E16) 위에서는 캐릭터의 짙은 외곽선이 배경에 먹혀 모자와 몸통
+   실루엣이 사라집니다. 얇은 중간톤 테두리로 형태만 되살립니다 — 밝은 테두리를
+   쓰면 종이에 인쇄된 그림이 아니라 오려 붙인 스티커로 보입니다. */
+[data-theme="dark"] .bibin img {
+  filter: drop-shadow(1.5px 0 0 var(--ink-faint)) drop-shadow(-1.5px 0 0 var(--ink-faint))
+    drop-shadow(0 1.5px 0 var(--ink-faint)) drop-shadow(0 -1.5px 0 var(--ink-faint));
 }
 .bibin.is-boinging {
   animation: bibin-boing 560ms cubic-bezier(.2, .82, .24, 1) both;
@@ -1787,18 +1734,12 @@ a:focus-visible,
 .receipt__collection-list i { color: var(--codex-color); font-size: var(--t-micro); font-style: normal; }
 
 /* 카페의 등급 대신 사용자의 저장 여부만 지도에서 강조합니다. */
-.map-marker--plain::before { display: none; }
 .map-marker__dot {
   display: grid;
   place-items: center;
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid var(--ink-soft);
   border-radius: 50%;
-  background: transparent;
   transition: width 140ms ease, height 140ms ease, transform 140ms ease;
 }
-.map-marker--plain:hover .map-marker__dot { background: var(--ink-soft); transform: scale(1.12); }
 .map-marker.is-saved { z-index: 7; color: var(--codex-color); }
 .map-marker.is-saved .map-marker__dot {
   width: 29px;
@@ -1811,7 +1752,6 @@ a:focus-visible,
 .map-marker.is-saved:hover .map-marker__dot { background: var(--codex-color); }
 .map-marker.is-saved .map-marker__name { color: var(--codex-color); }
 .map-marker__name i { margin-left: 4px; color: var(--codex-color); font-family: var(--font-mono); font-size: 9px; font-style: normal; }
-.map-marker.is-active::after { width: 46px; height: 46px; inset: 50% auto auto 50%; transform: translate(-50%, -50%); border-radius: 50%; color: var(--codex-color, var(--ink-soft)); }
 
 @media (max-width: 767px) {
   .codex__collections { margin-right: -12px; }
@@ -1850,8 +1790,44 @@ a:focus-visible,
   box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow) 65%, transparent);
 }
 .map-marker--plain:hover .map-marker__dot { background: var(--paper); color: var(--ink); }
+
+/* 협력업체 — 도장은 걷어냈지만 지도에서의 강조는 남습니다 (00 §2 Q4 "뱃지 정도",
+   03 §5.2 "지도 마커"). 인주 대신 도형을 뒤집습니다: 일반 카페가 종이 바탕에
+   잉크 아이콘이라면, 협력업체는 갈색 바탕에 종이색 아이콘. 같은 조형의 음영만
+   뒤집은 것이라 도장을 되살리지 않고도 한눈에 갈립니다. */
+.map-marker.is-partner { z-index: 6; }
+.map-marker.is-partner .map-marker__dot {
+  width: 26px;
+  height: 26px;
+  border-color: var(--bean);
+  background: var(--bean);
+  color: var(--paper);
+}
+.map-marker.is-partner:hover .map-marker__dot {
+  background: color-mix(in srgb, var(--bean) 82%, var(--paper));
+}
+.map-marker.is-partner .map-marker__name { color: var(--bean); }
+
+/* 이름표는 기본적으로 접어 둡니다. 협력업체가 71곳이 되면 이름 71개가 겹쳐
+   아무것도 안 읽힙니다. 확대했거나, 가리켰거나, 열어 둔 것만 이름을 폅니다. */
+.map-marker.is-partner:not(.is-saved) .map-marker__name {
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+.map.is-zoomed .map-marker.is-partner .map-marker__name,
+.map-marker.is-partner:hover .map-marker__name,
+.map-marker.is-partner:focus-visible .map-marker__name,
+.map-marker.is-partner.is-active .map-marker__name {
+  opacity: 1;
+}
+/* 가리킨 마커의 이름이 옆 마커에 가리지 않도록 잠깐 위로 올립니다. */
+.map-marker:hover,
+.map-marker.is-active {
+  z-index: 8;
+}
+/* 내가 뜯어둔 곳이 협력업체이기도 하면, 내 도감 색이 이깁니다 — 그게 내 기록이니까. */
 .map-marker.is-saved .map-marker__dot { width: 30px; height: 30px; }
-.map-marker.is-active::after { content: none; }
 .map-marker.is-active .map-marker__dot::after {
   content: "";
   position: absolute;

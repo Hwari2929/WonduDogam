@@ -11,6 +11,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "원두도감 — 수도권 개인 카페 지도",
     description: "영수증 한 장이 카페 한 곳이고, 모으면 도감이 됩니다.",
+    // 파비콘은 16px에서도 읽혀야 해서 기하 마크를, 홈 화면 아이콘은 180px라
+    // 일러스트 비빈을 씁니다.
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+      apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+    },
     openGraph: {
       title: "원두도감",
       description: "영수증 한 장이 카페 한 곳이고, 모으면 도감이 됩니다.",

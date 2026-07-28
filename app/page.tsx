@@ -205,11 +205,8 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (!collections.some((collection) => collection.id === activeCollectionId)) {
-      setActiveCollectionId(collections[0]?.id ?? "default");
-    }
-  }, [collections, activeCollectionId]);
+  // 사라진 묶음을 가리키고 있으면 activeCollection(위)이 이미 첫 묶음으로
+  // 되돌아갑니다. 저장된 id 까지 효과로 고쳐 쓸 필요는 없습니다.
 
   useEffect(() => {
     if (!notice) return;

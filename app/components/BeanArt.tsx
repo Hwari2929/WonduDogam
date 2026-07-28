@@ -104,16 +104,21 @@ export type BibinVariant =
   | "surprised"
   | "diary-writing";
 
+/**
+ * 원본은 512px PNG(34~52KB)지만 화면에서 가장 크게 쓰는 자리가 96px이라
+ * 256px WebP(8~11KB)로 구워 씁니다 — 03_기능_명세 §9의 "이미지: WebP".
+ * 원본 PNG는 public/mascot 에 그대로 두어 OG·인쇄물에 쓸 수 있게 남깁니다.
+ */
 const bibinPresets: Record<BibinVariant, { src: string; label: string }> = {
-  neutral: { src: "/mascot/bibean-neutral.png", label: "비빈" },
-  "map-reading": { src: "/mascot/bibean-map-reading.png", label: "지도를 읽는 비빈" },
-  "map-lost": { src: "/mascot/bibean-map-lost.png", label: "길을 잃은 비빈" },
-  squinting: { src: "/mascot/bibean-squinting.png", label: "눈을 찡그려 보는 비빈" },
-  "map-puzzled": { src: "/mascot/bibean-map-puzzled.png", label: "지도를 고민하는 비빈" },
-  inspecting: { src: "/mascot/bibean-inspecting.png", label: "유심히 살펴보는 비빈" },
-  delighted: { src: "/mascot/bibean-delighted.png", label: "신이 난 비빈" },
-  surprised: { src: "/mascot/bibean-surprised.png", label: "깜짝 놀란 비빈" },
-  "diary-writing": { src: "/mascot/bibean-diary-writing.png", label: "다이어리에 기록하는 비빈" },
+  neutral: { src: "/mascot/bibean-neutral.webp", label: "비빈" },
+  "map-reading": { src: "/mascot/bibean-map-reading.webp", label: "지도를 읽는 비빈" },
+  "map-lost": { src: "/mascot/bibean-map-lost.webp", label: "길을 잃은 비빈" },
+  squinting: { src: "/mascot/bibean-squinting.webp", label: "눈을 찡그려 보는 비빈" },
+  "map-puzzled": { src: "/mascot/bibean-map-puzzled.webp", label: "지도를 고민하는 비빈" },
+  inspecting: { src: "/mascot/bibean-inspecting.webp", label: "유심히 살펴보는 비빈" },
+  delighted: { src: "/mascot/bibean-delighted.webp", label: "신이 난 비빈" },
+  surprised: { src: "/mascot/bibean-surprised.webp", label: "깜짝 놀란 비빈" },
+  "diary-writing": { src: "/mascot/bibean-diary-writing.webp", label: "다이어리에 기록하는 비빈" },
 };
 
 /** 제공된 PNG 프리셋을 상황에 맞춰 보여 주는 인터랙티브 마스코트. */
@@ -152,7 +157,7 @@ export function Bibin({
         event.currentTarget.classList.remove("is-boinging");
       }}
     >
-      <img src={preset.src} alt="" width="512" height="512" draggable="false" />
+      <img src={preset.src} alt="" width="256" height="256" draggable="false" loading="lazy" decoding="async" />
     </button>
   );
 }

@@ -24,6 +24,8 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
 type View = { zoom: number; x: number; y: number };
+
+const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
 type Drag = { pointerId: number; startX: number; startY: number; view: View };
 
 export type SavedCafeMarker = { color: string; icon: CodexIconId; count: number; collectionName: string };
@@ -49,8 +51,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 }) {
   const mapRef = useRef<HTMLElement>(null);
   const dragRef = useRef<Drag | null>(null);
-  const viewRef = useRef<View>({ zoom: 1, x: 0, y: 0 });
-  const [view, setView] = useState<View>(viewRef.current);
+  // ref 와 state 가 같은 값에서 출발해야 하지만, 초깃값을 ref 에서 읽으면
+  // 렌더 중 ref 접근이 됩니다. 상수 하나를 양쪽이 나눠 씁니다.
+  const viewRef = useRef<View>(INITIAL_VIEW);
+  const [view, setView] = useState<View>(INITIAL_VIEW);
   const [dragging, setDragging] = useState(false);
 
   function commitView(next: View) {
@@ -112,10 +116,15 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (event.key === "0") { event.preventDefault(); resetView(); }
   }
 
+  // is-zoomed: 확대하면 협력업체 이름표를 폅니다. 축척이 촘촘해져 이름이 겹치지 않는 지점입니다.
+  const mapClass = ["map", dragging ? "is-dragging" : "", view.zoom >= 1.6 ? "is-zoomed" : ""]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <section
       ref={mapRef}
-      className={`map ${dragging ? "is-dragging" : ""}`}
+      className={mapClass}
       aria-label="수도권 카페 지도"
       tabIndex={0}
       onWheel={onWheel}
@@ -140,15 +149,15 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           const { x, y } = project(cafe.pos[0], cafe.pos[1]);
           return <button
             key={cafe.id}
-            className={["map-marker", "map-marker--plain", saved ? "is-saved" : "", active ? "is-active" : ""].filter(Boolean).join(" ")}
+            className={["map-marker", "map-marker--plain", cafe.partner ? "is-partner" : "", saved ? "is-saved" : "", active ? "is-active" : ""].filter(Boolean).join(" ")}
             style={{ left: `${x}%`, top: `${y}%`, "--codex-color": saved?.color, "--marker-scale": 1 / view.zoom } as CSSProperties}
             type="button"
             onClick={() => onSelect(cafe.id)}
-            aria-label={`${cafe.name}, ${cafe.area}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
+            aria-label={`${cafe.name}, ${cafe.area}${cafe.partner ? ", 협력업체" : ""}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
             aria-pressed={active}
           >
             <span className="map-marker__dot">{saved ? <CodexIcon name={saved.icon} size={14} /> : <Coffee size={12} strokeWidth={2.3} aria-hidden="true" />}</span>
-            {saved ? <span className="map-marker__name">{cafe.name}{saved.count > 1 ? <i>+{saved.count - 1}</i> : null}</span> : null}
+            {saved || cafe.partner ? <span className="map-marker__name">{cafe.name}{saved && saved.count > 1 ? <i>+{saved.count - 1}</i> : null}</span> : null}
           </button>;
         })}
       </div>

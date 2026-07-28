@@ -43,5 +43,10 @@ next-env.d.ts
 /outputs/
 /work/
 
-# local Codex preview
+# 로컬 개발 서버 로그 (Codex, Claude, 직접 실행 등 무엇이 남기든)
 .codex-dev.*.log
+.dev.*.log
+*.dev.log
+
+# 타입스크립트 증분 빌드 캐시
+*.tsbuildinfo

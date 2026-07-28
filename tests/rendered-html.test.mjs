@@ -58,7 +58,7 @@ test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", a
   assert.match(css, /\.receipt\s*\{[^}]*--ticket-notch-y:\s*138px;[^}]*radial-gradient\(circle 11px at 0 var\(--ticket-notch-y\), transparent 98%, #010101\)/s);
   assert.doesNotMatch(css, /\.receipt__identity::before|\.receipt__affiliation/);
   assert.match(receipt, /<b>\{confirmed \? "비빈 파트너" : "원두도감"\}<\/b>/);
-  assert.match(receipt, /className="receipt__photo"[\s\S]*bibean-inspecting\.png/);
+  assert.match(receipt, /className="receipt__photo"[\s\S]*bibean-inspecting\.webp/);
   assert.match(css, /\.receipt__photo\s*\{[^}]*aspect-ratio:\s*16 \/ 9/s);
   assert.doesNotMatch(receipt, /소속|receipt__affiliation/);
   assert.doesNotMatch(receipt, /<div className="dashed-rule" \/>\s*<div className="receipt__identity">/);
@@ -67,6 +67,55 @@ test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", a
   assert.match(receipt, /className="receipt-action text-button"/);
   assert.doesNotMatch(receipt, /className="stamp"|비빈이 다녀갔습니다|\{confirmed \? "확정"/);
 });
+test("협력업체는 지도에서도 구분된다", async () => {
+  // 00_결정서 §2 Q4 "시각적으로는 뱃지 정도" · 03_기능_명세 §5.2 "지도 마커".
+  // 도장은 걷어냈지만 강조 자체가 사라지면 부스팅의 시각적 절반이 없어집니다.
+  const [map, css] = await Promise.all([
+    readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(map, /cafe\.partner \? "is-partner" : ""/);
+  assert.match(map, /saved \|\| cafe\.partner \? <span className="map-marker__name">/);
+  assert.match(map, /cafe\.partner \? ", 협력업체" : ""/);
+  assert.match(css, /\.map-marker\.is-partner \.map-marker__dot\s*\{[^}]*color:\s*var\(--bean\)/s);
+  // 인주는 도장 전용이었으므로 지도 강조에 되살리지 않습니다.
+  assert.doesNotMatch(css, /\.map-marker[^{]*\{[^}]*var\(--stamp\)/s);
+});
+
+test("인주 색은 협력업체 도장에만 남는다", async () => {
+  // 02_디자인_시스템 §2.2 — "붉은색이 여기저기 나오면 도장이 특별해지지 않습니다."
+  const [marks, css] = await Promise.all([
+    readFile(new URL("../app/marks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  const stamp = /--stamp:\s*(#[0-9a-f]{6})/i.exec(css)?.[1]?.toLowerCase();
+  assert.ok(stamp, "--stamp 토큰을 찾지 못했습니다");
+
+  // 도감 색 팔레트에 인주와 같은 값이 있으면 안 됩니다.
+  for (const [, value] of marks.matchAll(/value:\s*"(#[0-9a-f]{6})"/gi)) {
+    assert.notEqual(value.toLowerCase(), stamp, `도감 색 ${value} 가 인주와 같습니다`);
+  }
+  // 기본 도감도 붉은색이 아니어야 합니다.
+  assert.doesNotMatch(marks, /DEFAULT_COLLECTION[^\n]*color:\s*"clay"/);
+});
+
+test("마스코트는 WebP로, 작게 쓰지 않는다", async () => {
+  // 03_기능_명세 §9 — "이미지: WebP". 512px PNG 는 34~52KB, 256px WebP 는 8~11KB 입니다.
+  const [art, receipt, page, codex] = await Promise.all(
+    ["../app/components/BeanArt.tsx", "../app/components/Receipt.tsx", "../app/page.tsx", "../app/components/Codex.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.doesNotMatch(art, /\/mascot\/[a-z-]+\.png/);
+  assert.doesNotMatch(receipt, /\/mascot\/[a-z-]+\.png/);
+
+  // 40px 아래로 내려가면 모자와 콧수염이 뭉개져 갈색 얼룩이 됩니다.
+  for (const source of [page, codex]) {
+    for (const [, size] of source.matchAll(/<Bibin[^>]*\bsize=\{(\d+)\}/g)) {
+      assert.ok(Number(size) >= 44, `Bibin size=${size} 는 너무 작습니다 (최소 44)`);
+    }
+  }
+});
+
 test("공유 링크와 새로고침이 살아 있다", async () => {
   // 03_기능_명세 §1 — "공유·뒤로가기·새로고침이 전부 정상 동작해야 합니다."
   // 카페 하나를 링크로 공유할 수 있어야 브랜드 확산이 일어납니다.
@@ -192,30 +241,35 @@ test("mock cafe ratio stays at two regular cafes per partner cafe", async () => 
   assert.equal(regulars.length, partners.length * 2);
 });
 
-test("selection ring remains circular and supplied PNG Bibin boings accessibly", async () => {
+test("selection ring remains circular and supplied Bibin boings accessibly", async () => {
   const [css, beanArt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/BeanArt.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(css, /\.map-marker\.is-saved\.is-active \.map-marker__dot::after\s*\{[^}]*width:\s*46px;[^}]*height:\s*46px;/s);
   assert.match(css, /@keyframes\s+marker-ring-spin/);
-  assert.match(css, /\.map-marker\.is-active::after\s*\{\s*content:\s*none/);
+  // 선택 링은 바깥 사각 테두리가 아니라 점 위의 원이어야 합니다.
+  assert.doesNotMatch(css, /\.map-marker\.is-active::after\s*\{[^}]*border:/s);
   assert.match(css, /@keyframes\s+bibin-boing/);
   assert.match(beanArt, /<button[\s\S]*type="button"[\s\S]*onClick=\{boing\}/);
   assert.match(beanArt, /<img src=\{preset\.src\}/);
   assert.match(beanArt, /isBoinging \? bibinPresets\.surprised/);
-  assert.match(beanArt, /\/mascot\/bibean-delighted\.png/);
+  assert.match(beanArt, /\/mascot\/bibean-delighted\.webp/);
+  // 화면에는 WebP 를 쓰고, 원본 PNG 는 OG·인쇄물용으로 함께 남겨 둡니다.
   await Promise.all([
-    "bibean-neutral.png",
-    "bibean-map-reading.png",
-    "bibean-map-lost.png",
-    "bibean-squinting.png",
-    "bibean-map-puzzled.png",
-    "bibean-inspecting.png",
-    "bibean-delighted.png",
-    "bibean-surprised.png",
-    "bibean-diary-writing.png",
-  ].map((name) => access(new URL(`../public/mascot/${name}`, import.meta.url))));
+    "bibean-neutral",
+    "bibean-map-reading",
+    "bibean-map-lost",
+    "bibean-squinting",
+    "bibean-map-puzzled",
+    "bibean-inspecting",
+    "bibean-delighted",
+    "bibean-surprised",
+    "bibean-diary-writing",
+  ].flatMap((name) => [
+    access(new URL(`../public/mascot/${name}.png`, import.meta.url)),
+    access(new URL(`../public/mascot/${name}.webp`, import.meta.url)),
+  ]));
 });
 test("Codex selection keeps the Codex open beside its cafe receipt", async () => {
   const [page, codex, receipt, css] = await Promise.all([

@@ -38,7 +38,7 @@ export function Receipt({
       <p className="receipt__issue"><span>{dateLabel}<i aria-hidden="true">{timeLabel ?? "--:--"}</i></span><span className="receipt__serial">NO.{serial}</span></p>
       <div className="receipt__identity"><h1 className="receipt__name">{cafe.name}</h1><p className="romanized">{cafe.romanized}</p></div>
       <figure className="receipt__photo">
-        <img src="/mascot/bibean-inspecting.png" alt="" />
+        <img src="/mascot/bibean-inspecting.webp" alt="" width="256" height="256" loading="lazy" decoding="async" />
         <figcaption><span>CAFE PHOTO</span><small>사진 준비 중</small></figcaption>
       </figure>
       <p className="intro">{confirmed ? cafe.intro : cafe.guess}</p>

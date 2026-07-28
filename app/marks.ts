@@ -2,8 +2,15 @@
 
 import { useSyncExternalStore } from "react";
 
+/**
+ * 도감 색.
+ *
+ * 인주(--stamp #A63A2E)와 같은 값은 쓰지 않습니다. 02_디자인_시스템 §2.2 —
+ * "붉은색이 여기저기 나오면 도장이 특별해지지 않습니다." 벽돌색은 인주에서
+ * 한 칸 비켜 두어, 나란히 놓여도 협력업체 도장과 구분됩니다.
+ */
 export const CODEX_COLORS = [
-  { id: "clay", label: "벽돌", value: "#A63A2E" },
+  { id: "clay", label: "벽돌", value: "#B3543F" },
   { id: "ochre", label: "황토", value: "#B66A2C" },
   { id: "olive", label: "올리브", value: "#6D7339" },
   { id: "forest", label: "숲", value: "#37715B" },
@@ -33,7 +40,9 @@ export type CodexState = { collections: Collection[]; marks: Mark[] };
 export const MARKS_KEY = "wondudogam.marks";
 export const DEFAULT_COLLECTION_ID = "default";
 const CHANGE_EVENT = "wondudogam:marks";
-const DEFAULT_COLLECTION: Collection = { id: DEFAULT_COLLECTION_ID, name: "나의 원두 도감", color: "clay", icon: "bean", createdAt: "" };
+// 기본 도감은 브랜드 갈색으로. 모두의 첫 도감이 붉은색이면 화면에서 인주가
+// 가장 흔한 색이 되어 도장이 특별해지지 않습니다.
+const DEFAULT_COLLECTION: Collection = { id: DEFAULT_COLLECTION_ID, name: "나의 원두 도감", color: "cocoa", icon: "bean", createdAt: "" };
 const EMPTY_STATE: CodexState = { collections: [DEFAULT_COLLECTION], marks: [] };
 let cachedRaw: string | null = null;
 let cachedState: CodexState = EMPTY_STATE;
