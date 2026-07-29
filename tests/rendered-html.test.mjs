@@ -61,7 +61,19 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   assert.match(css, /\.receipt::after,\n\.codex::after\s*\{[^}]*background:\s*var\(--perforation\)/s);
   assert.match(css, /--perforation:\s*repeating-linear-gradient\(90deg, var\(--rule\) 0 5px, transparent 5px 10px\)/);
   assert.doesNotMatch(css, /--ticket-notch-y|\.receipt__identity|\.receipt__affiliation/);
-  assert.match(receipt, /<b>\{confirmed \? "비빈 파트너" : "원두도감"\}<\/b>/);
+  // 등급은 상호 옆 한 글자로 갈립니다 — 협력업체는 원두 마크, 추정은 미확인 칩.
+  // 뜻은 가리켰을 때만 펴 보이므로, 툴팁이 없으면 마크가 무엇인지 알 길이 없습니다.
+  assert.match(receipt, /confirmed \? \([\s\S]*<BeanMark size=\{19\} \/>/);
+  assert.match(receipt, /className="partner-mark__tip"[\s\S]*비빈 파트너/);
+  assert.match(receipt, /aria-label="비빈 파트너\. 카페가 직접 확인해 준 정보입니다\."/);
+  assert.match(receipt, /\) : \(\s*<span className="chip chip--unknown">추정<\/span>/);
+  assert.match(css, /\.partner-mark:hover \.partner-mark__tip,\n\.partner-mark:focus-visible \.partner-mark__tip\s*\{[^}]*opacity: 1/s);
+
+  // 상호와 주소 바로 아래가 사진입니다. 발행 정보·영문명·구분선은 걷어냈습니다.
+  assert.match(receipt, /className="receipt__address">\{cafe\.address\}/);
+  assert.doesNotMatch(receipt, /romanized|receipt__issue|receipt__mark|dateLabel|serial/);
+  assert.doesNotMatch(css, /\.romanized|\.receipt__issue|\.receipt__mark|\.receipt__specs/);
+
   // 준비 중인 사진은 마스코트가 아니라 빗금입니다 (§03) — 비빈은 여백에서 거드는 관찰자.
   assert.match(receipt, /className="receipt__photo"[\s\S]*PHOTO — 사진 준비 중/);
   assert.doesNotMatch(receipt, /bibean-\w+\.webp/);
@@ -71,6 +83,38 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   assert.match(receipt, /className=\{`receipt-action save-button/);
   assert.match(receipt, /className="receipt-action text-button"/);
   assert.doesNotMatch(receipt, /className="stamp"|비빈이 다녀갔습니다|\{confirmed \? "확정"/);
+});
+
+test("사진 밑 한 줄은 내가 적은 것이 먼저다", async () => {
+  // 남이 써 준 소개보다 내가 마시고 적은 문장이 앞섭니다 — 그래야 도감입니다.
+  const [receipt, page, css] = await Promise.all(
+    ["../app/components/Receipt.tsx", "../app/page.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(receipt, /const mine = note\.trim\(\);/);
+  assert.match(receipt, /const summary = mine \|\| \(confirmed \? cafe\.intro : cafe\.guess\);/);
+  assert.match(receipt, /note=\{|note: string/);
+  // 적어 둔 한 줄은 카페 등급과 무관하게 확정 표시로 섭니다.
+  assert.match(css, /\.receipt \.intro--mine\s*\{[^}]*border-left: 2px solid var\(--bean\)/s);
+  // 영수증은 자기 메모를 어디서도 읽어 오지 않습니다. 여는 쪽이 넘겨줍니다.
+  assert.doesNotMatch(receipt, /useCodex|localStorage/);
+  assert.equal((page.match(/note=\{marks\.find\(/g) ?? []).length, 2);
+});
+
+test("상세는 표(모노) 중심으로 접혀 있다", async () => {
+  // §06 TAB RULES — "기본값은 항상 요약보기", "상세는 표(모노) 중심".
+  const [receipt, css] = await Promise.all(
+    ["../app/components/Receipt.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(receipt, /const \[detailOpen, setDetailOpen\] = useState\(false\)/);
+  assert.match(receipt, /\{detailOpen \? "접기" : "상세 보기"\}/);
+  assert.match(receipt, /aria-expanded=\{detailOpen\}/);
+  assert.match(receipt, /<section className="detail"/);
+  assert.match(css, /\.detail__table\s*\{[^}]*font-family: var\(--font-mono\)/s);
+  // 카카오맵은 상세 안으로 들어갔습니다 — 요약의 단추는 둘까지 (§08).
+  assert.equal((receipt.match(/receipt-action/g) ?? []).length, 3);
+  assert.match(receipt, /<section className="detail"[\s\S]*map\.kakao\.com/);
 });
 test("협력업체는 지도에서도 구분된다", async () => {
   // 00_결정서 §2 Q4 "시각적으로는 뱃지 정도" · 03_기능_명세 §5.2 "지도 마커".

@@ -973,14 +973,67 @@ a:focus-visible,
   right: 8px;
 }
 
+/* 상호 한 줄, 주소 한 줄. 그 아래는 바로 사진입니다 — 발행 정보와 구분선이
+   차지하던 자리를 사진이 가져갑니다. */
 .receipt__head {
-  display: grid;
-  justify-items: center;
-  gap: 7px;
-  text-align: center;
+  padding-right: 34px; /* 닫기 단추 자리 */
 }
-.receipt__head .receipt__issue {
-  justify-content: center;
+.receipt__address {
+  margin-top: 5px;
+  color: var(--ink-faint);
+  font-size: var(--t-label);
+  word-break: keep-all;
+}
+
+/* 원두 하나가 곧 "비빈 파트너"입니다. 뜻은 가리켰을 때만 펴 보입니다 —
+   상시 라벨은 상호보다 길어져서 이름을 밀어냅니다. */
+.partner-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: -0.12em;
+  margin-left: 8px;
+  color: var(--accent);
+  cursor: help;
+}
+/* 아래로 폅니다. 상호는 종이 맨 위에 있고 도크는 스크롤 상자라, 위로 펴면
+   말풍선이 상자 바깥으로 나가 잘립니다. */
+.partner-mark__tip {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: calc(100% + 8px);
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: 220px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: normal;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+.partner-mark__tip b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+.partner-mark:hover .partner-mark__tip,
+.partner-mark:focus-visible .partner-mark__tip {
+  opacity: 1;
 }
 
 .brand-lockup {
@@ -1014,20 +1067,7 @@ a:focus-visible,
   color: var(--ink);
 }
 
-.receipt__issue {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 4px 12px;
-  margin: 0;
-}
-.receipt__issue i {
-  margin-left: 10px;
-  font-style: normal;
-}
-
 .receipt__name {
-  margin-top: 18px;
   font-family: var(--font-display);
   font-size: var(--t-display);
   font-weight: 800;
@@ -1035,24 +1075,15 @@ a:focus-visible,
   letter-spacing: -0.03em;
   word-break: keep-all;
 }
-.receipt__sub {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 6px;
-}
-.romanized {
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  font-weight: 400;
-  letter-spacing: var(--ls-meta);
+.receipt__name .chip {
+  margin-left: 9px;
+  vertical-align: 0.24em;
 }
 /* 확정 정보와 추정 정보는 눈으로 즉시 구분되어야 합니다 (결정서 §3 Q34).
    구분이 없으면 AI가 조립한 문장이 사실로 유통됩니다.
    협력업체 소개는 실선에 진한 잉크, 추정 서술은 점선에 흐린 잉크. */
 .intro {
-  margin: 18px 0 20px;
+  margin: 16px 0 20px;
   padding-left: 13px;
   word-break: keep-all;
 }
@@ -1063,6 +1094,15 @@ a:focus-visible,
   border-left: 2px dashed var(--rule);
   color: var(--ink-faint);
 }
+/* 내가 적은 문장은 추정이 아닙니다. 카페 등급과 상관없이 확정 표시로 섭니다. */
+.receipt .intro--mine {
+  border-left: 2px solid var(--bean);
+  color: var(--ink);
+}
+.intro__by {
+  display: block;
+  margin-bottom: 3px;
+}
 
 /* §03 야장 — 취급 원두는 문장이 아니라 라벨입니다. 칩으로 끊어 둡니다. */
 .bean-tags {
@@ -1072,50 +1112,64 @@ a:focus-visible,
   margin: 14px 0 2px;
 }
 
-/* ── 점선 리더 ── 라벨과 값이 실제로 이어져야 영수증이 됩니다. */
-.receipt__specs .spec {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 11px 0;
+/* §06 상세 — "상세는 표(모노) 중심, 요약은 문장(SUIT) 중심."
+   요약이 읽는 것이라면 상세는 확인하는 것이라, 값이 오른쪽 한 줄에 정렬됩니다. */
+.detail {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--rule);
+  animation: unfold 220ms var(--ease-paper) both;
 }
-.receipt__specs dt {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  color: var(--ink-faint);
+.detail__table {
+  display: grid;
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 2.2;
+}
+.detail__table > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.detail__table dt {
+  color: var(--ink-faint);
   letter-spacing: var(--ls-label-ko);
   white-space: nowrap;
 }
-.receipt__specs dt::after {
-  content: "";
-  flex: 1 1 auto;
-  min-width: 14px;
-  border-bottom: 1px dotted var(--rule);
-  transform: translateY(-0.3em);
-}
-.receipt__specs dd {
-  flex: 0 1 auto;
+.detail__table dd {
   text-align: right;
-  line-height: 1.5;
   word-break: keep-all;
 }
-.receipt__specs dd a {
+.detail__table dd a {
   text-decoration: underline dotted;
   text-underline-offset: 4px;
 }
-
-.receipt__foot {
-  margin-top: 16px;
+.detail .bean-tags {
+  margin: 10px 0 0;
+}
+.detail .guess-note {
+  margin-top: 2px;
+}
+/* 상세 안의 바깥 링크는 종이 한 장을 가로지르는 한 줄로 둡니다. */
+.detail > .receipt-action {
+  width: 100%;
 }
 
-/* 협력업체 도장(.stamp)은 제거했습니다. 파트너 표시는 영수증 머리의 "비빈 파트너"
-   록업과 목록·지도의 뱃지가 맡습니다. 도장을 되살릴 일이 생기면 02 §4.4에 CSS가,
+@keyframes unfold {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+  to {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+}
+
+/* 협력업체 도장(.stamp)은 제거했습니다. 파트너 표시는 상호 옆의 원두 마크와
+   목록·지도의 뱃지가 맡습니다. 도장을 되살릴 일이 생기면 02 §4.4에 CSS가,
    §6.2에 press 모션이 그대로 적혀 있습니다. */
 
 .guess-note {
@@ -1182,14 +1236,6 @@ a:focus-visible,
   border-color: var(--ink);
   background: transparent;
   color: var(--ink);
-}
-
-/* 아래끝 발행 표시 (§03). 가운데로 모으고, 절취선 위에 앉힙니다. */
-.receipt__mark {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--rule);
-  text-align: center;
 }
 
 .dock-tab {
@@ -1859,8 +1905,11 @@ a:focus-visible,
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  height: 124px;
-  margin: 16px 0 18px;
+  /* 발행 정보와 구분선이 비운 자리를 사진이 가져갑니다 — 카페를 고르는 건
+     결국 이 한 장이라, 세로를 가장 넓게 씁니다. */
+  aspect-ratio: 4 / 3;
+  max-height: 240px;
+  margin: 14px 0 0;
   padding-bottom: 9px;
   overflow: hidden;
   border: 1px solid var(--rule);

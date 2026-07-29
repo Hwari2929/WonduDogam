@@ -93,6 +93,27 @@ export function BeanStamp({ size = 34, className }: { size?: number; className?:
   );
 }
 
+/**
+ * 원두 실루엣 하나. 상호 옆에 붙어 "비빈 파트너"를 뜻합니다.
+ *
+ * 도장 테두리도 눈도 없는 조형이라 §7.3의 "한 화면에 비빈은 하나"에 걸리지
+ * 않습니다 — 이건 마스코트가 아니라 표시입니다.
+ */
+export function BeanMark({ size = 19, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <BeanBody paper="var(--paper)" />
+    </svg>
+  );
+}
+
 export type BibinVariant =
   | "neutral"
   | "map-reading"

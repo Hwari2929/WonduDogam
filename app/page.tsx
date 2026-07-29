@@ -27,12 +27,9 @@ function pad(value: number) {
 }
 
 /** 서버와 클라이언트가 같은 "오늘"을 봐야 하므로 KST를 고정 오프셋으로 계산합니다. */
-function kstParts(now: Date) {
+function kstToday(now: Date) {
   const kst = new Date(now.getTime() + KST_OFFSET_MS);
-  return {
-    date: `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}`,
-    time: `${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}`,
-  };
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}`;
 }
 
 function hash(value: string) {
@@ -63,19 +60,6 @@ const PAPERS: Record<Theme, { hint: string; glyph: string }> = {
   warm: { hint: "묵은 종이", glyph: "◑" },
   cool: { hint: "식은 종이", glyph: "◒" },
 };
-
-/**
- * 발행 시각은 페이지를 연 순간으로 한 번만 굳힙니다.
- * 서버에서는 null 이라 하이드레이션이 어긋나지 않고, 클라이언트에서는 매 렌더
- * 같은 값이 나와야 하므로 모듈 스코프에 담아 둡니다.
- */
-let issuedAt: string | null = null;
-const neverChanges = () => () => {};
-
-function readIssuedAt() {
-  if (issuedAt === null) issuedAt = kstParts(new Date()).time;
-  return issuedAt;
-}
 
 /**
  * 주소창이 상태를 반영하되 페이지를 새로 그리지는 않습니다 (03_기능_명세 §1).
@@ -160,7 +144,6 @@ export default function Home() {
   const [activeCollectionId, setActiveCollectionId] = useState("default");
   const [notice, setNotice] = useState("");
   const [codexPreviewId, setCodexPreviewId] = useState<string | null>(null);
-  const timeLabel = useSyncExternalStore(neverChanges, readIssuedAt, () => null);
   const [tear, setTear] = useState<{ dx: number; dy: number; x: number; y: number; w: number; name: string } | null>(null);
 
   const [cursor, setCursor] = useState(0);
@@ -174,7 +157,7 @@ export default function Home() {
   const panel = route?.panel ?? "receipt";
   const selectedId = route?.cafeId ?? "";
 
-  const dateLabel = useMemo(() => kstParts(new Date()).date, []);
+  const dateLabel = useMemo(() => kstToday(new Date()), []);
   const paper = PAPERS[theme];
 
   // 03 §2 — 후보 풀은 협력업체와 승격 카페뿐입니다. 소개할 내용이 없는 카페를
@@ -504,9 +487,7 @@ export default function Home() {
                     <Receipt
                       key={codexPreviewCafe.id}
                       cafe={codexPreviewCafe}
-                      dateLabel={dateLabel}
-                      timeLabel={timeLabel}
-                      serial={String(hash(codexPreviewCafe.id + dateLabel) % 10000).padStart(4, "0")}
+                      note={marks.find((mark) => mark.id === codexPreviewCafe.id)?.note ?? ""}
                       collections={collections}
                       selectedCollectionIds={marks.find((mark) => mark.id === codexPreviewCafe.id)?.collectionIds ?? []}
                       onToggleCollection={(collectionId, included, event) => onToggleCollection(codexPreviewCafe, collectionId, included, event)}
@@ -533,9 +514,7 @@ export default function Home() {
               <Receipt
                 key={displayedCafe.id}
                 cafe={displayedCafe}
-                dateLabel={dateLabel}
-                timeLabel={timeLabel}
-                serial={String(hash(displayedCafe.id + dateLabel) % 10000).padStart(4, "0")}
+                note={marks.find((mark) => mark.id === displayedCafe.id)?.note ?? ""}
                 collections={collections}
                 selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
                 onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
