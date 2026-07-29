@@ -2,6 +2,7 @@
 
 import { useState, type MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
+import { BookmarkCheck, BookmarkPlus, X } from "lucide-react";
 import { colorValue, type Collection } from "../marks";
 import { BeanMark } from "./BeanArt";
 import { CodexIcon } from "./CodexIcon";
@@ -42,7 +43,23 @@ export function Receipt({
 
   return (
     <article className={`receipt ${confirmed ? "receipt--confirmed" : "receipt--guess"}`}>
-      <button className="icon-button receipt__close-x" type="button" onClick={onClose} aria-label="영수증 닫기">×</button>
+      {/* 연장 두 개는 종이 오른쪽 위 모서리에. 본문은 상호로 시작합니다. */}
+      <div className="receipt__tools">
+        <button
+          className={`tool-button has-tip ${saved ? "is-saved" : ""}`}
+          type="button"
+          onClick={() => setSaveOpen((value) => !value)}
+          aria-expanded={saveOpen}
+          aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
+        >
+          {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <BookmarkPlus size={17} aria-hidden="true" />}
+          <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
+        </button>
+        <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="영수증 닫기">
+          <X size={17} aria-hidden="true" />
+          <span className="tip" aria-hidden="true">닫기</span>
+        </button>
+      </div>
 
       {/* 상호와 주소 두 줄. 발행 정보·영문명·구분선은 걷어냈습니다 — 카페를 고르는
           사람에게 필요한 건 어디인지와 어떻게 생겼는지뿐입니다. */}
@@ -51,13 +68,13 @@ export function Receipt({
           {cafe.name}
           {confirmed ? (
             <span
-              className="partner-mark"
+              className="partner-mark has-tip"
               tabIndex={0}
               role="note"
               aria-label="비빈 파트너. 카페가 직접 확인해 준 정보입니다."
             >
               <BeanMark size={19} />
-              <span className="partner-mark__tip" aria-hidden="true">
+              <span className="tip" aria-hidden="true">
                 <b>비빈 파트너</b>
                 카페가 직접 확인해 준 정보
               </span>
@@ -78,15 +95,6 @@ export function Receipt({
         {summary}
       </p>
 
-      <div className="receipt__actions">
-        <button className={`receipt-action save-button ${saved ? "is-saved" : ""}`} type="button" onClick={() => setSaveOpen((value) => !value)} aria-expanded={saveOpen}>
-          <span aria-hidden="true">{saved ? "✓" : "+"}</span>{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}
-        </button>
-        <button className="receipt-action text-button" type="button" onClick={() => setDetailOpen((value) => !value)} aria-expanded={detailOpen}>
-          {detailOpen ? "접기" : "상세 보기"}
-        </button>
-      </div>
-
       {saveOpen ? <section className="receipt__save-panel" aria-label="저장할 도감 고르기">
         <p>어느 도감에 넣을까?</p>
         <div className="receipt__collection-list">
@@ -97,7 +105,15 @@ export function Receipt({
         </div>
       </section> : null}
 
-      {/* §06 — 요약은 문장(SUIT) 중심, 상세는 표(모노) 중심. */}
+      <div className="receipt__actions">
+        <button className="receipt-action text-button" type="button" onClick={() => setDetailOpen((value) => !value)} aria-expanded={detailOpen}>
+          {detailOpen ? "접기" : "상세 보기"}
+        </button>
+      </div>
+
+      {/* §06 — 요약은 문장(SUIT) 중심, 상세는 표(모노) 중심.
+          점선은 BEAN LIST 앞의 한 줄만 남깁니다. 표 하나에 구분선 셋이면
+          읽는 리듬이 아니라 격자가 됩니다. */}
       {detailOpen ? (
         <section className="detail" aria-label={`${cafe.name} 상세 정보`}>
           <dl className="detail__table">
@@ -115,13 +131,9 @@ export function Receipt({
               </div>
             </>
           ) : (
-            <>
-              <div className="dashed-rule" />
-              <p className="guess-note">상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.</p>
-            </>
+            <p className="guess-note">상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.</p>
           )}
 
-          <div className="dashed-rule" />
           <a className="receipt-action text-button" href={`https://map.kakao.com/?q=${encodeURIComponent(cafe.name)}`} target="_blank" rel="noopener noreferrer">카카오맵에서 보기 <span aria-hidden="true">↗</span></a>
         </section>
       ) : null}

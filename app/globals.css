@@ -965,18 +965,10 @@ a:focus-visible,
   pointer-events: none;
 }
 
-/* 닫기는 종이 위에 얹힌 것이라 흐름에서 빼 둡니다 — 그래야 상호가 가운데 섭니다. */
-.receipt__close-x {
-  position: absolute;
-  z-index: 2;
-  top: 8px;
-  right: 8px;
-}
-
 /* 상호 한 줄, 주소 한 줄. 그 아래는 바로 사진입니다 — 발행 정보와 구분선이
    차지하던 자리를 사진이 가져갑니다. */
 .receipt__head {
-  padding-right: 34px; /* 닫기 단추 자리 */
+  padding-right: 82px; /* 오른쪽 위 연장 두 칸 자리 */
 }
 .receipt__address {
   margin-top: 5px;
@@ -985,20 +977,12 @@ a:focus-visible,
   word-break: keep-all;
 }
 
-/* 원두 하나가 곧 "비빈 파트너"입니다. 뜻은 가리켰을 때만 펴 보입니다 —
-   상시 라벨은 상호보다 길어져서 이름을 밀어냅니다. */
-.partner-mark {
+/* 아이콘만 남은 조작은 뜻을 잃기 쉽습니다. 가리키거나 포커스가 닿으면 이름을
+   아래로 폅니다 — 위로 펴면 도크가 스크롤 상자라 말풍선이 잘립니다. */
+.has-tip {
   position: relative;
-  display: inline-grid;
-  place-items: center;
-  vertical-align: -0.12em;
-  margin-left: 8px;
-  color: var(--accent);
-  cursor: help;
 }
-/* 아래로 폅니다. 상호는 종이 맨 위에 있고 도크는 스크롤 상자라, 위로 펴면
-   말풍선이 상자 바깥으로 나가 잘립니다. */
-.partner-mark__tip {
+.tip {
   position: absolute;
   z-index: 3;
   left: 50%;
@@ -1024,16 +1008,63 @@ a:focus-visible,
   pointer-events: none;
   transition: opacity 140ms ease;
 }
-.partner-mark__tip b {
+.tip b {
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   font-weight: 400;
   letter-spacing: 0.1em;
 }
-.partner-mark:hover .partner-mark__tip,
-.partner-mark:focus-visible .partner-mark__tip {
+.has-tip:hover > .tip,
+.has-tip:focus-visible > .tip {
   opacity: 1;
+}
+
+/* 원두 하나가 곧 "비빈 파트너"입니다. 상시 라벨은 상호보다 길어져 이름을 밀어냅니다. */
+.partner-mark {
+  display: inline-grid;
+  place-items: center;
+  vertical-align: -0.12em;
+  margin-left: 8px;
+  color: var(--accent);
+  cursor: help;
+}
+
+/* 종이 오른쪽 위의 연장 두 개. 정사각 칸에 하나씩 (§08 — 모서리는 각지게). */
+.receipt__tools {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+}
+.tool-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.tool-button:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+/* 이미 뜯어 둔 곳은 채우지 않습니다 — 채운 칸은 "아직 안 한 일" 자리입니다. */
+.tool-button.is-saved {
+  border-color: var(--bean);
+  color: var(--bean);
+}
+/* 종이 오른쪽 끝에 붙은 연장이라, 말풍선을 가운데에 맞추면 종이 밖으로 나갑니다. */
+.receipt__tools .tip {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 .brand-lockup {
@@ -1114,10 +1145,10 @@ a:focus-visible,
 
 /* §06 상세 — "상세는 표(모노) 중심, 요약은 문장(SUIT) 중심."
    요약이 읽는 것이라면 상세는 확인하는 것이라, 값이 오른쪽 한 줄에 정렬됩니다. */
+/* 구분선은 BEAN LIST 앞의 한 줄뿐입니다. 나머지 사이는 여백이 벌립니다 —
+   표 하나에 점선 셋이면 읽는 리듬이 아니라 격자가 됩니다. */
 .detail {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--rule);
+  margin-top: 16px;
   animation: unfold 220ms var(--ease-paper) both;
 }
 .detail__table {
@@ -1150,11 +1181,12 @@ a:focus-visible,
   margin: 10px 0 0;
 }
 .detail .guess-note {
-  margin-top: 2px;
+  margin-top: 12px;
 }
 /* 상세 안의 바깥 링크는 종이 한 장을 가로지르는 한 줄로 둡니다. */
 .detail > .receipt-action {
   width: 100%;
+  margin-top: 16px;
 }
 
 @keyframes unfold {
@@ -1183,11 +1215,10 @@ a:focus-visible,
 }
 
 /* §08 BUTTON — 채운 것 하나, 선만 있는 것 하나. 어느 쪽이 주된 행동인지 형태로 말합니다. */
+/* 저장은 오른쪽 위 연장으로 올라갔습니다. 여기 남는 건 상세 하나뿐입니다. */
 .receipt__actions {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  margin-top: 20px;
+  margin-top: 18px;
 }
 .receipt-action {
   min-height: 46px;
@@ -1906,9 +1937,10 @@ a:focus-visible,
   align-items: flex-end;
   justify-content: center;
   /* 발행 정보와 구분선이 비운 자리를 사진이 가져갑니다 — 카페를 고르는 건
-     결국 이 한 장이라, 세로를 가장 넓게 씁니다. */
-  aspect-ratio: 4 / 3;
-  max-height: 240px;
+     결국 이 한 장이라, 세로를 가장 넓게 씁니다.
+     비율(aspect-ratio)로 잡으면 max-height 가 높이를 자를 때 폭까지 같이
+     줄어들어 오른쪽이 남습니다. 높이를 직접 적어 폭을 온전히 씁니다. */
+  height: 240px;
   margin: 14px 0 0;
   padding-bottom: 9px;
   overflow: hidden;

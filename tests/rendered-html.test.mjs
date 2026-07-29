@@ -64,10 +64,10 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   // 등급은 상호 옆 한 글자로 갈립니다 — 협력업체는 원두 마크, 추정은 미확인 칩.
   // 뜻은 가리켰을 때만 펴 보이므로, 툴팁이 없으면 마크가 무엇인지 알 길이 없습니다.
   assert.match(receipt, /confirmed \? \([\s\S]*<BeanMark size=\{19\} \/>/);
-  assert.match(receipt, /className="partner-mark__tip"[\s\S]*비빈 파트너/);
+  assert.match(receipt, /className="partner-mark has-tip"[\s\S]*<b>비빈 파트너<\/b>/);
   assert.match(receipt, /aria-label="비빈 파트너\. 카페가 직접 확인해 준 정보입니다\."/);
   assert.match(receipt, /\) : \(\s*<span className="chip chip--unknown">추정<\/span>/);
-  assert.match(css, /\.partner-mark:hover \.partner-mark__tip,\n\.partner-mark:focus-visible \.partner-mark__tip\s*\{[^}]*opacity: 1/s);
+  assert.match(css, /\.has-tip:hover > \.tip,\n\.has-tip:focus-visible > \.tip\s*\{[^}]*opacity: 1/s);
 
   // 상호와 주소 바로 아래가 사진입니다. 발행 정보·영문명·구분선은 걷어냈습니다.
   assert.match(receipt, /className="receipt__address">\{cafe\.address\}/);
@@ -80,7 +80,15 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   assert.match(css, /\.receipt__photo\s*\{[^}]*background:\s*var\(--hatch\)/s);
   assert.doesNotMatch(receipt, /소속|receipt__affiliation/);
   assert.match(receipt, /상호명과 위치로 자동 추정한 정보입니다/);
-  assert.match(receipt, /className=\{`receipt-action save-button/);
+  // 저장과 닫기는 종이 오른쪽 위 정사각 칸 두 개. 아이콘만 남으므로 이름은
+  // aria-label 과 말풍선이 함께 져야 합니다.
+  assert.match(receipt, /<div className="receipt__tools">/);
+  assert.match(receipt, /<BookmarkCheck size=\{17\}[\s\S]*<BookmarkPlus size=\{17\}/);
+  assert.match(receipt, /<X size=\{17\} aria-hidden="true" \/>/);
+  assert.equal((receipt.match(/tool-button has-tip/g) ?? []).length, 2);
+  assert.match(receipt, /aria-label=\{saved \?/);
+  assert.match(css, /\.tool-button\s*\{[^}]*width: 34px;\s*height: 34px/s);
+  assert.doesNotMatch(css, /\.tool-button[^{]*\{[^}]*border-radius/s);
   assert.match(receipt, /className="receipt-action text-button"/);
   assert.doesNotMatch(receipt, /className="stamp"|비빈이 다녀갔습니다|\{confirmed \? "확정"/);
 });
@@ -113,7 +121,12 @@ test("상세는 표(모노) 중심으로 접혀 있다", async () => {
   assert.match(receipt, /<section className="detail"/);
   assert.match(css, /\.detail__table\s*\{[^}]*font-family: var\(--font-mono\)/s);
   // 카카오맵은 상세 안으로 들어갔습니다 — 요약의 단추는 둘까지 (§08).
-  assert.equal((receipt.match(/receipt-action/g) ?? []).length, 3);
+  // 요약에 남은 단추는 상세 하나, 상세 안에 카카오맵 하나.
+  assert.equal((receipt.match(/receipt-action/g) ?? []).length, 2);
+  // 점선은 BEAN LIST 앞의 한 줄뿐입니다. 일반 카페 쪽에는 하나도 없습니다.
+  assert.equal((receipt.match(/dashed-rule/g) ?? []).length, 1);
+  assert.match(receipt, /<div className="dashed-rule" \/>\s*<p className="meta">BEAN LIST<\/p>/);
+  assert.doesNotMatch(css, /\.detail\s*\{[^}]*border-top/s);
   assert.match(receipt, /<section className="detail"[\s\S]*map\.kakao\.com/);
 });
 test("협력업체는 지도에서도 구분된다", async () => {

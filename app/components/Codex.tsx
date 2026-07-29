@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { downloadBlob, decodeMarks, encodeMarks, renderCodexImage } from "../codex-export";
 import { cafes } from "../data/cafes";
 import {
@@ -104,7 +104,13 @@ export function Codex({
 
   return (
     <article className="codex">
-      <button className="icon-button receipt__close-x" type="button" onClick={onClose} aria-label="내 도감 닫기">×</button>
+      {/* 영수증과 같은 자리를 나눠 쓰는 종이라, 닫는 연장도 같은 칸을 씁니다. */}
+      <div className="receipt__tools">
+        <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="내 도감 닫기">
+          <X size={17} aria-hidden="true" />
+          <span className="tip" aria-hidden="true">닫기</span>
+        </button>
+      </div>
       <header className="receipt__head">
         <span className="brand-lockup"><CodexMark size={18} /><b>내 도감</b></span>
         <p className="meta">{activeCollection.name} · {activeMarks.length}곳</p>
