@@ -462,6 +462,37 @@ test("검색이 적어 둔 단축키대로 실제로 움직인다", async () => 
   assert.match(page, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/);
   assert.match(page, /if \(event\.key === "Enter"\)/);
   assert.match(page, /if \(event\.key === "\/" && !sidebarOpen\)/);
-  assert.match(page, /aria-selected=\{index === cursor\}/);
+  assert.match(page, /aria-selected=\{index === cursorIndex\}/);
   assert.match(css, /\.search-results__list > button\.is-cursor/);
+});
+
+test("도감 완성도는 목록에 있는 카페만 센다", async () => {
+  // 남이 준 코드에는 이 판에 없는 id 가 섞여 옵니다 (decodeMarks 는 일부러
+  // 걸러내지 않습니다). 그걸 같이 세면 25/18 이 나오고 막대가 상자를 넘습니다.
+  const codex = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
+  assert.match(codex, /const collected = rows\.filter\(\(row\) => row\.cafe\)\.length;/);
+  assert.match(codex, /const strays = activeMarks\.length - collected;/);
+  assert.match(codex, /<b>\{collected\}<\/b>/);
+  assert.match(codex, /Math\.round\(\(collected \/ cafes\.length\) \* 100\)/);
+  assert.match(codex, /index < collected \? "is-on" : ""/);
+  assert.match(codex, /남은 곳 \{cafes\.length - collected\}/);
+  assert.match(codex, /목록 밖 \$\{strays\}/);
+  // 진행 표시 어디에도 날것의 activeMarks.length 가 남아 있으면 안 됩니다.
+  const progress = codex.slice(codex.indexOf('className="codex__progress"'), codex.indexOf("codex__progress-note") + 400);
+  assert.doesNotMatch(progress, /\{activeMarks\.length\}/);
+});
+
+test("화살표로 짚은 검색 결과가 소리로도 전해진다", async () => {
+  // 포커스는 입력칸에 머무르므로 aria-activedescendant 가 없으면 "↑↓ 이동"은
+  // 눈에만 보이는 안내가 됩니다.
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /const cursorIndex = visibleMatches\.length \? Math\.min\(cursor, visibleMatches\.length - 1\) : 0;/);
+  assert.match(page, /aria-activedescendant=\{visibleMatches\.length \? `search-option-\$\{cursorIndex\}` : undefined\}/);
+  assert.match(page, /aria-autocomplete="list"/);
+  assert.match(page, /id=\{`search-option-\$\{index\}`\}/);
+  assert.match(page, /aria-selected=\{index === cursorIndex\}/);
+  // 강조와 Enter 와 안내가 모두 같은 자리를 가리켜야 합니다.
+  assert.match(page, /className=\{index === cursorIndex \? "is-cursor" : ""\}/);
+  assert.match(page, /openCafe\(visibleMatches\[cursorIndex\]\.id\)/);
+  assert.match(page, /setCursor\(\(cursorIndex \+ step\) % visibleMatches\.length\)/);
 });

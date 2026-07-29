@@ -183,6 +183,11 @@ export default function Home() {
 
   const emptyResult = query.trim().length > 0 && matches.length === 0;
   const visibleMatches = useMemo(() => matches.slice(0, SEARCH_LIMIT), [matches]);
+  /**
+   * 결과가 줄어드는 사이에도 커서는 목록 안에 있어야 합니다. 밖을 가리키면
+   * 강조가 사라지고, aria-activedescendant 가 없는 id 를 가리키게 됩니다.
+   */
+  const cursorIndex = visibleMatches.length ? Math.min(cursor, visibleMatches.length - 1) : 0;
 
   const activeCollection = collections.find((collection) => collection.id === activeCollectionId) ?? collections[0];
   const savedMarkers = useMemo(() => {
@@ -298,12 +303,13 @@ export default function Home() {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const step = event.key === "ArrowDown" ? 1 : visibleMatches.length - 1;
-      setCursor((current) => (current + step) % visibleMatches.length);
+      // 목록 밖을 가리키던 커서에서 세면 엉뚱한 줄로 건너뜁니다. 보이는 자리에서 셉니다.
+      setCursor((cursorIndex + step) % visibleMatches.length);
       return;
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      openCafe(visibleMatches[Math.min(cursor, visibleMatches.length - 1)].id);
+      openCafe(visibleMatches[cursorIndex].id);
     }
   }
 
@@ -400,6 +406,10 @@ export default function Home() {
             role="combobox"
             aria-expanded={visibleMatches.length > 0}
             aria-controls="search-results"
+            aria-autocomplete="list"
+            /* 포커스는 입력칸에 머무르므로, 화살표로 짚은 줄이 무엇인지는
+               이 속성으로만 전해집니다. 없으면 "↑↓ 이동"이 눈에만 보입니다. */
+            aria-activedescendant={visibleMatches.length ? `search-option-${cursorIndex}` : undefined}
           />
           <span className="chip" aria-hidden="true">{query ? "ESC" : "/"}</span>
         </div>
@@ -425,10 +435,11 @@ export default function Home() {
                   {visibleMatches.map((cafe, index) => (
                     <button
                       key={cafe.id}
+                      id={`search-option-${index}`}
                       type="button"
                       role="option"
-                      aria-selected={index === cursor}
-                      className={index === cursor ? "is-cursor" : ""}
+                      aria-selected={index === cursorIndex}
+                      className={index === cursorIndex ? "is-cursor" : ""}
                       onMouseEnter={() => setCursor(index)}
                       onClick={() => openCafe(cafe.id)}
                     >

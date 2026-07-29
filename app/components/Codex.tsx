@@ -55,6 +55,17 @@ export function Codex({
   const activeMarks = marks.filter((mark) => mark.collectionIds.includes(activeCollection.id));
   const rows = activeMarks.map((mark) => ({ mark, cafe: cafes.find((entry) => entry.id === mark.id) }));
 
+  /**
+   * 도감 완성도는 **지금 목록에 있는 카페**만 셉니다.
+   *
+   * 남이 준 코드를 불러오면 이 판에 없는 id 도 그대로 들어옵니다 (decodeMarks 는
+   * 일부러 걸러내지 않습니다 — 목록이 늘면 되살아나야 하니까요). 그걸 같이 세면
+   * 25 / 18 같은 숫자가 나오고, 막대는 100%를 넘어 상자 밖으로 자라며, 남은 곳이
+   * 음수가 됩니다. 목록 밖의 것은 따로 적어 둡니다.
+   */
+  const collected = rows.filter((row) => row.cafe).length;
+  const strays = activeMarks.length - collected;
+
   function onCreate() {
     const id = createCollection(name, color, icon);
     onSelectCollection(id);
@@ -143,19 +154,20 @@ export function Codex({
         <section className="codex__progress" aria-label={`${activeCollection.name} 수집 상태`}>
           <p className="meta">COLLECTION · {dateLabel}</p>
           <p className="codex__progress-count">
-            <b>{activeMarks.length}</b>
+            <b>{collected}</b>
             <span>/ {cafes.length}</span>
           </p>
           <div className="codex__progress-bar" role="presentation">
-            <i style={{ width: `${Math.round((activeMarks.length / cafes.length) * 100)}%` }} />
+            <i style={{ width: `${Math.round((collected / cafes.length) * 100)}%` }} />
           </div>
           <div className="codex__progress-dots" aria-hidden="true">
             {cafes.map((cafe, index) => (
-              <i key={cafe.id} className={index < activeMarks.length ? "is-on" : ""} />
+              <i key={cafe.id} className={index < collected ? "is-on" : ""} />
             ))}
           </div>
           <p className="meta codex__progress-note">
-            뜯어 둔 곳 {activeMarks.length} · 남은 곳 {cafes.length - activeMarks.length}
+            뜯어 둔 곳 {collected} · 남은 곳 {cafes.length - collected}
+            {strays > 0 ? ` · 목록 밖 ${strays}` : ""}
           </p>
         </section>
       ) : null}
