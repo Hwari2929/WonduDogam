@@ -50,3 +50,6 @@ next-env.d.ts
 
 # 타입스크립트 증분 빌드 캐시
 *.tsbuildinfo
+
+# 정적 미리보기 빌드 결과
+dist-preview

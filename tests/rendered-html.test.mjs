@@ -135,6 +135,14 @@ test("공유 링크와 새로고침이 살아 있다", async () => {
   assert.match(page, /useSyncExternalStore\(subscribeLocation, readPathname/);
   assert.match(page, /const panel = route\?\.panel/);
   assert.doesNotMatch(page, /setPanel\(|setSelectedId\(/);
+
+  // 하위 경로(정적 미리보기)에 놓여도 주소가 상태로 남습니다. 기준은 <base> 태그
+  // 하나뿐이어야 합니다 — document.baseURI 를 그냥 쓰면 <base> 가 없을 때 지금
+  // 보고 있는 주소가 통째로 기준이 되어 /c/{id} 새로고침이 깨집니다.
+  assert.match(page, /document\.querySelector\("base"\)\?\.getAttribute\("href"\)/);
+  assert.match(page, /if \(!href\) return "";/);
+  assert.doesNotMatch(page, /document\.baseURI/);
+  assert.match(page, /window\.history\.pushState\(\{\}, "", `\$\{BASE_PATH\}\$\{pathname\}`\)/);
 });
 
 test("내 도감 코드가 명세한 형식과 왕복을 지킨다", async () => {

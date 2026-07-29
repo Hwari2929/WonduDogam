@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 프로젝트 페이지는 /WonduDogam/ 아래에 섭니다. app/page.tsx 의 BASE_PATH 가 이 태그를 읽습니다. -->
+    <base href="%BASE_URL%" />
+    <title>원두도감 — 수도권 개인 카페 지도</title>
+    <meta name="description" content="영수증 한 장이 카페 한 곳이고, 모으면 도감이 됩니다." />
+    <link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />
+    <script>
+      try {
+        var s = localStorage.getItem("wondudogam.theme");
+        if (s === "dark") s = "warm";
+        document.documentElement.dataset.theme =
+          s === "warm" || s === "cool" || s === "light"
+            ? s
+            : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "warm"
+              : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2/fonts/variable/woff2/SUIT-Variable.css"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

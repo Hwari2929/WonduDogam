@@ -122,13 +122,32 @@ function subscribeLocation(onChange: () => void) {
   };
 }
 
+/**
+ * 앱이 루트가 아니라 하위 경로에 놓일 수도 있습니다 (정적 미리보기는
+ * `/WonduDogam/` 아래에 섭니다). 주소가 상태의 원본이므로 그 자리를 한 번만
+ * 재어 두고 안팎에서 떼었다 붙입니다.
+ *
+ * 기준은 문서의 <base> 태그 하나뿐입니다. 문서의 기준 주소를 그냥 읽으면 태그가
+ * 없을 때 지금 보고 있는 주소 자체가 나오고, 그러면 /c/demo 에서 새로고침한
+ * 순간 그게 통째로 기준이 되어 버립니다. 태그가 없으면 빈 문자열 — 지금까지와
+ * 완전히 같습니다.
+ */
+const BASE_PATH = (() => {
+  if (typeof document === "undefined") return "";
+  const href = document.querySelector("base")?.getAttribute("href");
+  if (!href) return "";
+  return new URL(href, window.location.origin).pathname.replace(/\/+$/, "");
+})();
+
 function readPathname() {
-  return window.location.pathname;
+  const path = window.location.pathname;
+  const inside = BASE_PATH && path.startsWith(BASE_PATH) ? path.slice(BASE_PATH.length) : path;
+  return inside || "/";
 }
 
 function navigate(pathname: string) {
-  if (window.location.pathname === pathname) return;
-  window.history.pushState({}, "", pathname);
+  if (readPathname() === pathname) return;
+  window.history.pushState({}, "", `${BASE_PATH}${pathname}`);
   window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
