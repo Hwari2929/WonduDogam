@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
 import { BookmarkCheck, BookmarkPlus, X } from "lucide-react";
 import { colorValue, type Collection } from "../marks";
@@ -33,6 +33,7 @@ export function Receipt({
 }) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const saveRef = useRef<HTMLDivElement>(null);
   const confirmed = cafe.partner;
   const saved = selectedCollectionIds.length > 0;
 
@@ -41,20 +42,57 @@ export function Receipt({
   const mine = note.trim();
   const summary = mine || (confirmed ? cafe.intro : cafe.guess);
 
+  // 드롭다운은 바깥을 누르거나 Esc 로 닫힙니다. Esc 를 여기서 멈춰 세우지 않으면
+  // 영수증까지 같이 닫혀서, 도감을 잘못 고른 사람이 카페를 통째로 잃습니다.
+  useEffect(() => {
+    if (!saveOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!saveRef.current?.contains(event.target as Node)) setSaveOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setSaveOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [saveOpen]);
+
   return (
     <article className={`receipt ${confirmed ? "receipt--confirmed" : "receipt--guess"}`}>
       {/* 연장 두 개는 종이 오른쪽 위 모서리에. 본문은 상호로 시작합니다. */}
       <div className="receipt__tools">
-        <button
-          className={`tool-button has-tip ${saved ? "is-saved" : ""}`}
-          type="button"
-          onClick={() => setSaveOpen((value) => !value)}
-          aria-expanded={saveOpen}
-          aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
-        >
-          {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <BookmarkPlus size={17} aria-hidden="true" />}
-          <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
-        </button>
+        <div className={`tool-slot ${saveOpen ? "is-open" : ""}`} ref={saveRef}>
+          <button
+            className={`tool-button has-tip ${saved ? "is-saved" : ""}`}
+            type="button"
+            onClick={() => setSaveOpen((value) => !value)}
+            aria-expanded={saveOpen}
+            aria-haspopup="true"
+            aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
+          >
+            {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <BookmarkPlus size={17} aria-hidden="true" />}
+            <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
+          </button>
+
+          {/* 종이에 끼어들지 않고 연장 아래로 펴집니다 — 고르는 동안 카페는 그대로 보여야 합니다. */}
+          {saveOpen ? (
+            <section className="save-drop" aria-label="저장할 도감 고르기">
+              <p className="meta">어느 도감에 넣을까</p>
+              <div className="receipt__collection-list">
+                {collections.map((collection) => {
+                  const included = selectedCollectionIds.includes(collection.id);
+                  return <button key={collection.id} type="button" className={included ? "is-selected" : ""} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={15} /></span><b>{collection.name}</b><i>{included ? "저장됨" : "담기"}</i></button>;
+                })}
+              </div>
+            </section>
+          ) : null}
+        </div>
+
         <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="영수증 닫기">
           <X size={17} aria-hidden="true" />
           <span className="tip" aria-hidden="true">닫기</span>
@@ -79,9 +117,7 @@ export function Receipt({
                 카페가 직접 확인해 준 정보
               </span>
             </span>
-          ) : (
-            <span className="chip chip--unknown">추정</span>
-          )}
+          ) : null}
         </h1>
         <p className="receipt__address">{cafe.address}</p>
       </header>
@@ -94,16 +130,6 @@ export function Receipt({
         {mine ? <span className="meta intro__by">내가 적어 둔 한 줄</span> : null}
         {summary}
       </p>
-
-      {saveOpen ? <section className="receipt__save-panel" aria-label="저장할 도감 고르기">
-        <p>어느 도감에 넣을까?</p>
-        <div className="receipt__collection-list">
-          {collections.map((collection) => {
-            const included = selectedCollectionIds.includes(collection.id);
-            return <button key={collection.id} type="button" className={included ? "is-selected" : ""} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={15} /></span><b>{collection.name}</b><i>{included ? "저장됨" : "담기"}</i></button>;
-          })}
-        </div>
-      </section> : null}
 
       <div className="receipt__actions">
         <button className="receipt-action text-button" type="button" onClick={() => setDetailOpen((value) => !value)} aria-expanded={detailOpen}>

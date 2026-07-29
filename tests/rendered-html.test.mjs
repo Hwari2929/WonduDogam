@@ -66,7 +66,11 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   assert.match(receipt, /confirmed \? \([\s\S]*<BeanMark size=\{19\} \/>/);
   assert.match(receipt, /className="partner-mark has-tip"[\s\S]*<b>비빈 파트너<\/b>/);
   assert.match(receipt, /aria-label="비빈 파트너\. 카페가 직접 확인해 준 정보입니다\."/);
-  assert.match(receipt, /\) : \(\s*<span className="chip chip--unknown">추정<\/span>/);
+  // 추정 카페에는 도장을 찍지 않습니다. 등급은 소개 문단의 점선(위)과 상세의
+  // 안내문이 계속 말하므로 결정서 §3 Q34 는 지켜집니다.
+  assert.match(receipt, /<\/span>\s*\) : null\}/);
+  assert.doesNotMatch(receipt, /추정<\/span>|chip--unknown/);
+  assert.doesNotMatch(css, /chip--unknown/);
   assert.match(css, /\.has-tip:hover > \.tip,\n\.has-tip:focus-visible > \.tip\s*\{[^}]*opacity: 1/s);
 
   // 상호와 주소 바로 아래가 사진입니다. 발행 정보·영문명·구분선은 걷어냈습니다.
@@ -91,6 +95,31 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   assert.doesNotMatch(css, /\.tool-button[^{]*\{[^}]*border-radius/s);
   assert.match(receipt, /className="receipt-action text-button"/);
   assert.doesNotMatch(receipt, /className="stamp"|비빈이 다녀갔습니다|\{confirmed \? "확정"/);
+});
+
+test("도감 고르기는 종이에 끼어들지 않고 연장 아래로 펴진다", async () => {
+  const [receipt, css] = await Promise.all(
+    ["../app/components/Receipt.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  // 본문에 자리를 만들면 고르는 동안 카페가 밀려납니다. 연장에 붙은 쪽지여야 합니다.
+  assert.doesNotMatch(receipt, /receipt__save-panel/);
+  assert.doesNotMatch(css, /receipt__save-panel/);
+  assert.match(receipt, /<div className=\{`tool-slot \$\{saveOpen \? "is-open" : ""\}`\} ref=\{saveRef\}>/);
+  assert.match(receipt, /<section className="save-drop"/);
+  assert.match(receipt, /aria-haspopup="true"/);
+  assert.match(css, /\.save-drop\s*\{[^}]*position: absolute[^}]*animation: drop-in/s);
+  assert.match(css, /@keyframes drop-in/);
+
+  // 바깥을 누르거나 Esc 로 닫힙니다. Esc 를 여기서 멈춰 세우지 않으면 영수증까지
+  // 같이 닫혀, 도감을 잘못 고른 사람이 카페를 통째로 잃습니다.
+  assert.match(receipt, /document\.addEventListener\("pointerdown", onPointerDown\)/);
+  assert.match(receipt, /document\.addEventListener\("keydown", onKeyDown, true\)/);
+  assert.match(receipt, /event\.stopPropagation\(\);\s*setSaveOpen\(false\)/);
+
+  // 상호 줄과 연장 줄은 같은 선에서 시작합니다 — 종이 안쪽 여백과 같은 값.
+  assert.match(css, /\.receipt,\n\.codex\s*\{[^}]*padding: 26px 22px 30px/s);
+  assert.match(css, /\.receipt__tools\s*\{[^}]*top: 26px;\s*right: 22px/s);
 });
 
 test("사진 밑 한 줄은 내가 적은 것이 먼저다", async () => {

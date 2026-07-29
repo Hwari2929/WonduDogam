@@ -287,7 +287,7 @@ a:focus-visible,
   border-top: 1px dashed var(--rule);
 }
 
-/* §08 TAG · CHIP — 모노, 각진 상자. 세 가지 상태가 전부입니다. */
+/* §08 TAG · CHIP — 모노, 각진 상자. 두 가지 상태가 전부입니다. */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -307,9 +307,6 @@ a:focus-visible,
 .chip--accent {
   border-color: var(--bean);
   color: var(--bean);
-}
-.chip--unknown {
-  border-style: dashed;
 }
 
 /* 지도 위에 뜬 종이 조각. 검색·상태·탭이 같은 재질이어야 따로 놀지 않습니다.
@@ -1031,13 +1028,22 @@ a:focus-visible,
 }
 
 /* 종이 오른쪽 위의 연장 두 개. 정사각 칸에 하나씩 (§08 — 모서리는 각지게). */
+/* 상호의 첫 줄과 같은 선에서 시작합니다. 종이 안쪽 여백(26/22px)과 같은 값이라
+   글줄 상자와 단추 상자의 위끝이 정확히 맞습니다 — 둘 다 34px 높이입니다. */
 .receipt__tools {
   position: absolute;
   z-index: 2;
-  top: 14px;
-  right: 14px;
+  top: 26px;
+  right: 22px;
   display: flex;
   gap: 6px;
+}
+.tool-slot {
+  position: relative;
+}
+/* 드롭다운이 열려 있으면 같은 자리에서 말풍선이 겹칩니다. */
+.tool-slot.is-open .tip {
+  display: none;
 }
 .tool-button {
   display: grid;
@@ -1105,10 +1111,6 @@ a:focus-visible,
   line-height: 1.2;
   letter-spacing: -0.03em;
   word-break: keep-all;
-}
-.receipt__name .chip {
-  margin-left: 9px;
-  vertical-align: 0.24em;
 }
 /* 확정 정보와 추정 정보는 눈으로 즉시 구분되어야 합니다 (결정서 §3 Q34).
    구분이 없으면 AI가 조립한 문장이 사실로 유통됩니다.
@@ -2033,14 +2035,34 @@ a:focus-visible,
 .codex-delete { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 0; background: transparent; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--t-micro); cursor: pointer; }
 .codex-delete:hover { color: var(--stamp); }
 
-.receipt__save-panel {
+/* 저장은 종이 본문에 끼어들지 않습니다. 연장 아래로 펴졌다가 접히는 쪽지입니다 —
+   고르는 동안에도 카페 이름과 사진이 그대로 보여야 합니다. */
+.save-drop {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 8px);
+  right: 0;
   display: grid;
   gap: 10px;
-  margin-top: 10px;
+  width: max-content;
+  min-width: 236px;
+  max-width: min(300px, 74vw);
   padding: 13px 12px;
   border: 1px solid var(--rule);
+  background: var(--paper);
+  box-shadow: var(--lift-2);
+  animation: drop-in 180ms var(--ease-paper) both;
 }
-.receipt__save-panel > p { color: var(--ink-faint); }
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .receipt__collection-list { display: grid; gap: 6px; }
 .receipt__collection-list button {
   --codex-color: var(--accent);
