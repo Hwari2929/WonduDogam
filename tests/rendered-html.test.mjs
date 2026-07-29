@@ -47,7 +47,7 @@ test("starter preview is removed and design safeguards remain", async () => {
   assert.doesNotMatch(layout, /Starter Project|codex-preview|_sites-preview/);
 });
 
-test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", async () => {
+test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종이는 각지다", async () => {
   const [css, receipt] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/Receipt.tsx", import.meta.url), "utf8"),
@@ -55,13 +55,18 @@ test("카페 유형은 상단 브랜드와 실제 티켓 홀로 구분된다", a
   ]);
   assert.match(css, /\.receipt--confirmed \.intro\s*\{[^}]*border-left:\s*2px solid/);
   assert.match(css, /\.receipt--guess \.intro\s*\{[^}]*border-left:\s*2px dashed/);
-  assert.match(css, /\.receipt\s*\{[^}]*--ticket-notch-y:\s*138px;[^}]*radial-gradient\(circle 11px at 0 var\(--ticket-notch-y\), transparent 98%, #010101\)/s);
-  assert.doesNotMatch(css, /\.receipt__identity::before|\.receipt__affiliation/);
+  // 비빈 디자인 시스템 v0.1 §03 · §08 — 종이는 각지고 테두리는 실선 한 줄입니다.
+  // 뜯을 수 있다는 신호는 아래끝 절취선 하나가 맡습니다 (예전의 티켓 홀 마스크 대체).
+  assert.match(css, /\.receipt,\n\.codex\s*\{[^}]*border:\s*1px solid var\(--rule\)/s);
+  assert.match(css, /\.receipt::after,\n\.codex::after\s*\{[^}]*background:\s*var\(--perforation\)/s);
+  assert.match(css, /--perforation:\s*repeating-linear-gradient\(90deg, var\(--rule\) 0 5px, transparent 5px 10px\)/);
+  assert.doesNotMatch(css, /--ticket-notch-y|\.receipt__identity|\.receipt__affiliation/);
   assert.match(receipt, /<b>\{confirmed \? "비빈 파트너" : "원두도감"\}<\/b>/);
-  assert.match(receipt, /className="receipt__photo"[\s\S]*bibean-inspecting\.webp/);
-  assert.match(css, /\.receipt__photo\s*\{[^}]*aspect-ratio:\s*16 \/ 9/s);
+  // 준비 중인 사진은 마스코트가 아니라 빗금입니다 (§03) — 비빈은 여백에서 거드는 관찰자.
+  assert.match(receipt, /className="receipt__photo"[\s\S]*PHOTO — 사진 준비 중/);
+  assert.doesNotMatch(receipt, /bibean-\w+\.webp/);
+  assert.match(css, /\.receipt__photo\s*\{[^}]*background:\s*var\(--hatch\)/s);
   assert.doesNotMatch(receipt, /소속|receipt__affiliation/);
-  assert.doesNotMatch(receipt, /<div className="dashed-rule" \/>\s*<div className="receipt__identity">/);
   assert.match(receipt, /상호명과 위치로 자동 추정한 정보입니다/);
   assert.match(receipt, /className=\{`receipt-action save-button/);
   assert.match(receipt, /className="receipt-action text-button"/);
@@ -288,4 +293,81 @@ test("Codex selection keeps the Codex open beside its cafe receipt", async () =>
   assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.dock\.has-preview \.dock__codex\s*\{[^}]*display:\s*none/s);
   assert.doesNotMatch(receipt, /<div className="dashed-rule" \/>\s*<div className="receipt__actions">/);
   assert.doesNotMatch(codex, /<div className="dashed-rule" \/>\s*<div className="codex__actions">/);
+});
+
+test("세 테마가 같은 역할 이름을 공유하고, 어느 것도 검정이 아니다", async () => {
+  // 비빈 디자인 시스템 v0.1 §01 — "세 테마는 같은 역할 이름을 공유한다.
+  // 다크는 검정이 아니라 어두운 종이다."
+  const [css, theme, layout] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/theme.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+  ]);
+
+  const ROLES = ["--desk", "--paper", "--rule", "--ink", "--ink-faint", "--accent", "--bean"];
+  for (const selector of [":root,\n[data-theme=\"light\"]", "[data-theme=\"warm\"]", "[data-theme=\"cool\"]"]) {
+    const start = css.indexOf(selector);
+    assert.ok(start >= 0, `${selector} 블록이 없습니다`);
+    const block = css.slice(start, css.indexOf("}", start));
+    for (const role of ROLES) {
+      assert.match(block, new RegExp(`${role}:`), `${selector} 에 ${role} 이 없습니다`);
+    }
+  }
+
+  // 옛 저장값 "dark" 를 가진 사람에게서 어둠을 빼앗지 않습니다.
+  assert.match(theme, /if\(s==="dark"\)s="warm"/);
+  assert.match(theme, /export type Theme = "light" \| "warm" \| "cool"/);
+  assert.doesNotMatch(layout, /#DCD3C2|#100E0A/i);
+});
+
+test("모서리는 각지고, 둥근 것은 도장과 핀에만 남는다", async () => {
+  // 비빈 디자인 시스템 v0.1 §08 — "모서리는 각지게. 둥근 것은 도장과 핀에만 허용한다."
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const ALLOWED = [
+    ".map-marker__dot", // 핀
+    ".map-marker.is-active .map-marker__dot::after",
+    ".map-marker.is-saved .map-marker__dot",
+    ".sheet-handle::before", // 손잡이는 실물이라 둥급니다
+    ".search", // border-radius: 0 — 사파리 기본 둥근 입력칸을 각지게 되돌립니다
+  ];
+  for (const [, selector] of css.matchAll(/([^{}]+)\{[^}]*border-radius:\s*(?!0)[^;]+;/g)) {
+    const name = selector.trim().split("\n").pop().trim();
+    assert.ok(ALLOWED.includes(name), `${name} 에 남은 border-radius 는 §08 위반입니다`);
+  }
+});
+
+test("값과 라벨은 모노 한 벌로만 찍힌다", async () => {
+  // 비빈 디자인 시스템 v0.1 §02 RULES — "숫자·좌표·수량은 항상 모노, tabular."
+  const [css, page, receipt, codex] = await Promise.all(
+    ["../app/globals.css", "../app/page.tsx", "../app/components/Receipt.tsx", "../app/components/Codex.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(css, /--font-display: "Paperlogy"/);
+  assert.match(css, /--font-mono: "MonoplexKR"/);
+  assert.match(css, /--font-body: "SUIT Variable"/);
+  // 폴백 스택이 사라지면 CDN이 막힌 곳에서 굴림체로 떨어집니다.
+  assert.match(css, /--font-mono:[^;]*"Malgun Gothic", monospace/s);
+  assert.match(css, /\.meta\s*\{[^}]*font-family: var\(--font-mono\)[^}]*font-variant-numeric: tabular-nums/s);
+  // 본문 최소 14px, 캡션 최소 11px.
+  assert.match(css, /--t-label: 0\.875rem/);
+  assert.match(css, /--t-micro: 0\.6875rem/);
+  // 느낌표 금지 (§02 RULES).
+  for (const [name, source] of [["page", page], ["receipt", receipt], ["codex", codex]]) {
+    assert.doesNotMatch(source, /[가-힣]!/, `${name} 에 느낌표가 있습니다`);
+  }
+});
+
+test("검색이 적어 둔 단축키대로 실제로 움직인다", async () => {
+  // 비빈 디자인 시스템 v0.1 §08 SEARCH — 목록 아래에 "↑↓ 이동 · ↵ 선택"이라고
+  // 적어 두었으므로 실제로 그렇게 움직여야 합니다.
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /↑↓ 이동 · ↵ 선택/);
+  assert.match(page, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/);
+  assert.match(page, /if \(event\.key === "Enter"\)/);
+  assert.match(page, /if \(event\.key === "\/" && !sidebarOpen\)/);
+  assert.match(page, /aria-selected=\{index === cursor\}/);
+  assert.match(css, /\.search-results__list > button\.is-cursor/);
 });

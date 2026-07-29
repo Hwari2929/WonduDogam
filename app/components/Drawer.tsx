@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { partnerRegions, partnerTotal } from "../data/cafes";
+import { THEMES, type Theme } from "../theme";
 import { CodexMark } from "./BeanArt";
 
 /** 서랍 (03_기능_명세 §7). --desk-deep 위에 종이가 아니라 책상 안쪽이 보이는 자리입니다. */
@@ -13,8 +14,8 @@ export function Drawer({
   onClose,
 }: {
   markCount: number;
-  theme: "light" | "dark";
-  onTheme: (next: "light" | "dark") => void;
+  theme: Theme;
+  onTheme: (next: Theme) => void;
   onOpenCodex: () => void;
   onClose: () => void;
 }) {
@@ -85,15 +86,21 @@ export function Drawer({
 
         <div className="dashed-rule" />
 
+        {/* 02_디자인_시스템 §01 — 세 테마는 같은 역할 이름을 공유합니다.
+            다크는 검정이 아니라 어두운 종이라서, 라벨도 밝기가 아니라 종이로 씁니다. */}
         <div className="drawer__setting">
-          <span className="label-ko">테마</span>
-          <div className="segmented" role="group" aria-label="테마">
-            <button type="button" aria-pressed={theme === "light"} onClick={() => onTheme("light")}>
-              밝게
-            </button>
-            <button type="button" aria-pressed={theme === "dark"} onClick={() => onTheme("dark")}>
-              어둡게
-            </button>
+          <span className="label-ko">종이</span>
+          <div className="segmented" role="group" aria-label="종이 고르기">
+            {THEMES.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                aria-pressed={theme === entry.id}
+                onClick={() => onTheme(entry.id)}
+              >
+                {entry.hint}
+              </button>
+            ))}
           </div>
         </div>
 

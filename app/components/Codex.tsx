@@ -104,9 +104,10 @@ export function Codex({
 
   return (
     <article className="codex">
-      <header className="receipt__topline">
+      <button className="icon-button receipt__close-x" type="button" onClick={onClose} aria-label="내 도감 닫기">×</button>
+      <header className="receipt__head">
         <span className="brand-lockup"><CodexMark size={18} /><b>내 도감</b></span>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="내 도감 닫기">×</button>
+        <p className="meta">{activeCollection.name} · {activeMarks.length}곳</p>
       </header>
 
       <div className="codex__collections" aria-label="도감 선택">
@@ -131,7 +132,27 @@ export function Codex({
         </button>
       </div>
 
-      <p className="receipt__issue"><span>{dateLabel}</span><span className="receipt__serial">{activeMarks.length}곳</span></p>
+      {/* §04 COLLECTION — 몇 곳인지가 먼저, 목록은 그 다음. 칸 하나가 카페 한 곳입니다. */}
+      {mode === "list" ? (
+        <section className="codex__progress" aria-label={`${activeCollection.name} 수집 상태`}>
+          <p className="meta">COLLECTION · {dateLabel}</p>
+          <p className="codex__progress-count">
+            <b>{activeMarks.length}</b>
+            <span>/ {cafes.length}</span>
+          </p>
+          <div className="codex__progress-bar" role="presentation">
+            <i style={{ width: `${Math.round((activeMarks.length / cafes.length) * 100)}%` }} />
+          </div>
+          <div className="codex__progress-dots" aria-hidden="true">
+            {cafes.map((cafe, index) => (
+              <i key={cafe.id} className={index < activeMarks.length ? "is-on" : ""} />
+            ))}
+          </div>
+          <p className="meta codex__progress-note">
+            뜯어 둔 곳 {activeMarks.length} · 남은 곳 {cafes.length - activeMarks.length}
+          </p>
+        </section>
+      ) : null}
 
       {mode === "create" ? (
         <section className="codex-maker" aria-label="새 도감 만들기">
@@ -154,14 +175,21 @@ export function Codex({
           </div>
         ) : (
           <ul className="codex__stack">
-            {rows.map(({ mark, cafe }) => (
+            {rows.map(({ mark, cafe }, index) => (
               <li key={mark.id} className={["codex__slip", cafe ? "" : "is-unknown", mark.id === activeCafeId ? "is-active" : ""].filter(Boolean).join(" ")} style={{ "--codex-color": colorValue(activeCollection.color) } as React.CSSProperties}>
-                <div className="codex__slip-head">
-                  <button className="codex__name" type="button" onClick={() => cafe && onOpenCafe(mark.id)} disabled={!cafe} aria-current={mark.id === activeCafeId ? "true" : undefined}>{cafe?.name ?? "알 수 없는 카페"}</button>
+                {/* §04 도감 카드 — 머리에 번호와 지역, 몸에 이름과 손으로 적은 한 줄. */}
+                <p className="meta codex__slip-head">
+                  <span className="codex__meta">
+                    <span>NO.{String(index + 1).padStart(3, "0")}</span>
+                    <span>{cafe?.area ?? "위치 미상"}</span>
+                  </span>
                   <button className="codex__drop" type="button" onClick={() => { removeMark(mark.id, activeCollection.id); onNotice("이 도감에서 꺼냈어."); }} aria-label={`${cafe?.name ?? "카페"} 이 도감에서 빼기`}>×</button>
+                </p>
+                <div className="codex__slip-body">
+                  <button className="codex__name" type="button" onClick={() => cafe && onOpenCafe(mark.id)} disabled={!cafe} aria-current={mark.id === activeCafeId ? "true" : undefined}>{cafe?.name ?? "알 수 없는 카페"}</button>
+                  <input className="codex__note" defaultValue={mark.note} placeholder="한 줄 적어두기" maxLength={120} onBlur={(event) => setNote(mark.id, event.target.value)} aria-label={`${cafe?.name ?? "카페"} 메모`} />
+                  <p className="meta codex__slip-foot">뜯은 날 {mark.at}</p>
                 </div>
-                <p className="codex__meta"><span>{cafe?.area ?? "위치를 알 수 없는 카페"}</span><i className="tabular">{mark.at}</i></p>
-                <input className="codex__note" defaultValue={mark.note} placeholder="한 줄 적어두기" maxLength={120} onBlur={(event) => setNote(mark.id, event.target.value)} aria-label={`${cafe?.name ?? "카페"} 메모`} />
               </li>
             ))}
           </ul>

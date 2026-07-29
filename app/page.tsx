@@ -8,7 +8,7 @@ import { MapSurface } from "./components/MapSurface";
 import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
 import { colorValue, setCafeInCollection, useCodex } from "./marks";
-import { applyTheme, useTheme } from "./theme";
+import { applyTheme, nextTheme, useTheme, type Theme } from "./theme";
 import { useSheetDrag } from "./useSheetDrag";
 
 /**
@@ -38,6 +38,31 @@ function kstParts(now: Date) {
 function hash(value: string) {
   return [...value].reduce((total, character) => (total * 31 + character.charCodeAt(0)) >>> 0, 7);
 }
+
+/** 02_디자인_시스템 §08 — 찾은 글자만 강조색으로. 굵기는 건드리지 않습니다. */
+function highlight(name: string, query: string) {
+  const needle = query.trim();
+  if (!needle) return name;
+  const at = name.toLocaleLowerCase("ko").indexOf(needle.toLocaleLowerCase("ko"));
+  if (at < 0) return name;
+  return (
+    <>
+      {name.slice(0, at)}
+      <mark>{name.slice(at, at + needle.length)}</mark>
+      {name.slice(at + needle.length)}
+    </>
+  );
+}
+
+/** 목록에 한 번에 보여 주는 줄 수. 다섯 줄이 넘으면 목록이 아니라 페이지입니다. */
+const SEARCH_LIMIT = 5;
+
+/** 상단 바에는 지금 놓인 종이 한 장만 적습니다 — 고를 수 있는 셋은 서랍에 있습니다. */
+const PAPERS: Record<Theme, { hint: string; glyph: string }> = {
+  light: { hint: "새 종이", glyph: "◐" },
+  warm: { hint: "묵은 종이", glyph: "◑" },
+  cool: { hint: "식은 종이", glyph: "◒" },
+};
 
 /**
  * 발행 시각은 페이지를 연 순간으로 한 번만 굳힙니다.
@@ -119,7 +144,9 @@ export default function Home() {
   const timeLabel = useSyncExternalStore(neverChanges, readIssuedAt, () => null);
   const [tear, setTear] = useState<{ dx: number; dy: number; x: number; y: number; w: number; name: string } | null>(null);
 
+  const [cursor, setCursor] = useState(0);
   const marksButtonRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const isSheet = useSyncExternalStore(subscribeSheetQuery, readSheetQuery, () => false);
   const pathname = useSyncExternalStore(subscribeLocation, readPathname, () => "/");
   const route = useMemo(() => readRoute(pathname), [pathname]);
@@ -129,6 +156,7 @@ export default function Home() {
   const selectedId = route?.cafeId ?? "";
 
   const dateLabel = useMemo(() => kstParts(new Date()).date, []);
+  const paper = PAPERS[theme];
 
   // 03 §2 — 후보 풀은 협력업체와 승격 카페뿐입니다. 소개할 내용이 없는 카페를
   // "오늘의 카페"로 뽑으면 카드가 텅 빕니다.
@@ -152,6 +180,7 @@ export default function Home() {
   }, [query]);
 
   const emptyResult = query.trim().length > 0 && matches.length === 0;
+  const visibleMatches = useMemo(() => matches.slice(0, SEARCH_LIMIT), [matches]);
 
   const activeCollection = collections.find((collection) => collection.id === activeCollectionId) ?? collections[0];
   const savedMarkers = useMemo(() => {
@@ -222,6 +251,16 @@ export default function Home() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // §08 SEARCH 의 `/` 칩은 장식이 아니라 실제 단축키입니다.
+      if (event.key === "/" && !sidebarOpen) {
+        const active = document.activeElement;
+        const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+        if (!typing) {
+          event.preventDefault();
+          searchRef.current?.focus();
+          return;
+        }
+      }
       if (event.key !== "Escape" || sidebarOpen) return;
       if (codexPreviewId) {
         setCodexPreviewId(null);
@@ -237,7 +276,33 @@ export default function Home() {
     setCodexPreviewId(null);
     setPhase("docked");
     setQuery("");
+    setCursor(0);
     navigate(`/c/${encodeURIComponent(id)}`);
+  }
+
+  /**
+   * §08 SEARCH 가 목록 아래에 "↑↓ 이동 · ⏎ 선택"이라고 적어 두었으므로 실제로
+   * 그렇게 움직여야 합니다. 적어 놓고 안 되는 단축키가 제일 나쁩니다.
+   */
+  function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      if (!query) return; // 빈 칸에서의 Esc 는 영수증 닫기(문서 핸들러)에 넘깁니다
+      event.stopPropagation();
+      setQuery("");
+      setCursor(0);
+      return;
+    }
+    if (!visibleMatches.length) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : visibleMatches.length - 1;
+      setCursor((current) => (current + step) % visibleMatches.length);
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      openCafe(visibleMatches[Math.min(cursor, visibleMatches.length - 1)].id);
+    }
   }
 
   function openCodex() {
@@ -286,9 +351,15 @@ export default function Home() {
           <small>BEAN CODEX</small>
         </div>
         <div className="topbar__actions">
-          <button className="theme-button" type="button" onClick={() => applyTheme(theme === "light" ? "dark" : "light")}>
-            <span aria-hidden="true">{theme === "light" ? "◐" : "◑"}</span>
-            {theme === "light" ? "묵은 종이" : "새 종이"}
+          {/* 02_디자인_시스템 §01 — 세 장의 종이를 한 칸으로 돌립니다. */}
+          <button
+            className="theme-button"
+            type="button"
+            onClick={() => applyTheme(nextTheme(theme))}
+            aria-label={`종이 바꾸기, 지금은 ${paper.hint}`}
+          >
+            <span aria-hidden="true">{paper.glyph}</span>
+            {paper.hint}
           </button>
           <button
             className="marks-button"
@@ -304,20 +375,31 @@ export default function Home() {
         </div>
       </header>
 
+      {/* 02_디자인_시스템 §08 SEARCH — 밑줄 하나가 아니라 각진 상자. 앞에 ⌕,
+          뒤에 단축키, 아래에 무엇을 누르면 되는지. */}
       <section className="search-panel plate" aria-label="카페 찾기">
         <label className="label-ko" htmlFor="cafe-search">
           어디로 갈까
         </label>
-        <div className="search-line">
+        <div className="search-field">
+          <span className="search-field__glyph" aria-hidden="true">⌕</span>
           <input
             id="cafe-search"
             className="search"
+            ref={searchRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setCursor(0);
+            }}
+            onKeyDown={onSearchKeyDown}
             placeholder="지역, 상호, 느낌"
             autoComplete="off"
+            role="combobox"
+            aria-expanded={visibleMatches.length > 0}
+            aria-controls="search-results"
           />
-          <span aria-hidden="true">↵</span>
+          <span className="chip" aria-hidden="true">{query ? "ESC" : "/"}</span>
         </div>
         {query.trim() ? (
           <div className="search-results">
@@ -325,7 +407,7 @@ export default function Home() {
               // 비빈의 말은 한 덩어리로 둡니다. 개수 줄과 나눠 놓으면 같은 사람이
               // 두 번 말하는 것처럼 읽힙니다 (02 §7.4).
               <div className="empty-state">
-                <Bibin variant="map-lost" size={88} />
+                <Bibin variant="map-lost" size={80} />
                 <p>
                   여긴 아직 아무것도 없네.
                   <br />
@@ -337,16 +419,25 @@ export default function Home() {
               </div>
             ) : (
               <>
-                <p className="search-results__count">
-                  <i className="tabular">{matches.length}</i>곳
+                <div className="search-results__list" id="search-results" role="listbox">
+                  {visibleMatches.map((cafe, index) => (
+                    <button
+                      key={cafe.id}
+                      type="button"
+                      role="option"
+                      aria-selected={index === cursor}
+                      className={index === cursor ? "is-cursor" : ""}
+                      onMouseEnter={() => setCursor(index)}
+                      onClick={() => openCafe(cafe.id)}
+                    >
+                      <span className="search-results__name">{highlight(cafe.name, query)}</span>
+                      <span className="meta">{cafe.partner ? "협력" : "카페"} · {cafe.area}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="meta search-results__foot">
+                  결과 {matches.length}건 · ↑↓ 이동 · ↵ 선택
                 </p>
-                {matches.slice(0, 4).map((cafe) => (
-                  <button key={cafe.id} type="button" onClick={() => openCafe(cafe.id)}>
-                    <span>{cafe.name}</span>
-                    <small>{cafe.area}</small>
-                    {cafe.partner ? <b className="partner-badge">협력</b> : null}
-                  </button>
-                ))}
               </>
             )}
           </div>
