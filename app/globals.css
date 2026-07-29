@@ -1374,6 +1374,13 @@ a:focus-visible,
   justify-content: space-between;
   gap: 16px;
 }
+/* 숫자가 무엇을 센 것인지 답하는 두 줄. 모노라 값처럼 읽히고, 도감이
+   채워질수록 내용이 붙습니다. */
+.codex__board-lines {
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+  word-break: keep-all;
+}
 .codex__board-actions {
   display: flex;
   justify-content: flex-end;

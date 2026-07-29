@@ -22,6 +22,24 @@ import {
 import { Bibin, CodexMark } from "./BeanArt";
 import { CodexIcon } from "./CodexIcon";
 
+/** "2026-07-29" 를 "07.29" 로. 형식이 다르면 손대지 않고 그대로 둡니다. */
+function shortDate(at: string) {
+  const match = /^\d{4}-(\d{2})-(\d{2})$/.exec(at);
+  return match ? `${match[1]}.${match[2]}` : at;
+}
+
+/** 날짜 하나로는 "요즘 안 갔네"가 읽히지 않습니다. 셀 수 있을 때만 며칠 전인지 덧붙입니다. */
+function sinceLabel(at: string, today: string) {
+  const shown = shortDate(at);
+  const from = Date.parse(`${at}T00:00:00Z`);
+  const to = Date.parse(`${today}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return shown;
+  const days = Math.round((to - from) / 86400000);
+  if (days <= 0) return `${shown} · 오늘`;
+  if (days === 1) return `${shown} · 어제`;
+  return `${shown} · ${days}일 전`;
+}
+
 export function Codex({
   collections,
   marks,
@@ -79,6 +97,27 @@ export function Codex({
   const strays = activeMarks.length - collected;
   /** 쓴 칸 수. 한도를 넘겨 저장해 둔 옛 데이터가 있어도 격자 밖으로 넘치지 않습니다. */
   const used = Math.min(activeMarks.length, COLLECTION_LIMIT);
+
+  /**
+   * "6 / 10" 만으로는 무엇을 센 숫자인지 알 수 없습니다. 두 줄이 그걸 답합니다 —
+   * 어디를 모았나(지역), 마지막으로 언제 움직였나. §04 의 "아프리카 14 · 중남미 16"
+   * 과 같은 조형이라, 도감이 채워질수록 두 줄 다 내용이 붙습니다.
+   */
+  const tally = (() => {
+    // 목록 밖 카페는 등급도 동네도 모릅니다. 여기서 세면 뒤의 "목록 밖 n" 과
+    // 같은 것을 두 번 세게 됩니다.
+    const known = rows.map((row) => row.cafe).filter((cafe) => !!cafe);
+    if (!known.length) return "";
+    const partners = known.filter((cafe) => cafe.partner).length;
+    const parts = [`비빈 파트너 ${partners}`, `그 밖 ${known.length - partners}`];
+    // 동네 수는 겹치는 게 있을 때만 말이 됩니다. 전부 다른 동네면 "모은 곳"과
+    // 같은 숫자라, 한 줄을 써서 같은 말을 두 번 하는 셈입니다.
+    const areas = new Set(known.map((cafe) => cafe.area)).size;
+    if (areas < known.length) parts.push(`동네 ${areas}곳`);
+    return parts.join(" · ");
+  })();
+
+  const lastMark = activeMarks.reduce((latest, mark) => (mark.at > latest ? mark.at : latest), "");
 
   function onCreate() {
     const id = createCollection(name, color, icon);
@@ -191,7 +230,14 @@ export function Codex({
               </div>
             </div>
 
-            {strays > 0 ? <p className="meta">목록 밖 {strays}</p> : null}
+            {activeMarks.length ? (
+              <p className="meta codex__board-lines">
+                {tally}
+                {strays > 0 ? `${tally ? " · " : ""}목록 밖 ${strays}` : ""}
+                <br />
+                마지막 기록 {sinceLabel(lastMark, dateLabel)}
+              </p>
+            ) : null}
 
             <div className="codex__board-actions">
               <button className="tool-button tool-button--sm has-tip" type="button" onClick={onExportImage} disabled={busy || activeMarks.length === 0} aria-label="이미지로 뽑기">

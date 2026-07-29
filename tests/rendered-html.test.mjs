@@ -474,7 +474,9 @@ test("도감 완성도는 목록에 있는 카페만 센다", async () => {
   const codex = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
   assert.match(codex, /const collected = rows\.filter\(\(row\) => row\.cafe\)\.length;/);
   assert.match(codex, /const strays = activeMarks\.length - collected;/);
-  assert.match(codex, /목록 밖 \{strays\}/);
+  assert.match(codex, /목록 밖 \$\{strays\}/);
+  // 목록 밖 카페는 등급도 동네도 모릅니다 — 집계에서 세면 같은 것을 두 번 셉니다.
+  assert.match(codex, /const known = rows\.map\(\(row\) => row\.cafe\)\.filter\(\(cafe\) => !!cafe\);/);
   // 칸 수는 한도까지만. 한도를 넘겨 저장해 둔 옛 데이터가 있어도 격자가 넘치지 않습니다.
   assert.match(codex, /const used = Math\.min\(activeMarks\.length, COLLECTION_LIMIT\);/);
   assert.match(codex, /index < used \? "is-on" : ""/);
@@ -559,4 +561,23 @@ test("도감 한 권은 열 곳까지다", async () => {
   // 격자는 5×2 로 못 박습니다.
   assert.match(css, /\.codex__progress-dots\s*\{[^}]*grid-template-columns: repeat\(5, 14px\);\s*grid-template-rows: repeat\(2, 14px\)/s);
   assert.match(codex, /Array\.from\(\{ length: COLLECTION_LIMIT \}/);
+});
+
+test("숫자 옆에 무엇을 센 것인지가 적힌다", async () => {
+  // "6 / 10" 만으로는 무엇을 센 숫자인지 알 수 없습니다.
+  const [codex, css] = await Promise.all(
+    ["../app/components/Codex.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(codex, /<span className="meta">모은 곳<\/span>/);
+  assert.match(codex, /className="meta codex__board-lines"/);
+  assert.match(codex, /마지막 기록 \{sinceLabel\(lastMark, dateLabel\)\}/);
+  // 동네 수는 겹칠 때만 말이 됩니다. 전부 다른 동네면 "모은 곳"과 같은 숫자입니다.
+  assert.match(codex, /if \(areas < known\.length\) parts\.push\(`동네 \$\{areas\}곳`\);/);
+  // 날짜 하나로는 "요즘 안 갔네"가 읽히지 않습니다.
+  assert.match(codex, /if \(days === 1\) return `\$\{shown\} · 어제`;/);
+  assert.match(codex, /return `\$\{shown\} · \$\{days\}일 전`;/);
+  // 형식이 다른 옛 값에는 손대지 않습니다.
+  assert.match(codex, /return match \? `\$\{match\[1\]\}\.\$\{match\[2\]\}` : at;/);
+  assert.match(css, /\.codex__board-lines\s*\{[^}]*border-top: 1px dashed var\(--rule\)/s);
 });
