@@ -944,7 +944,7 @@ a:focus-visible,
 .receipt,
 .codex {
   position: relative;
-  padding: 26px 22px 30px;
+  padding: 26px 26px 30px;
   border: 1px solid var(--rule);
   background: var(--paper);
   color: var(--ink);
@@ -1034,7 +1034,7 @@ a:focus-visible,
   position: absolute;
   z-index: 2;
   top: 26px;
-  right: 22px;
+  right: 26px;
   display: flex;
   gap: 6px;
 }
@@ -1060,6 +1060,22 @@ a:focus-visible,
 .tool-button:hover {
   border-color: var(--ink);
   color: var(--ink);
+}
+.tool-button--sm {
+  width: 30px;
+  height: 30px;
+}
+.tool-button--danger:hover:not(:disabled) {
+  border-color: var(--stamp);
+  color: var(--stamp);
+}
+.tool-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tool-button:disabled:hover {
+  border-color: var(--rule);
+  color: var(--ink-faint);
 }
 /* 이미 뜯어 둔 곳은 채우지 않습니다 — 채운 칸은 "아직 안 한 일" 자리입니다. */
 .tool-button.is-saved {
@@ -1302,21 +1318,79 @@ a:focus-visible,
   color: var(--ink-soft);
 }
 
-/* §04 COLLECTION — 몇 곳을 모았는지가 목록보다 먼저 옵니다. */
-.codex__progress {
-  margin: 14px 0 4px;
-  padding: 14px 14px 13px;
+/* 목록만 흐르고 머리는 제자리에 남습니다. 스크롤 상자는 .dock 이라 여기서
+   top: 0 이 곧 종이의 윗변입니다. 좌우로 밀어낸 만큼 다시 채워, 띠가 종이
+   폭을 꽉 덮게 합니다 — 안 그러면 지나가는 목록이 옆구리로 비칩니다. */
+.codex {
+  padding-top: 0;
+}
+.codex__top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-inline: -26px;
+  padding: 30px 26px 12px;
+  background: var(--paper);
+}
+
+.codex__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+}
+.codex__title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: var(--ls-brand);
+  padding-left: var(--ls-brand);
+}
+
+.codex__collection-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.codex__collection-row .codex__collections {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.codex__collection-row > .tool-button {
+  flex: 0 0 auto;
+  margin-top: 16px;
+}
+
+/* §04 COLLECTION — 몇 곳인지와 이 도감으로 할 수 있는 일. */
+.codex__board {
+  display: grid;
+  gap: 11px;
+  margin-top: 4px;
+  padding: 13px 14px;
   border: 1px solid var(--rule);
+  animation: drop-in 180ms var(--ease-paper) both;
+}
+.codex__board-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.codex__board-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 .codex__progress-count {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin-top: 10px;
   font-family: var(--font-display);
 }
 .codex__progress-count b {
-  font-size: 2.5rem;
+  font-size: 2.25rem;
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1326,25 +1400,13 @@ a:focus-visible,
   font-size: var(--t-title);
   font-weight: 600;
 }
-.codex__progress-bar {
-  height: 8px;
-  margin-top: 11px;
-  padding: 1px;
-  border: 1px solid var(--rule);
-}
-.codex__progress-bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 320ms var(--ease-paper);
-}
 /* 칸 하나가 카페 한 곳. 채운 칸은 뜯어 둔 곳, 빈 칸은 아직 안 가 본 곳.
    칸 수가 늘어도 줄만 늘고 칸 크기는 그대로여야 "몇 칸 남았나"가 눈에 들어옵니다. */
 .codex__progress-dots {
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13px, 1fr));
+  grid-template-columns: repeat(5, 11px);
   gap: 3px;
-  margin-top: 13px;
 }
 .codex__progress-dots i {
   display: block;
@@ -1357,18 +1419,12 @@ a:focus-visible,
   background: var(--accent);
   opacity: 0.85;
 }
-.codex__progress-note {
-  margin-top: 13px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--rule);
-}
-
 .codex__stack {
   display: grid;
   gap: 9px;
   margin: 14px 0 2px;
 }
-/* §04 도감 카드 — 머리에 번호와 지역, 몸에 이름과 한 줄. */
+/* §04 도감 카드 — 접혀 있을 땐 이름 한 줄. 필요한 것만 폅니다. */
 .codex__slip {
   position: relative;
   border: 1px solid var(--rule);
@@ -1382,67 +1438,76 @@ a:focus-visible,
   border-style: dashed;
   background: transparent;
 }
-.codex__slip-head {
+.codex__slip-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 6px 8px 12px;
-  border-bottom: 1px dashed var(--rule);
+  gap: 4px;
+  padding: 7px 8px 7px 13px;
 }
-.codex__slip-body {
-  padding: 12px 12px 11px;
-}
+/* 긴 상호는 줄을 늘리지 않고 자릅니다 — 연장은 언제나 같은 자리에 있어야 합니다. */
 .codex__name {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font-family: var(--font-display);
   font-size: 1.0625rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  text-align: left;
-  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.codex__name:hover:not(:disabled) {
-  color: var(--bean);
-}
-.codex__name:disabled {
+.codex__slip.is-unknown .codex__name {
   color: var(--ink-faint);
-  cursor: default;
 }
-.codex__drop {
+
+.codex__slip-tool {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
   cursor: pointer;
+  transition: color 140ms ease;
 }
-.codex__drop:hover {
+.codex__slip-tool:hover:not(:disabled) {
+  color: var(--ink);
+}
+.codex__slip-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.codex__slip-tool--danger {
   color: var(--stamp);
 }
-.codex__meta {
-  flex: 1 1 auto;
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
+.codex__slip-tool--danger:hover:not(:disabled) {
+  color: var(--stamp);
+}
+/* 목록 안에서는 말풍선을 왼쪽으로 물려야 종이 밖으로 나가지 않습니다. */
+.codex__slip-tool .tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.codex__slip-body {
+  padding: 0 8px 9px 13px;
+  animation: drop-in 160ms var(--ease-paper) both;
 }
 .codex__slip-foot {
-  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
 }
 /* §03 야장 — 손으로 적는 자리는 상자가 아니라 괘선 한 줄입니다. */
 .codex__note {
   width: 100%;
   height: 26px;
-  margin-top: 9px;
   padding: 0;
   border: 0;
   background: repeating-linear-gradient(180deg, transparent 0 25px, var(--rule) 25px 26px);
@@ -1489,16 +1554,6 @@ a:focus-visible,
 .codex__panel-actions {
   display: flex;
   gap: 16px;
-}
-.codex__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin-top: 16px;
-}
-.codex__actions .pill-button {
-  margin-right: auto;
 }
 
 .sheet-handle {
@@ -2032,8 +2087,6 @@ a:focus-visible,
 .codex-color.is-selected { border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--paper); }
 .codex-icon-choice { display: grid; place-items: center; background: transparent; color: var(--ink-faint); }
 .codex-icon-choice.is-selected { border-color: var(--ink); background: var(--ink); color: var(--desk); }
-.codex-delete { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 0; background: transparent; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--t-micro); cursor: pointer; }
-.codex-delete:hover { color: var(--stamp); }
 
 /* 저장은 종이 본문에 끼어들지 않습니다. 연장 아래로 펴졌다가 접히는 쪽지입니다 —
    고르는 동안에도 카페 이름과 사진이 그대로 보여야 합니다. */

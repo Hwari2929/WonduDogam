@@ -118,8 +118,8 @@ test("도감 고르기는 종이에 끼어들지 않고 연장 아래로 펴진�
   assert.match(receipt, /event\.stopPropagation\(\);\s*setSaveOpen\(false\)/);
 
   // 상호 줄과 연장 줄은 같은 선에서 시작합니다 — 종이 안쪽 여백과 같은 값.
-  assert.match(css, /\.receipt,\n\.codex\s*\{[^}]*padding: 26px 22px 30px/s);
-  assert.match(css, /\.receipt__tools\s*\{[^}]*top: 26px;\s*right: 22px/s);
+  assert.match(css, /\.receipt,\n\.codex\s*\{[^}]*padding: 26px 26px 30px/s);
+  assert.match(css, /\.receipt__tools\s*\{[^}]*top: 26px;\s*right: 26px/s);
 });
 
 test("사진 밑 한 줄은 내가 적은 것이 먼저다", async () => {
@@ -275,7 +275,9 @@ test("내 도감 코드가 명세한 형식과 왕복을 지킨다", async () =>
 
 test("내 도감이 비어 있어도 불러오기로 들어갈 수 있다", async () => {
   const source = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
-  assert.match(source, /onClick=\{\(\) => setMode\("import"\)\}>불러오기/);
+  // 불러오기는 글자 단추에서 관리판의 붙여넣기 연장으로 옮겼습니다.
+  assert.match(source, /onClick=\{\(\) => setMode\("import"\)\} aria-label="받은 코드 붙여 넣기"/);
+  assert.match(source, /<ClipboardPaste size=\{15\}/);
   const marks = await readFile(new URL("../app/marks.ts", import.meta.url), "utf8");
   assert.match(marks, /export function mergeMarks/);
   assert.match(marks, /existing\.collectionIds/);
@@ -473,13 +475,11 @@ test("도감 완성도는 목록에 있는 카페만 센다", async () => {
   assert.match(codex, /const collected = rows\.filter\(\(row\) => row\.cafe\)\.length;/);
   assert.match(codex, /const strays = activeMarks\.length - collected;/);
   assert.match(codex, /<b>\{collected\}<\/b>/);
-  assert.match(codex, /Math\.round\(\(collected \/ cafes\.length\) \* 100\)/);
   assert.match(codex, /index < collected \? "is-on" : ""/);
-  assert.match(codex, /남은 곳 \{cafes\.length - collected\}/);
-  assert.match(codex, /목록 밖 \$\{strays\}/);
+  assert.match(codex, /목록 밖 \{strays\}/);
   // 진행 표시 어디에도 날것의 activeMarks.length 가 남아 있으면 안 됩니다.
-  const progress = codex.slice(codex.indexOf('className="codex__progress"'), codex.indexOf("codex__progress-note") + 400);
-  assert.doesNotMatch(progress, /\{activeMarks\.length\}/);
+  const board = codex.slice(codex.indexOf('className="codex__board"'), codex.indexOf("codex__board-actions"));
+  assert.doesNotMatch(board, /\{activeMarks\.length\}/);
 });
 
 test("화살표로 짚은 검색 결과가 소리로도 전해진다", async () => {
@@ -495,4 +495,38 @@ test("화살표로 짚은 검색 결과가 소리로도 전해진다", async () 
   assert.match(page, /className=\{index === cursorIndex \? "is-cursor" : ""\}/);
   assert.match(page, /openCafe\(visibleMatches\[cursorIndex\]\.id\)/);
   assert.match(page, /setCursor\(\(cursorIndex \+ step\) % visibleMatches\.length\)/);
+});
+
+test("도감 머리는 제자리에 남고, 관리판과 낱장은 접힌 채로 시작한다", async () => {
+  const [codex, css] = await Promise.all(
+    ["../app/components/Codex.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  // 스크롤 상자는 .dock 입니다. 머리가 같이 흐르면 어느 도감을 보고 있는지 잃습니다.
+  assert.match(css, /\.codex__top\s*\{[^}]*position: sticky;\s*top: 0/s);
+  assert.match(css, /\.codex\s*\{\n\s*padding-top: 0;\n\}/);
+  assert.match(codex, /<div className="codex__top">/);
+  // 머리 안에 있어야 같이 남습니다 — 제목·탭·관리판까지.
+  const top = codex.slice(codex.indexOf('<div className="codex__top">'), codex.indexOf("{mode === \"create\""));
+  for (const inside of ["receipt__tools", "codex__title", "codex__collections", "codex__board"]) {
+    assert.ok(top.includes(inside), `${inside} 가 고정 머리 밖에 있습니다`);
+  }
+
+  // 기본은 접힘. 목록이 먼저 보여야 도감입니다.
+  assert.match(codex, /const \[boardOpen, setBoardOpen\] = useState\(false\)/);
+  assert.match(codex, /const \[openIds, setOpenIds\] = useState<ReadonlySet<string>>\(\(\) => new Set\(\)\)/);
+  assert.match(codex, /\{mode === "list" && boardOpen \? \(/);
+
+  // 낱장은 이름 한 줄 + 연장 둘. 긴 이름은 줄을 늘리지 않고 자릅니다.
+  assert.match(codex, /<span className="codex__name" title=\{label\}>\{label\}<\/span>/);
+  assert.match(css, /\.codex__name\s*\{[^}]*text-overflow: ellipsis;\s*white-space: nowrap/s);
+  assert.match(codex, /<MapPin size=\{15\}/);
+  assert.match(codex, /aria-label=\{`\$\{label\} \$\{open \? "접기" : "펼치기"\}`\}/);
+  // 빼기는 펼친 뒤에만, 붉은 색으로. 접힌 줄에서 실수로 눌리면 안 됩니다.
+  assert.match(codex, /\{open \? \([\s\S]*codex__slip-tool--danger/);
+  assert.match(css, /\.codex__slip-tool--danger\s*\{[^}]*color: var\(--stamp\)/s);
+
+  // "나의 원두 도감 · n곳" 줄은 제목이 커지면서 걷어냈습니다.
+  assert.doesNotMatch(codex, /\{activeCollection\.name\} · \{activeMarks\.length\}곳/);
+  assert.doesNotMatch(css, /codex__progress-bar|codex__progress-note|codex__actions|codex-delete/);
 });
