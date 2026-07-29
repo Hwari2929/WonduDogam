@@ -19,6 +19,7 @@ export function Receipt({
   cafe,
   note,
   collections,
+  fullCollectionIds,
   selectedCollectionIds,
   onToggleCollection,
   onClose,
@@ -27,6 +28,8 @@ export function Receipt({
   /** 이 카페에 사용자가 적어 둔 한 줄. 있으면 관리자 소개보다 이게 앞섭니다. */
   note: string;
   collections: Collection[];
+  /** 열 칸을 다 쓴 도감. 이미 들어 있는 카페는 빼야 하므로 잠그지 않습니다. */
+  fullCollectionIds: string[];
   selectedCollectionIds: string[];
   onToggleCollection: (collectionId: string, included: boolean, event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
@@ -86,7 +89,8 @@ export function Receipt({
               <div className="receipt__collection-list">
                 {collections.map((collection) => {
                   const included = selectedCollectionIds.includes(collection.id);
-                  return <button key={collection.id} type="button" className={included ? "is-selected" : ""} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={15} /></span><b>{collection.name}</b><i>{included ? "저장됨" : "담기"}</i></button>;
+                  const full = !included && fullCollectionIds.includes(collection.id);
+                  return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={15} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;
                 })}
               </div>
             </section>

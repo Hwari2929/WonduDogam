@@ -7,7 +7,7 @@ import { Drawer } from "./components/Drawer";
 import { MapSurface } from "./components/MapSurface";
 import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
-import { colorValue, setCafeInCollection, useCodex } from "./marks";
+import { COLLECTION_LIMIT, colorValue, countInCollection, setCafeInCollection, useCodex } from "./marks";
 import { applyTheme, nextTheme, useTheme, type Theme } from "./theme";
 import { useSheetDrag } from "./useSheetDrag";
 
@@ -190,6 +190,11 @@ export default function Home() {
   const cursorIndex = visibleMatches.length ? Math.min(cursor, visibleMatches.length - 1) : 0;
 
   const activeCollection = collections.find((collection) => collection.id === activeCollectionId) ?? collections[0];
+  /** 이미 열 칸을 다 쓴 도감. 영수증에서 잠가 두지 않으면 눌러 보고서야 알게 됩니다. */
+  const fullCollectionIds = useMemo(
+    () => collections.filter((collection) => countInCollection(marks, collection.id) >= COLLECTION_LIMIT).map((collection) => collection.id),
+    [collections, marks],
+  );
   const savedMarkers = useMemo(() => {
     const result: Record<string, { color: string; icon: typeof collections[number]["icon"]; count: number; collectionName: string }> = {};
     for (const mark of marks) {
@@ -325,11 +330,16 @@ export default function Home() {
   }
 
   function onToggleCollection(cafe: Cafe, collectionId: string, included: boolean, event: React.MouseEvent<HTMLButtonElement>) {
-    setCafeInCollection(cafe.id, collectionId, dateLabel, included);
+    const result = setCafeInCollection(cafe.id, collectionId, dateLabel, included);
     const collection = collections.find((entry) => entry.id === collectionId);
-    setNotice(included ? `${collection?.name ?? "도감"}에 넣었어.` : `${collection?.name ?? "도감"}에서 꺼냈어.`);
+    // 자리가 없어 못 들어갔는데 뜯기는 시늉을 하면, 저장한 줄 알고 떠납니다.
+    if (result === "full") {
+      setNotice(`${collection?.name ?? "도감"}은 ${COLLECTION_LIMIT}곳이 다 찼어.`);
+      return;
+    }
+    setNotice(result === "added" ? `${collection?.name ?? "도감"}에 넣었어.` : `${collection?.name ?? "도감"}에서 꺼냈어.`);
     const target = marksButtonRef.current?.getBoundingClientRect();
-    if (included && target) {
+    if (result === "added" && target) {
       const origin = event.currentTarget.getBoundingClientRect();
       setTear({ x: origin.left, y: origin.top, w: origin.width, dx: target.left + target.width / 2 - (origin.left + origin.width / 2), dy: target.top + target.height / 2 - (origin.top + origin.height / 2), name: cafe.name });
     }
@@ -500,6 +510,7 @@ export default function Home() {
                       cafe={codexPreviewCafe}
                       note={marks.find((mark) => mark.id === codexPreviewCafe.id)?.note ?? ""}
                       collections={collections}
+                      fullCollectionIds={fullCollectionIds}
                       selectedCollectionIds={marks.find((mark) => mark.id === codexPreviewCafe.id)?.collectionIds ?? []}
                       onToggleCollection={(collectionId, included, event) => onToggleCollection(codexPreviewCafe, collectionId, included, event)}
                       onClose={() => setCodexPreviewId(null)}
@@ -527,6 +538,7 @@ export default function Home() {
                 cafe={displayedCafe}
                 note={marks.find((mark) => mark.id === displayedCafe.id)?.note ?? ""}
                 collections={collections}
+                fullCollectionIds={fullCollectionIds}
                 selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
                 onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
                 onClose={closePanel}

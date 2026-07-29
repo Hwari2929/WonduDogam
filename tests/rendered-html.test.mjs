@@ -474,10 +474,10 @@ test("도감 완성도는 목록에 있는 카페만 센다", async () => {
   const codex = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
   assert.match(codex, /const collected = rows\.filter\(\(row\) => row\.cafe\)\.length;/);
   assert.match(codex, /const strays = activeMarks\.length - collected;/);
-  assert.match(codex, /<b>\{collected\}<\/b>/);
-  assert.match(codex, /index < collected \? "is-on" : ""/);
   assert.match(codex, /목록 밖 \{strays\}/);
-  // 진행 표시 어디에도 날것의 activeMarks.length 가 남아 있으면 안 됩니다.
+  // 칸 수는 한도까지만. 한도를 넘겨 저장해 둔 옛 데이터가 있어도 격자가 넘치지 않습니다.
+  assert.match(codex, /const used = Math\.min\(activeMarks\.length, COLLECTION_LIMIT\);/);
+  assert.match(codex, /index < used \? "is-on" : ""/);
   const board = codex.slice(codex.indexOf('className="codex__board"'), codex.indexOf("codex__board-actions"));
   assert.doesNotMatch(board, /\{activeMarks\.length\}/);
 });
@@ -512,10 +512,12 @@ test("도감 머리는 제자리에 남고, 관리판과 낱장은 접힌 채로
     assert.ok(top.includes(inside), `${inside} 가 고정 머리 밖에 있습니다`);
   }
 
-  // 기본은 접힘. 목록이 먼저 보여야 도감입니다.
-  assert.match(codex, /const \[boardOpen, setBoardOpen\] = useState\(false\)/);
+  // 관리판은 상시 표출입니다. 한 번 더 눌러야 보이는 정보는 없는 정보와 같습니다.
+  assert.doesNotMatch(codex, /boardOpen/);
+  assert.doesNotMatch(codex, /aria-controls="codex-board"/);
+  assert.match(codex, /\{mode === "list" \? \(\s*\n\s*<section className="codex__board"/);
+  // 낱장은 접힌 채로 시작합니다 — 목록이 먼저 보여야 도감입니다.
   assert.match(codex, /const \[openIds, setOpenIds\] = useState<ReadonlySet<string>>\(\(\) => new Set\(\)\)/);
-  assert.match(codex, /\{mode === "list" && boardOpen \? \(/);
 
   // 낱장은 이름 한 줄 + 연장 둘. 긴 이름은 줄을 늘리지 않고 자릅니다.
   assert.match(codex, /<span className="codex__name" title=\{label\}>\{label\}<\/span>/);
@@ -529,4 +531,32 @@ test("도감 머리는 제자리에 남고, 관리판과 낱장은 접힌 채로
   // "나의 원두 도감 · n곳" 줄은 제목이 커지면서 걷어냈습니다.
   assert.doesNotMatch(codex, /\{activeCollection\.name\} · \{activeMarks\.length\}곳/);
   assert.doesNotMatch(css, /codex__progress-bar|codex__progress-note|codex__actions|codex-delete/);
+});
+
+test("도감 한 권은 열 곳까지다", async () => {
+  // 무한히 담기는 목록은 도감이 아니라 즐겨찾기입니다. 관리판의 5×2 격자가
+  // 곧 이 열 칸이므로, 저장 쪽이 한도를 지키지 않으면 격자가 거짓말을 합니다.
+  const [marks, page, receipt, codex, css] = await Promise.all(
+    ["../app/marks.ts", "../app/page.tsx", "../app/components/Receipt.tsx", "../app/components/Codex.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(marks, /export const COLLECTION_LIMIT = 10;/);
+  assert.match(marks, /if \(countInCollection\(current\.marks, collectionId\) >= COLLECTION_LIMIT\) return "full";/);
+  // 코드 불러오기도 같은 한도를 지킵니다 — 여기서만 비켜 가면 칸 수가 어긋납니다.
+  assert.match(marks, /const room = wanted\.filter\(\(id\) => countInCollection\(marks, id\) < COLLECTION_LIMIT\);/);
+  assert.match(marks, /return \{ added, skipped \};/);
+  assert.match(codex, /const \{ added, skipped \} = mergeMarks\(/);
+
+  // 못 넣은 걸 넣은 것처럼 보이면 저장한 줄 알고 떠납니다.
+  assert.match(page, /if \(result === "full"\) \{/);
+  assert.match(page, /\$\{COLLECTION_LIMIT\}곳이 다 찼어/);
+  assert.match(page, /if \(result === "added" && target\)/);
+  // 가득 찬 도감은 눌러 보기 전에 잠겨 있어야 합니다.
+  assert.match(receipt, /const full = !included && fullCollectionIds\.includes\(collection\.id\);/);
+  assert.match(receipt, /disabled=\{full\}/);
+  assert.match(receipt, /full \? "가득 참" : "담기"/);
+
+  // 격자는 5×2 로 못 박습니다.
+  assert.match(css, /\.codex__progress-dots\s*\{[^}]*grid-template-columns: repeat\(5, 14px\);\s*grid-template-rows: repeat\(2, 14px\)/s);
+  assert.match(codex, /Array\.from\(\{ length: COLLECTION_LIMIT \}/);
 });

@@ -6,6 +6,7 @@ import { downloadBlob, decodeMarks, encodeMarks, renderCodexImage } from "../cod
 import { cafes } from "../data/cafes";
 import {
   CODEX_COLORS,
+  COLLECTION_LIMIT,
   CODEX_ICONS,
   colorValue,
   createCollection,
@@ -50,8 +51,6 @@ export function Codex({
   const [icon, setIcon] = useState<CodexIconId>("coffee");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  /** 도감 관리판은 접힌 채로 시작합니다 — 목록이 먼저 보여야 도감입니다. */
-  const [boardOpen, setBoardOpen] = useState(false);
   /** 펼쳐 둔 카페들. 한 줄만 보이는 게 기본이고, 필요한 것만 폅니다. */
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -78,6 +77,8 @@ export function Codex({
    */
   const collected = rows.filter((row) => row.cafe).length;
   const strays = activeMarks.length - collected;
+  /** 쓴 칸 수. 한도를 넘겨 저장해 둔 옛 데이터가 있어도 격자 밖으로 넘치지 않습니다. */
+  const used = Math.min(activeMarks.length, COLLECTION_LIMIT);
 
   function onCreate() {
     const id = createCollection(name, color, icon);
@@ -119,8 +120,12 @@ export function Codex({
     if (!value.trim()) return;
     setBusy(true);
     try {
-      const added = mergeMarks(await decodeMarks(value), activeCollection.id);
-      onNotice(added ? `${added}곳을 이 도감에 넣었어.` : "이미 가지고 있는 곳들이야.");
+      const { added, skipped } = mergeMarks(await decodeMarks(value), activeCollection.id);
+      onNotice(
+        skipped ? `${added}곳을 넣었어. ${skipped}곳은 자리가 없어 못 넣었어.`
+          : added ? `${added}곳을 이 도감에 넣었어.`
+            : "이미 가지고 있는 곳들이야.",
+      );
       setMode("list");
     } catch (error) { onNotice(error instanceof Error ? error.message : "코드를 읽지 못했어."); }
     finally { setBusy(false); }
@@ -166,32 +171,22 @@ export function Codex({
               <Plus size={17} aria-hidden="true" /><span>새 도감</span>
             </button>
           </div>
-
-          <button
-            className="tool-button tool-button--sm has-tip"
-            type="button"
-            onClick={() => setBoardOpen((value) => !value)}
-            aria-expanded={boardOpen}
-            aria-controls="codex-board"
-            aria-label={boardOpen ? "도감 관리 접기" : "도감 관리 펼치기"}
-          >
-            {boardOpen ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
-            <span className="tip" aria-hidden="true">{boardOpen ? "접기" : "도감 관리"}</span>
-          </button>
         </div>
 
         {/* §04 COLLECTION — 몇 곳인지와 이 도감으로 할 수 있는 일. 목록을 내리지
             않고도 손이 닿는 자리입니다. */}
-        {mode === "list" && boardOpen ? (
+        {mode === "list" ? (
           <section className="codex__board" id="codex-board" aria-label={`${activeCollection.name} 수집 상태`}>
             <div className="codex__board-top">
               <p className="codex__progress-count">
-                <b>{collected}</b>
-                <span>/ {cafes.length}</span>
+                <span className="meta">모은 곳</span>
+                <b>{used}</b>
+                <span>/ {COLLECTION_LIMIT}</span>
               </p>
+              {/* 칸 하나가 자리 하나. 열 칸이 이 도감의 전부입니다. */}
               <div className="codex__progress-dots" aria-hidden="true">
-                {cafes.map((cafe, index) => (
-                  <i key={cafe.id} className={index < collected ? "is-on" : ""} />
+                {Array.from({ length: COLLECTION_LIMIT }, (unused, index) => (
+                  <i key={index} className={index < used ? "is-on" : ""} />
                 ))}
               </div>
             </div>

@@ -1358,10 +1358,6 @@ a:focus-visible,
   flex: 1 1 auto;
   min-width: 0;
 }
-.codex__collection-row > .tool-button {
-  flex: 0 0 auto;
-  margin-top: 16px;
-}
 
 /* §04 COLLECTION — 몇 곳인지와 이 도감으로 할 수 있는 일. */
 .codex__board {
@@ -1384,10 +1380,15 @@ a:focus-visible,
   gap: 6px;
 }
 .codex__progress-count {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: baseline;
-  gap: 6px;
+  gap: 0 6px;
   font-family: var(--font-display);
+}
+.codex__progress-count .meta {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
 }
 .codex__progress-count b {
   font-size: 2.25rem;
@@ -1402,11 +1403,13 @@ a:focus-visible,
 }
 /* 칸 하나가 카페 한 곳. 채운 칸은 뜯어 둔 곳, 빈 칸은 아직 안 가 본 곳.
    칸 수가 늘어도 줄만 늘고 칸 크기는 그대로여야 "몇 칸 남았나"가 눈에 들어옵니다. */
+/* 5×2 — 도감 한 권의 열 칸을 그대로 옮긴 격자입니다. */
 .codex__progress-dots {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(5, 11px);
-  gap: 3px;
+  grid-template-columns: repeat(5, 14px);
+  grid-template-rows: repeat(2, 14px);
+  gap: 4px;
 }
 .codex__progress-dots i {
   display: block;
