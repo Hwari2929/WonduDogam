@@ -7,6 +7,7 @@ import { cafes } from "../data/cafes";
 import {
   CODEX_COLORS,
   COLLECTION_LIMIT,
+  CURATOR_COLLECTION_ID,
   CODEX_ICONS,
   colorValue,
   createCollection,
@@ -97,6 +98,11 @@ export function Codex({
   const strays = activeMarks.length - collected;
   /** 쓴 칸 수. 한도를 넘겨 저장해 둔 옛 데이터가 있어도 격자 밖으로 넘치지 않습니다. */
   const used = Math.min(activeMarks.length, COLLECTION_LIMIT);
+  /**
+   * 큐레이터 픽은 매일 저절로 다시 뽑히는 도감입니다. 넣고 빼고 적는 자리를
+   * 열어 두면 오늘 손댄 것이 내일 사라져, 없어진 이유를 설명할 길이 없습니다.
+   */
+  const readOnly = activeCollection.id === CURATOR_COLLECTION_ID;
 
   /**
    * "6 / 10" 만으로는 무엇을 센 숫자인지 알 수 없습니다. 두 줄이 그걸 답합니다 —
@@ -246,13 +252,13 @@ export function Codex({
               <button className="tool-button tool-button--sm has-tip" type="button" onClick={onExportCode} disabled={busy || activeMarks.length === 0} aria-label="도감 코드 복사">
                 <Copy size={15} aria-hidden="true" /><span className="tip" aria-hidden="true">코드 복사</span>
               </button>
-              <button className="tool-button tool-button--sm has-tip" type="button" onClick={() => setMode("import")} aria-label="받은 코드 붙여 넣기">
-                <ClipboardPaste size={15} aria-hidden="true" /><span className="tip" aria-hidden="true">코드 붙여넣기</span>
+              <button className="tool-button tool-button--sm has-tip" type="button" onClick={() => setMode("import")} disabled={readOnly} aria-label="받은 코드 붙여 넣기">
+                <ClipboardPaste size={15} aria-hidden="true" /><span className="tip" aria-hidden="true">{readOnly ? "큐레이터 픽에는 넣을 수 없어" : "코드 붙여넣기"}</span>
               </button>
               <button
                 className="tool-button tool-button--sm tool-button--danger has-tip"
                 type="button"
-                disabled={collections.length < 2}
+                disabled={readOnly || collections.length < 2}
                 onClick={() => {
                   if (!window.confirm(`“${activeCollection.name}” 도감을 지울까?`)) return;
                   const fallback = collections.find((entry) => entry.id !== activeCollection.id)!;
@@ -263,7 +269,7 @@ export function Codex({
                 aria-label="이 도감 지우기"
               >
                 <Trash2 size={15} aria-hidden="true" />
-                <span className="tip" aria-hidden="true">{collections.length < 2 ? "마지막 도감은 지울 수 없어" : "이 도감 지우기"}</span>
+                <span className="tip" aria-hidden="true">{readOnly ? "큐레이터 픽은 지울 수 없어" : collections.length < 2 ? "마지막 도감은 지울 수 없어" : "이 도감 지우기"}</span>
               </button>
             </div>
           </section>
@@ -324,18 +330,22 @@ export function Codex({
 
                   {open ? (
                     <div className="codex__slip-body">
-                      <input className="codex__note" defaultValue={mark.note} placeholder="한 줄 적어두기" maxLength={120} onBlur={(event) => setNote(mark.id, event.target.value)} aria-label={`${label} 메모`} />
+                      {readOnly ? null : (
+                        <input className="codex__note" defaultValue={mark.note} placeholder="한 줄 적어두기" maxLength={120} onBlur={(event) => setNote(mark.id, event.target.value)} aria-label={`${label} 메모`} />
+                      )}
                       <p className="codex__slip-foot">
-                        <span className="meta">뜯은 날 {mark.at}</span>
-                        <button
-                          className="codex__slip-tool codex__slip-tool--danger has-tip"
-                          type="button"
-                          onClick={() => { removeMark(mark.id, activeCollection.id); onNotice("이 도감에서 꺼냈어."); }}
-                          aria-label={`${label} 이 도감에서 빼기`}
-                        >
-                          <Trash2 size={15} aria-hidden="true" />
-                          <span className="tip" aria-hidden="true">목록에서 빼기</span>
-                        </button>
+                        <span className="meta">{readOnly ? `오늘의 추천 · ${shortDate(mark.at)}` : `뜯은 날 ${mark.at}`}</span>
+                        {readOnly ? null : (
+                          <button
+                            className="codex__slip-tool codex__slip-tool--danger has-tip"
+                            type="button"
+                            onClick={() => { removeMark(mark.id, activeCollection.id); onNotice("이 도감에서 꺼냈어."); }}
+                            aria-label={`${label} 이 도감에서 빼기`}
+                          >
+                            <Trash2 size={15} aria-hidden="true" />
+                            <span className="tip" aria-hidden="true">목록에서 빼기</span>
+                          </button>
+                        )}
                       </p>
                     </div>
                   ) : null}

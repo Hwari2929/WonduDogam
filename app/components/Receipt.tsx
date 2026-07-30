@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
 import { BookmarkCheck, BookmarkPlus, X } from "lucide-react";
-import { colorValue, type Collection } from "../marks";
+import { CURATOR_COLLECTION_ID, colorValue, type Collection } from "../marks";
 import { BeanMark } from "./BeanArt";
 import { CodexIcon } from "./CodexIcon";
 
@@ -87,7 +87,8 @@ export function Receipt({
             <section className="save-drop" aria-label="저장할 도감 고르기">
               <p className="meta">어느 도감에 넣을까</p>
               <div className="receipt__collection-list">
-                {collections.map((collection) => {
+                {/* 큐레이터 픽은 매일 저절로 뽑히므로 손으로 담을 자리가 없습니다. */}
+                {collections.filter((collection) => collection.id !== CURATOR_COLLECTION_ID).map((collection) => {
                   const included = selectedCollectionIds.includes(collection.id);
                   const full = !included && fullCollectionIds.includes(collection.id);
                   return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={15} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;

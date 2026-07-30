@@ -69,7 +69,6 @@ export function Drawer({
                   <span>{region.label}</span>
                   <i className="drawer__leader" aria-hidden="true" />
                   <strong className="tabular">{region.count}</strong>
-                  {region.note ? <small>{region.note} · 지도 미표시</small> : null}
                 </li>
               ))}
             </ul>

@@ -23,6 +23,11 @@ const PLACES: { label: string; lng: number; lat: number; sea?: boolean }[] = [
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.25;
+/**
+ * 이 배율부터 지도가 "구석을 들여다보는" 상태가 됩니다. 여기서부터 담기지 않은
+ * 카페까지 모두 찍고, 이름표도 폅니다. 그 아래로는 내 것만 남습니다.
+ */
+const DETAIL_ZOOM = 1.6;
 type View = { zoom: number; x: number; y: number };
 
 const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
@@ -116,11 +121,18 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (event.key === "0") { event.preventDefault(); resetView(); }
   }
 
-  // is-zoomed: 확대하면 협력업체 이름표를 폅니다. 축척이 촘촘해져 이름이 겹치지 않는 지점입니다.
+  /**
+   * 줌아웃 상태에서는 내 도감에 담긴 곳만 남깁니다. 여든 곳이 한 화면에 다 찍히면
+   * 지도가 아니라 얼룩이 되고, 그중 무엇이 내 것인지도 묻힙니다. 열어 둔 카페는
+   * 담기지 않았어도 남습니다 — 검색으로 막 고른 곳이 사라지면 안 되니까요.
+   */
+  const zoomedIn = view.zoom >= DETAIL_ZOOM;
+  const shownCafes = zoomedIn ? cafes : cafes.filter((cafe) => savedMarkers[cafe.id] || cafe.id === activeId);
+
   /** 지형 겹과 핀 겹이 같은 값을 봐야 한 몸으로 움직입니다. */
   const mapVars = { "--map-zoom": view.zoom, "--map-pan-x": `${view.x}px`, "--map-pan-y": `${view.y}px` } as CSSProperties;
 
-  const mapClass = ["map", dragging ? "is-dragging" : "", view.zoom >= 1.6 ? "is-zoomed" : ""]
+  const mapClass = ["map", dragging ? "is-dragging" : "", zoomedIn ? "is-zoomed" : ""]
     .filter(Boolean)
     .join(" ");
 
@@ -153,21 +165,21 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
       <div className="map__layer map__pins" style={mapVars}>
         <div className="map__places" aria-hidden="true">{PLACES.map((place) => { const { x, y } = project(place.lng, place.lat); return <span key={place.label} className={place.sea ? "map__sea-label" : undefined} style={{ left: `${x}%`, top: `${y}%` }}>{place.label}</span>; })}</div>
-        {cafes.map((cafe) => {
+        {shownCafes.map((cafe) => {
           const active = activeId === cafe.id;
           const saved = savedMarkers[cafe.id];
           const { x, y } = project(cafe.pos[0], cafe.pos[1]);
           return <button
             key={cafe.id}
-            className={["map-marker", "map-marker--plain", cafe.partner ? "is-partner" : "", saved ? "is-saved" : "", active ? "is-active" : ""].filter(Boolean).join(" ")}
+            className={["map-marker", "map-marker--plain", saved ? "is-saved" : "", active ? "is-active" : ""].filter(Boolean).join(" ")}
             style={{ left: `${x}%`, top: `${y}%`, "--codex-color": saved?.color } as CSSProperties}
             type="button"
             onClick={() => onSelect(cafe.id)}
-            aria-label={`${cafe.name}, ${cafe.area}${cafe.partner ? ", 협력업체" : ""}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
+            aria-label={`${cafe.name}, ${cafe.area}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
             aria-pressed={active}
           >
             <span className="map-marker__dot">{saved ? <CodexIcon name={saved.icon} size={14} /> : <Coffee size={12} strokeWidth={2.3} aria-hidden="true" />}</span>
-            {saved || cafe.partner ? <span className="map-marker__name">{cafe.name}{saved && saved.count > 1 ? <i>+{saved.count - 1}</i> : null}</span> : null}
+            {saved ? <span className="map-marker__name">{cafe.name}{saved.count > 1 ? <i>+{saved.count - 1}</i> : null}</span> : null}
           </button>;
         })}
       </div>

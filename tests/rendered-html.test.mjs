@@ -158,17 +158,19 @@ test("상세는 표(모노) 중심으로 접혀 있다", async () => {
   assert.doesNotMatch(css, /\.detail\s*\{[^}]*border-top/s);
   assert.match(receipt, /<section className="detail"[\s\S]*map\.kakao\.com/);
 });
-test("협력업체는 지도에서도 구분된다", async () => {
-  // 00_결정서 §2 Q4 "시각적으로는 뱃지 정도" · 03_기능_명세 §5.2 "지도 마커".
-  // 도장은 걷어냈지만 강조 자체가 사라지면 부스팅의 시각적 절반이 없어집니다.
+test("지도는 협력업체가 아니라 내 기록을 강조한다", async () => {
+  // 00_결정서 §2 Q4 는 협력업체에 "뱃지 정도"를 허락했지만, 목록이 여든 곳으로
+  // 늘면서 열여섯이 갈색으로 도드라지면 지도가 광고판이 됩니다. 등급 표시는
+  // 영수증의 원두 마크로 옮기고, 지도에서는 내가 뜯어 둔 곳만 눈에 띕니다.
   const [map, css] = await Promise.all([
     readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.match(map, /cafe\.partner \? "is-partner" : ""/);
-  assert.match(map, /saved \|\| cafe\.partner \? <span className="map-marker__name">/);
-  assert.match(map, /cafe\.partner \? ", 협력업체" : ""/);
-  assert.match(css, /\.map-marker\.is-partner \.map-marker__dot\s*\{[^}]*color:\s*var\(--bean\)/s);
+  assert.doesNotMatch(map, /is-partner/);
+  assert.doesNotMatch(css, /is-partner/);
+  assert.match(map, /saved \? "is-saved" : ""/);
+  assert.match(map, /\{saved \? <span className="map-marker__name">/);
+  assert.match(css, /\.map-marker\.is-saved \.map-marker__dot\s*\{[^}]*background: color-mix/s);
   // 인주는 도장 전용이었으므로 지도 강조에 되살리지 않습니다.
   assert.doesNotMatch(css, /\.map-marker[^{]*\{[^}]*var\(--stamp\)/s);
 });
@@ -276,7 +278,7 @@ test("내 도감 코드가 명세한 형식과 왕복을 지킨다", async () =>
 test("내 도감이 비어 있어도 불러오기로 들어갈 수 있다", async () => {
   const source = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
   // 불러오기는 글자 단추에서 관리판의 붙여넣기 연장으로 옮겼습니다.
-  assert.match(source, /onClick=\{\(\) => setMode\("import"\)\} aria-label="받은 코드 붙여 넣기"/);
+  assert.match(source, /onClick=\{\(\) => setMode\("import"\)\} disabled=\{readOnly\} aria-label="받은 코드 붙여 넣기"/);
   assert.match(source, /<ClipboardPaste size=\{15\}/);
   const marks = await readFile(new URL("../app/marks.ts", import.meta.url), "utf8");
   assert.match(marks, /export function mergeMarks/);
@@ -330,16 +332,6 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
   assert.match(receipt, /https:\/\/map\.kakao\.com/);
-});
-
-test("mock cafe ratio stays at two regular cafes per partner cafe", async () => {
-  const source = await readFile(new URL("../app/data/cafes.ts", import.meta.url), "utf8");
-  const cafeArray = source.slice(source.indexOf("export const cafes"), source.indexOf("export const partnerRegions"));
-  const partners = cafeArray.match(/partner:\s*true/g) ?? [];
-  const regulars = cafeArray.match(/partner:\s*false/g) ?? [];
-  assert.equal(partners.length, 6);
-  assert.equal(regulars.length, 12);
-  assert.equal(regulars.length, partners.length * 2);
 });
 
 test("selection ring remains circular and supplied Bibin boings accessibly", async () => {
@@ -619,4 +611,57 @@ test("지도 연장은 우하단 한 덩어리로 모이고, 종이가 덮지 �
   assert.match(css, /max-height: calc\(100svh - var\(--dock-top\) - 104px\)/);
   // 손이 닿는 자리는 모바일에서만 위쪽입니다 (아래는 하단 시트가 씁니다).
   assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.map__tools \{ top: 76px; right: 14px; bottom: auto; \}/);
+});
+
+test("목업 카페는 여든 곳이고 협력업체는 다섯 중 하나다", async () => {
+  const cafes = await readFile(new URL("../app/data/cafes.ts", import.meta.url), "utf8");
+  const rows = cafes.slice(cafes.indexOf("export const cafes"), cafes.indexOf("export const partnerRegions"));
+  const total = (rows.match(/id: "demo-/g) ?? []).length;
+  const partners = (rows.match(/partner: true/g) ?? []).length;
+  assert.equal(total, 80);
+  assert.equal(partners, 16);
+  assert.equal(total / partners, 5, "협력업체는 1 : 4 (다섯 중 하나)여야 합니다");
+  // id 와 상호가 겹치면 도감이 같은 곳을 두 번 셉니다.
+  assert.equal(new Set(rows.match(/id: "[^"]+"/g)).size, total);
+  assert.equal(new Set(rows.match(/name: "[^"]+"/g)).size, total);
+  // 서랍의 지역 집계는 손으로 적지 않고 목록에서 셉니다.
+  assert.match(cafes, /export const partnerRegions = \(\(\) => \{/);
+  assert.doesNotMatch(cafes, /count: 52/);
+});
+
+test("줌아웃하면 내 도감에 담긴 곳만 남는다", async () => {
+  // 여든 곳이 한 화면에 다 찍히면 지도가 아니라 얼룩이 됩니다.
+  const canvas = await readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8");
+  assert.match(canvas, /const DETAIL_ZOOM = 1\.6;/);
+  assert.match(canvas, /const zoomedIn = view\.zoom >= DETAIL_ZOOM;/);
+  assert.match(canvas, /const shownCafes = zoomedIn \? cafes : cafes\.filter\(\(cafe\) => savedMarkers\[cafe\.id\] \|\| cafe\.id === activeId\);/);
+  assert.match(canvas, /\{shownCafes\.map\(\(cafe\) => \{/);
+  // 검색으로 막 고른 곳이 사라지면 안 됩니다.
+  assert.match(canvas, /cafe\.id === activeId/);
+});
+
+test("큐레이터 픽은 날짜에서 계산되고 손댈 수 없다", async () => {
+  const [marks, page, codex, receipt] = await Promise.all(
+    ["../app/marks.ts", "../app/page.tsx", "../app/components/Codex.tsx", "../app/components/Receipt.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  // 저장소에 쓰지 않아야 "매일 바뀌고 지울 수 없다"가 규칙이 아니라 성질이 됩니다.
+  assert.match(marks, /export const CURATOR_COLLECTION_ID = "curator";/);
+  assert.match(marks, /export function curatorPicks\(dateLabel: string\): string\[\]/);
+  assert.match(marks, /seededRandom\(dateLabel\)/);
+  assert.match(marks, /\.slice\(0, CURATOR_PARTNER_PICKS\)/);
+  assert.match(marks, /\.slice\(0, COLLECTION_LIMIT - partners\.length\)/);
+  assert.match(marks, /const taken = new Set\(partners\.map\(\(cafe\) => cafe\.id\)\);/);
+  // 저장 경로 어디에도 큐레이터 픽이 끼어들 수 없습니다.
+  assert.match(marks, /const target = knownCollections\.has\(collectionId\) \? collectionId : current\.collections\[0\]\.id;/);
+  assert.match(page, /withCuratorPicks\(storedMarks, dateLabel\)/);
+  assert.match(page, /\[CURATOR_COLLECTION, \.\.\.storedCollections\]/);
+  // "가득 참" 은 저장되는 도감에만 해당합니다.
+  assert.match(page, /storedCollections\.filter\(\(collection\) => countInCollection/);
+  // 읽기 전용: 담기·빼기·메모 자리가 없습니다.
+  assert.match(receipt, /collections\.filter\(\(collection\) => collection\.id !== CURATOR_COLLECTION_ID\)/);
+  assert.match(codex, /const readOnly = activeCollection\.id === CURATOR_COLLECTION_ID;/);
+  assert.match(codex, /\{readOnly \? null : \(\s*\n\s*<input className="codex__note"/);
+  assert.match(codex, /disabled=\{readOnly \|\| collections\.length < 2\}/);
+  assert.match(codex, /큐레이터 픽은 지울 수 없어/);
 });

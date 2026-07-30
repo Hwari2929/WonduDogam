@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { cafes } from "./data/cafes";
 
 /**
  * 도감 색.
@@ -53,6 +54,66 @@ export function countInCollection(marks: Mark[], collectionId: string): number {
   return marks.filter((mark) => mark.collectionIds.includes(collectionId)).length;
 }
 export const DEFAULT_COLLECTION_ID = "default";
+
+/* ── 큐레이터 픽 ────────────────────────────────────────────────────
+ * 매일 열 곳을 대신 골라 주는 도감입니다.
+ *
+ * 저장소에 쓰지 않고 날짜에서 계산해 냅니다. 그래야 "매일 바뀌고 지울 수 없다"가
+ * 규칙이 아니라 성질이 됩니다 — 지울 대상이 아예 없고, 날이 바뀌면 저절로 새 열
+ * 곳이 됩니다. 저장했다면 날마다 죽은 기록이 쌓이고 사용자 메모와 뒤엉킵니다.
+ */
+export const CURATOR_COLLECTION_ID = "curator";
+export const CURATOR_PARTNER_PICKS = 4;
+
+export const CURATOR_COLLECTION: Collection = {
+  id: CURATOR_COLLECTION_ID,
+  name: "큐레이터 픽",
+  color: "clay",
+  icon: "star",
+  createdAt: "",
+};
+
+/** 날짜만 있으면 누가 보든 같은 열 곳이 나오는 난수. */
+function seededRandom(seed: string) {
+  let state = [...seed].reduce((total, character) => (total * 31 + character.charCodeAt(0)) >>> 0, 7) || 1;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function shuffled<T>(items: readonly T[], random: () => number): T[] {
+  const list = [...items];
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+/**
+ * 협력업체에서 넷, 나머지는 아직 뽑히지 않은 곳에서 여섯.
+ * 사용자가 무엇을 담아 두었는지는 보지 않습니다 — 오늘의 픽은 누구에게나 같습니다.
+ */
+export function curatorPicks(dateLabel: string): string[] {
+  const random = seededRandom(dateLabel);
+  const partners = shuffled(cafes.filter((cafe) => cafe.partner), random).slice(0, CURATOR_PARTNER_PICKS);
+  const taken = new Set(partners.map((cafe) => cafe.id));
+  const rest = shuffled(cafes.filter((cafe) => !taken.has(cafe.id)), random)
+    .slice(0, COLLECTION_LIMIT - partners.length);
+  return [...partners, ...rest].map((cafe) => cafe.id);
+}
+
+/** 오늘의 픽을 저장된 기록에 겹쳐 놓습니다. 같은 카페는 한 장으로 합칩니다. */
+export function withCuratorPicks(marks: Mark[], dateLabel: string): Mark[] {
+  const merged = marks.map((mark) => ({ ...mark }));
+  for (const id of curatorPicks(dateLabel)) {
+    const existing = merged.find((mark) => mark.id === id);
+    if (existing) existing.collectionIds = [...existing.collectionIds, CURATOR_COLLECTION_ID];
+    else merged.push({ id, at: dateLabel, note: "", collectionIds: [CURATOR_COLLECTION_ID] });
+  }
+  return merged;
+}
 const CHANGE_EVENT = "wondudogam:marks";
 // 기본 도감은 브랜드 갈색으로. 모두의 첫 도감이 붉은색이면 화면에서 인주가
 // 가장 흔한 색이 되어 도장이 특별해지지 않습니다.
@@ -178,7 +239,9 @@ export function mergeMarks(incoming: Mark[], collectionId = readState().collecti
   let marks = [...current.marks];
   for (const item of incoming) {
     const targetIds = (item.collectionIds ?? []).filter((id) => knownCollections.has(id));
-    const ids = targetIds.length ? targetIds : [collectionId];
+    // 저장되지 않는 도감(큐레이터 픽)으로는 아무것도 들어갈 수 없습니다.
+    const target = knownCollections.has(collectionId) ? collectionId : current.collections[0].id;
+    const ids = targetIds.length ? targetIds : [target];
     const existing = marks.find((mark) => mark.id === item.id);
     // 이미 가진 곳은 칸을 새로 쓰지 않으므로 한도와 무관합니다.
     const wanted = ids.filter((id) => !existing?.collectionIds.includes(id));

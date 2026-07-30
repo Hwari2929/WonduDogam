@@ -2224,36 +2224,11 @@ a:focus-visible,
 }
 .map-marker--plain:hover .map-marker__dot { background: var(--paper); color: var(--ink); }
 
-/* 협력업체 — 도장은 걷어냈지만 지도에서의 강조는 남습니다 (00 §2 Q4 "뱃지 정도",
-   03 §5.2 "지도 마커"). 인주 대신 도형을 뒤집습니다: 일반 카페가 종이 바탕에
-   잉크 아이콘이라면, 협력업체는 갈색 바탕에 종이색 아이콘. 같은 조형의 음영만
-   뒤집은 것이라 도장을 되살리지 않고도 한눈에 갈립니다. */
-.map-marker.is-partner { z-index: 6; }
-.map-marker.is-partner .map-marker__dot {
-  width: 26px;
-  height: 26px;
-  border-color: var(--bean);
-  background: var(--bean);
-  color: var(--paper);
-}
-.map-marker.is-partner:hover .map-marker__dot {
-  background: color-mix(in srgb, var(--bean) 82%, var(--paper));
-}
-.map-marker.is-partner .map-marker__name { color: var(--bean); }
+/* 지도에서 협력업체를 따로 강조하지 않습니다. 여든 곳 중 열여섯이 갈색으로
+   도드라지면 지도가 광고판이 되고, 정작 내가 뜯어 둔 곳이 그 사이에 묻힙니다.
+   등급은 영수증의 원두 마크가 말합니다. */
 
-/* 이름표는 기본적으로 접어 둡니다. 협력업체가 71곳이 되면 이름 71개가 겹쳐
-   아무것도 안 읽힙니다. 확대했거나, 가리켰거나, 열어 둔 것만 이름을 폅니다. */
-.map-marker.is-partner:not(.is-saved) .map-marker__name {
-  opacity: 0;
-  transition: opacity 140ms ease;
-  pointer-events: none;
-}
-.map.is-zoomed .map-marker.is-partner .map-marker__name,
-.map-marker.is-partner:hover .map-marker__name,
-.map-marker.is-partner:focus-visible .map-marker__name,
-.map-marker.is-partner.is-active .map-marker__name {
-  opacity: 1;
-}
+/* 이름표는 담아 둔 곳에만 답니다. 나머지는 점으로 서서 배경이 됩니다. */
 /* 가리킨 마커의 이름이 옆 마커에 가리지 않도록 잠깐 위로 올립니다. */
 .map-marker:hover,
 .map-marker.is-active {

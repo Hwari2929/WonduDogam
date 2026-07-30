@@ -7,7 +7,7 @@ import { Drawer } from "./components/Drawer";
 import { MapSurface } from "./components/MapSurface";
 import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
-import { COLLECTION_LIMIT, colorValue, countInCollection, setCafeInCollection, useCodex } from "./marks";
+import { COLLECTION_LIMIT, CURATOR_COLLECTION, CURATOR_COLLECTION_ID, colorValue, countInCollection, setCafeInCollection, useCodex, withCuratorPicks } from "./marks";
 import { applyTheme, nextTheme, useTheme, type Theme } from "./theme";
 import { useSheetDrag } from "./useSheetDrag";
 
@@ -140,7 +140,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [query, setQuery] = useState("");
-  const { collections, marks } = useCodex();
+  const { collections: storedCollections, marks: storedMarks } = useCodex();
   const [activeCollectionId, setActiveCollectionId] = useState("default");
   const [notice, setNotice] = useState("");
   const [codexPreviewId, setCodexPreviewId] = useState<string | null>(null);
@@ -159,6 +159,14 @@ export default function Home() {
 
   const dateLabel = useMemo(() => kstToday(new Date()), []);
   const paper = PAPERS[theme];
+
+  /**
+   * 오늘의 큐레이터 픽을 저장된 도감 앞에 겹칩니다. 저장소에는 없는 도감이라
+   * 여기서 한 번 얹어 두면 아래로는 여느 도감과 똑같이 흐릅니다 — 다만 넣고
+   * 빼는 쪽은 저장소가 막습니다.
+   */
+  const collections = useMemo(() => [CURATOR_COLLECTION, ...storedCollections], [storedCollections]);
+  const marks = useMemo(() => withCuratorPicks(storedMarks, dateLabel), [storedMarks, dateLabel]);
 
   // 03 §2 — 후보 풀은 협력업체와 승격 카페뿐입니다. 소개할 내용이 없는 카페를
   // "오늘의 카페"로 뽑으면 카드가 텅 빕니다.
@@ -192,8 +200,8 @@ export default function Home() {
   const activeCollection = collections.find((collection) => collection.id === activeCollectionId) ?? collections[0];
   /** 이미 열 칸을 다 쓴 도감. 영수증에서 잠가 두지 않으면 눌러 보고서야 알게 됩니다. */
   const fullCollectionIds = useMemo(
-    () => collections.filter((collection) => countInCollection(marks, collection.id) >= COLLECTION_LIMIT).map((collection) => collection.id),
-    [collections, marks],
+    () => storedCollections.filter((collection) => countInCollection(marks, collection.id) >= COLLECTION_LIMIT).map((collection) => collection.id),
+    [storedCollections, marks],
   );
   const savedMarkers = useMemo(() => {
     const result: Record<string, { color: string; icon: typeof collections[number]["icon"]; count: number; collectionName: string }> = {};
