@@ -2,6 +2,7 @@
 
 import { Coffee, Minus, Plus, RotateCcw } from "lucide-react";
 import {
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -21,8 +22,14 @@ const PLACES: { label: string; lng: number; lat: number; sea?: boolean }[] = [
   { label: "수원", lng: 127.029, lat: 37.263 }, { label: "서해", lng: 126.5, lat: 37.34, sea: true },
 ];
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 0.25;
+const MAX_ZOOM = 5;
+/**
+ * 단추 한 번에 곱해지는 배율. 더하기로 올리면 100%에서 500%까지 열여섯 번을
+ * 눌러야 하고, 배율이 높을수록 한 번의 체감이 줄어듭니다.
+ */
+const ZOOM_FACTOR = 1.4;
+/** 화면 밖으로 이만큼까지는 핀을 남겨 둡니다 — 끌 때 가장자리에서 툭 튀지 않게. */
+const CULL_MARGIN = 0.2;
 /**
  * 이 배율부터 지도가 "구석을 들여다보는" 상태가 됩니다. 여기서부터 담기지 않은
  * 카페까지 모두 찍고, 이름표도 폅니다. 그 아래로는 내 것만 남습니다.
@@ -61,6 +68,22 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   const viewRef = useRef<View>(INITIAL_VIEW);
   const [view, setView] = useState<View>(INITIAL_VIEW);
   const [dragging, setDragging] = useState(false);
+  /**
+   * 화면에 들어오는 핀만 그리려면 지도의 실제 크기가 필요합니다. 재기 전에는
+   * 걸러내지 않습니다 — 0으로 재고 시작하면 첫 프레임이 텅 빕니다.
+   */
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const element = mapRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize((current) => (current?.width === width && current?.height === height ? current : { width, height }));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   function commitView(next: View) {
     viewRef.current = next;
@@ -80,7 +103,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }
 
   function changeZoom(direction: -1 | 1) {
-    zoomAt(viewRef.current.zoom + direction * ZOOM_STEP);
+    zoomAt(viewRef.current.zoom * (direction > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR));
   }
 
   function resetView() {
@@ -127,7 +150,27 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    * 담기지 않았어도 남습니다 — 검색으로 막 고른 곳이 사라지면 안 되니까요.
    */
   const zoomedIn = view.zoom >= DETAIL_ZOOM;
-  const shownCafes = zoomedIn ? cafes : cafes.filter((cafe) => savedMarkers[cafe.id] || cafe.id === activeId);
+
+  /**
+   * 지금 보이는 자리에 있는 카페인가. 확대할수록 화면에 남는 땅은 좁아지는데
+   * 여든 곳을 통째로 그려 두면 보이지도 않는 핀을 계속 붙들고 있게 됩니다.
+   */
+  function inView(x: number, y: number) {
+    if (!size) return true;
+    const screenX = (x / 100) * size.width * view.zoom + view.x;
+    const screenY = (y / 100) * size.height * view.zoom + view.y;
+    return (
+      screenX >= -size.width * CULL_MARGIN && screenX <= size.width * (1 + CULL_MARGIN) &&
+      screenY >= -size.height * CULL_MARGIN && screenY <= size.height * (1 + CULL_MARGIN)
+    );
+  }
+
+  const shownCafes = cafes.filter((cafe) => {
+    // 줌아웃 상태에서는 지금 고른 도감에 담긴 곳과 열어 둔 카페만 남습니다.
+    if (!zoomedIn && !savedMarkers[cafe.id] && cafe.id !== activeId) return false;
+    const { x, y } = project(cafe.pos[0], cafe.pos[1]);
+    return inView(x, y);
+  });
 
   /** 지형 겹과 핀 겹이 같은 값을 봐야 한 몸으로 움직입니다. */
   const mapVars = { "--map-zoom": view.zoom, "--map-pan-x": `${view.x}px`, "--map-pan-y": `${view.y}px` } as CSSProperties;
@@ -185,7 +228,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       </div>
 
       <div className="map__tools">
-        <div className="map__scale" aria-hidden="true"><i style={{ width: `${56 * view.zoom}px` }} /><span>10 km</span></div>
+        <div className="map__scale" aria-hidden="true"><i /><span>{(10 / view.zoom).toFixed(view.zoom >= 2 ? 1 : 0)} km</span></div>
         <div className="map__zoom" role="group" aria-label="지도 확대 축소" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" onClick={() => changeZoom(-1)} disabled={view.zoom <= MIN_ZOOM + 0.01} aria-label="지도 축소"><Minus size={16} /></button>
         <output aria-live="polite" aria-label={`지도 확대율 ${Math.round(view.zoom * 100)}퍼센트`}>{Math.round(view.zoom * 100)}%</output>

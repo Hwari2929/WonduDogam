@@ -325,7 +325,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /terrain__district/);
   assert.match(canvas, /onWheel=\{onWheel\}/);
   assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
-  assert.match(canvas, /MAX_ZOOM = 3/);
+  assert.match(canvas, /MAX_ZOOM = 5/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{12\}/);
   assert.match(css, /\.map__places span\s*\{[^}]*scale\(calc\(1 \/ var\(--map-zoom\)\)\)/s);
@@ -629,15 +629,35 @@ test("목업 카페는 여든 곳이고 협력업체는 다섯 중 하나다", a
   assert.doesNotMatch(cafes, /count: 52/);
 });
 
-test("줌아웃하면 내 도감에 담긴 곳만 남는다", async () => {
-  // 여든 곳이 한 화면에 다 찍히면 지도가 아니라 얼룩이 됩니다.
-  const canvas = await readFile(new URL("../app/components/MapCanvas.tsx", import.meta.url), "utf8");
+test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리만 남는다", async () => {
+  const [canvas, page] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/page.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
   assert.match(canvas, /const DETAIL_ZOOM = 1\.6;/);
   assert.match(canvas, /const zoomedIn = view\.zoom >= DETAIL_ZOOM;/);
-  assert.match(canvas, /const shownCafes = zoomedIn \? cafes : cafes\.filter\(\(cafe\) => savedMarkers\[cafe\.id\] \|\| cafe\.id === activeId\);/);
+  assert.match(canvas, /if \(!zoomedIn && !savedMarkers\[cafe\.id\] && cafe\.id !== activeId\) return false;/);
   assert.match(canvas, /\{shownCafes\.map\(\(cafe\) => \{/);
-  // 검색으로 막 고른 곳이 사라지면 안 됩니다.
-  assert.match(canvas, /cafe\.id === activeId/);
+
+  // 지도에서 도드라지는 건 지금 고른 도감뿐입니다 — 탭을 옮기면 지도도 옮겨 갑니다.
+  assert.match(page, /if \(!mark\.collectionIds\.includes\(activeCollection\.id\)\) continue;/);
+  assert.match(page, /color: colorValue\(activeCollection\.color\)/);
+  // 아직 담은 게 없는 사람에게 빈 지도를 열어 주지 않습니다.
+  assert.match(page, /useState\(CURATOR_COLLECTION_ID\)/);
+
+  // 보이지도 않는 핀을 붙들고 있지 않습니다.
+  assert.match(canvas, /const CULL_MARGIN = 0\.2;/);
+  assert.match(canvas, /function inView\(x: number, y: number\)/);
+  assert.match(canvas, /if \(!size\) return true;/);
+  assert.match(canvas, /return inView\(x, y\);/);
+  assert.match(canvas, /new ResizeObserver/);
+
+  // 100%에서 500%까지 다섯 번이면 닿습니다. 더하기로 올리면 열여섯 번입니다.
+  assert.match(canvas, /const ZOOM_FACTOR = 1\.4;/);
+  assert.match(canvas, /zoomAt\(viewRef\.current\.zoom \* \(direction > 0 \? ZOOM_FACTOR : 1 \/ ZOOM_FACTOR\)\);/);
+  assert.doesNotMatch(canvas, /ZOOM_STEP/);
+  // 축척은 막대를 늘리지 않고 거리를 줄입니다 — 500%에서 막대가 280px 로 자랍니다.
+  assert.match(canvas, /\{\(10 \/ view\.zoom\)\.toFixed\(view\.zoom >= 2 \? 1 : 0\)\} km/);
 });
 
 test("큐레이터 픽은 날짜에서 계산되고 손댈 수 없다", async () => {

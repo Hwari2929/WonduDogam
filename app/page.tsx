@@ -141,7 +141,9 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("intro");
   const [query, setQuery] = useState("");
   const { collections: storedCollections, marks: storedMarks } = useCodex();
-  const [activeCollectionId, setActiveCollectionId] = useState("default");
+  // 첫 화면의 도감은 큐레이터 픽입니다. 아직 아무것도 담지 않은 사람에게
+  // "나의 원두 도감"을 열어 주면 지도가 텅 빈 채로 시작합니다.
+  const [activeCollectionId, setActiveCollectionId] = useState(CURATOR_COLLECTION_ID);
   const [notice, setNotice] = useState("");
   const [codexPreviewId, setCodexPreviewId] = useState<string | null>(null);
   const [tear, setTear] = useState<{ dx: number; dy: number; x: number; y: number; w: number; name: string } | null>(null);
@@ -203,16 +205,25 @@ export default function Home() {
     () => storedCollections.filter((collection) => countInCollection(marks, collection.id) >= COLLECTION_LIMIT).map((collection) => collection.id),
     [storedCollections, marks],
   );
+  /**
+   * 지도에서 도드라지는 건 **지금 고른 도감**에 담긴 곳뿐입니다. 모든 도감을
+   * 한꺼번에 비추면 탭을 바꿔도 지도가 그대로라, 어느 도감을 보고 있는지가
+   * 지도에서 사라집니다. 탭을 옮기면 지도도 따라 옮겨 갑니다.
+   */
   const savedMarkers = useMemo(() => {
     const result: Record<string, { color: string; icon: typeof collections[number]["icon"]; count: number; collectionName: string }> = {};
+    if (!activeCollection) return result;
     for (const mark of marks) {
-      const memberships = collections.filter((collection) => mark.collectionIds.includes(collection.id));
-      if (!memberships.length) continue;
-      const primary = memberships.find((collection) => collection.id === activeCollection?.id) ?? memberships[0];
-      result[mark.id] = { color: colorValue(primary.color), icon: primary.icon, count: memberships.length, collectionName: primary.name };
+      if (!mark.collectionIds.includes(activeCollection.id)) continue;
+      result[mark.id] = {
+        color: colorValue(activeCollection.color),
+        icon: activeCollection.icon,
+        count: mark.collectionIds.length,
+        collectionName: activeCollection.name,
+      };
     }
     return result;
-  }, [marks, collections, activeCollection?.id]);
+  }, [marks, activeCollection]);
 
   /**
    * 주소에 카드가 적혀 있으면 그게 이깁니다. 링크로 들어왔거나 뒤로가기로 돌아온
