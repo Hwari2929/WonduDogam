@@ -326,7 +326,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /MAX_ZOOM = 3/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{12\}/);
-  assert.match(css, /\.map__places span\s*\{[^}]*scale\(var\(--map-inverse\)\)/s);
+  assert.match(css, /\.map__places span\s*\{[^}]*scale\(calc\(1 \/ var\(--map-zoom\)\)\)/s);
   assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
   assert.match(receipt, /https:\/\/map\.kakao\.com/);
@@ -580,4 +580,43 @@ test("숫자 옆에 무엇을 센 것인지가 적힌다", async () => {
   // 형식이 다른 옛 값에는 손대지 않습니다.
   assert.match(codex, /return match \? `\$\{match\[1\]\}\.\$\{match\[2\]\}` : at;/);
   assert.match(css, /\.codex__board-lines\s*\{[^}]*border-top: 1px dashed var\(--rule\)/s);
+});
+
+test("확대해도 핀은 뭉개지지 않는다", async () => {
+  // 지형과 핀이 한 레이어에 있으면, 브라우저가 한 번 그려 둔 그림을 늘려서
+  // 배율이 올라갈수록 아이콘과 이름이 흐려집니다. 겹을 갈라 지형만 승격합니다.
+  const [canvas, css] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(canvas, /className="map__layer map__viewport"/);
+  assert.match(canvas, /className="map__layer map__pins"/);
+  // 두 겹이 같은 값을 봐야 한 몸으로 움직입니다.
+  assert.match(canvas, /const mapVars = \{ "--map-zoom": view\.zoom/);
+  assert.equal((canvas.match(/style=\{mapVars\}/g) ?? []).length, 2);
+  // 변형과 전이는 공통 겹에, 승격은 지형에만.
+  assert.match(css, /\.map__layer\s*\{[^}]*transform: translate3d\(var\(--map-pan-x\), var\(--map-pan-y\), 0\) scale\(var\(--map-zoom\)\)/s);
+  assert.match(css, /\.map__viewport\s*\{\n\s*will-change: transform;\n\}/);
+  const pins = css.slice(css.indexOf(".map__pins {"), css.indexOf(".map.is-dragging .map__layer"));
+  assert.doesNotMatch(pins, /will-change/);
+  // 겹이 커지는 만큼 마커는 되돌려, 배율과 무관하게 같은 크기로 섭니다.
+  assert.match(css, /\.map-marker \{ transform: translate\(-50%, -50%\) scale\(calc\(1 \/ var\(--map-zoom\)\)\); \}/);
+  assert.doesNotMatch(css, /--map-inverse|--marker-scale/);
+  assert.doesNotMatch(canvas, /--map-inverse|--marker-scale/);
+});
+
+test("지도 연장은 우하단 한 덩어리로 모이고, 종이가 덮지 않는다", async () => {
+  const [canvas, css] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  assert.match(canvas, /<div className="map__tools">\s*\n\s*<div className="map__scale"[\s\S]*<div className="map__zoom"/);
+  assert.match(css, /\.map__tools\s*\{[^}]*right: var\(--rail\);\s*bottom: 26px/s);
+  // 자리를 옮겼으니 옛 좌표는 남아 있으면 안 됩니다.
+  assert.doesNotMatch(css, /\.map__zoom\s*\{[^}]*top: 88px/s);
+  assert.doesNotMatch(css, /\.map__scale\s*\{[^}]*position: absolute/s);
+  // 닿지 않는 단추는 없는 단추입니다 — 도크가 아래끝을 비워 줍니다.
+  assert.match(css, /max-height: calc\(100svh - var\(--dock-top\) - 104px\)/);
+  // 손이 닿는 자리는 모바일에서만 위쪽입니다 (아래는 하단 시트가 씁니다).
+  assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.map__tools \{ top: 76px; right: 14px; bottom: auto; \}/);
 });

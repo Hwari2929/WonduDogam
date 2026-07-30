@@ -117,6 +117,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }
 
   // is-zoomed: 확대하면 협력업체 이름표를 폅니다. 축척이 촘촘해져 이름이 겹치지 않는 지점입니다.
+  /** 지형 겹과 핀 겹이 같은 값을 봐야 한 몸으로 움직입니다. */
+  const mapVars = { "--map-zoom": view.zoom, "--map-pan-x": `${view.x}px`, "--map-pan-y": `${view.y}px` } as CSSProperties;
+
   const mapClass = ["map", dragging ? "is-dragging" : "", view.zoom >= 1.6 ? "is-zoomed" : ""]
     .filter(Boolean)
     .join(" ");
@@ -134,7 +137,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       onPointerCancel={endDrag}
       onKeyDown={onMapKeyDown}
     >
-      <div className="map__viewport" style={{ "--map-zoom": view.zoom, "--map-pan-x": `${view.x}px`, "--map-pan-y": `${view.y}px`, "--map-inverse": 1 / view.zoom } as CSSProperties}>
+      {/* 지형과 핀을 두 겹으로 가릅니다. 변형도 전이도 똑같아 한 몸처럼 움직이지만,
+          지형만 합성 레이어로 올립니다. 핀까지 같은 레이어에 두면 확대할 때
+          브라우저가 이미 그려 둔 그림을 늘려 버려서 아이콘과 이름이 뭉갭니다. */}
+      <div className="map__layer map__viewport" style={mapVars}>
         <svg className="map__terrain" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {minorRoads.map((d, index) => <path key={`minor-${index}`} className="terrain__road terrain__road--minor" d={d} />)}
           {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
@@ -142,6 +148,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
           <path className="terrain__river" d={river} /><path className="terrain__sea" d={sea} fillRule="evenodd" />
         </svg>
+      </div>
+      <div className="map__grain" aria-hidden="true" />
+
+      <div className="map__layer map__pins" style={mapVars}>
         <div className="map__places" aria-hidden="true">{PLACES.map((place) => { const { x, y } = project(place.lng, place.lat); return <span key={place.label} className={place.sea ? "map__sea-label" : undefined} style={{ left: `${x}%`, top: `${y}%` }}>{place.label}</span>; })}</div>
         {cafes.map((cafe) => {
           const active = activeId === cafe.id;
@@ -150,7 +160,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           return <button
             key={cafe.id}
             className={["map-marker", "map-marker--plain", cafe.partner ? "is-partner" : "", saved ? "is-saved" : "", active ? "is-active" : ""].filter(Boolean).join(" ")}
-            style={{ left: `${x}%`, top: `${y}%`, "--codex-color": saved?.color, "--marker-scale": 1 / view.zoom } as CSSProperties}
+            style={{ left: `${x}%`, top: `${y}%`, "--codex-color": saved?.color } as CSSProperties}
             type="button"
             onClick={() => onSelect(cafe.id)}
             aria-label={`${cafe.name}, ${cafe.area}${cafe.partner ? ", 협력업체" : ""}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
@@ -161,15 +171,16 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           </button>;
         })}
       </div>
-      <div className="map__grain" aria-hidden="true" />
 
-      <div className="map__zoom" role="group" aria-label="지도 확대 축소" onPointerDown={(event) => event.stopPropagation()}>
+      <div className="map__tools">
+        <div className="map__scale" aria-hidden="true"><i style={{ width: `${56 * view.zoom}px` }} /><span>10 km</span></div>
+        <div className="map__zoom" role="group" aria-label="지도 확대 축소" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" onClick={() => changeZoom(-1)} disabled={view.zoom <= MIN_ZOOM + 0.01} aria-label="지도 축소"><Minus size={16} /></button>
         <output aria-live="polite" aria-label={`지도 확대율 ${Math.round(view.zoom * 100)}퍼센트`}>{Math.round(view.zoom * 100)}%</output>
         <button type="button" onClick={() => changeZoom(1)} disabled={view.zoom >= MAX_ZOOM - 0.01} aria-label="지도 확대"><Plus size={16} /></button>
-        <button type="button" className="map__zoom-reset" onClick={resetView} disabled={view.zoom <= MIN_ZOOM + 0.01 && view.x === 0 && view.y === 0} aria-label="지도 위치와 확대율 초기화"><RotateCcw size={14} /></button>
+          <button type="button" className="map__zoom-reset" onClick={resetView} disabled={view.zoom <= MIN_ZOOM + 0.01 && view.x === 0 && view.y === 0} aria-label="지도 위치와 확대율 초기화"><RotateCcw size={14} /></button>
+        </div>
       </div>
-      <div className="map__scale" aria-hidden="true"><i style={{ width: `${56 * view.zoom}px` }} /><span>10 km</span></div>
     </section>
   );
 }

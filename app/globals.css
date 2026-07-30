@@ -515,10 +515,6 @@ a:focus-visible,
 }
 
 .map__scale {
-  position: absolute;
-  z-index: 8;
-  right: var(--rail);
-  bottom: 26px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -897,7 +893,9 @@ a:focus-visible,
   top: var(--dock-top);
   right: var(--dock-right);
   width: var(--card-w);
-  max-height: calc(100svh - var(--dock-top) - 28px);
+  /* 아래끝은 지도 연장(축척·확대축소) 몫으로 비웁니다. 종이는 안에서 스크롤되지만,
+     닿지 않는 단추는 없는 단추라 그쪽을 먼저 지킵니다. */
+  max-height: calc(100svh - var(--dock-top) - 104px);
   overflow: auto;
   scrollbar-width: none;
   filter: drop-shadow(0 10px 20px var(--shadow));
@@ -2177,24 +2175,43 @@ a:focus-visible,
 /* ── 지도 확대와 카페 아이콘 ── */
 .map { cursor: grab; touch-action: none; }
 .map.is-dragging { cursor: grabbing; }
-.map__viewport {
+/* 지형 겹과 핀 겹. 변형도 전이도 같은 값이라 한 몸으로 움직입니다. */
+.map__layer {
   --map-zoom: 1;
   --map-pan-x: 0px;
   --map-pan-y: 0px;
-  --map-inverse: 1;
   position: absolute;
   inset: 0;
   transform: translate3d(var(--map-pan-x), var(--map-pan-y), 0) scale(var(--map-zoom));
   transform-origin: 0 0;
   transition: transform 100ms cubic-bezier(.2, .75, .25, 1);
+}
+/* 지형만 합성 레이어로 올립니다. 선이 흐려지는 건 티가 안 나고, 넓은 면을
+   매 프레임 다시 칠하는 값이 큽니다. */
+.map__viewport {
   will-change: transform;
 }
-.map.is-dragging .map__viewport { transition: none; }
+/* 핀 겹은 승격하지 않습니다. will-change 를 붙이면 브라우저가 한 번 그려 둔
+   그림을 늘려서 확대할수록 아이콘과 이름이 뭉갭니다 — 여기서는 매번 다시
+   그리게 두어야 배율이 올라가도 선이 삽니다. 핀은 몇 개뿐이라 값도 쌉니다. */
+.map__pins {
+  z-index: 4;
+}
+/* 겹 자체는 지도 끌기를 막지 않습니다. 실제로 눌리는 건 마커뿐입니다. */
+.map__pins,
+.map__places {
+  pointer-events: none;
+}
+.map-marker {
+  pointer-events: auto;
+}
+.map.is-dragging .map__layer { transition: none; }
+/* 이름표와 마커는 확대해도 같은 크기로 섭니다. 겹이 커지는 만큼 되돌립니다. */
 .map__places span {
-  transform: translate(-50%, -50%) scale(var(--map-inverse));
+  transform: translate(-50%, -50%) scale(calc(1 / var(--map-zoom)));
   transform-origin: center;
 }
-.map-marker { transform: translate(-50%, -50%) scale(var(--marker-scale, 1)); }
+.map-marker { transform: translate(-50%, -50%) scale(calc(1 / var(--map-zoom))); }
 .map-marker--plain { width: 34px; height: 34px; }
 .map-marker__dot {
   position: relative;
@@ -2267,11 +2284,18 @@ a:focus-visible,
   to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
-.map__zoom {
+/* 지도를 다루는 것들은 한자리에 모입니다 — 축척 위, 확대·축소 아래. */
+.map__tools {
   position: absolute;
   z-index: 11;
-  top: 88px;
   right: var(--rail);
+  bottom: 26px;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.map__zoom {
   display: grid;
   grid-template-columns: 34px 48px 34px 30px;
   align-items: center;
@@ -2303,7 +2327,9 @@ a:focus-visible,
   .map-marker.is-active .map-marker__dot::after { animation: none; }
 }
 @media (max-width: 767px) {
-  .map__zoom { top: 76px; right: 14px; grid-template-columns: 38px 46px 38px; }
+  /* 아래는 하단 시트가 차지하므로, 손 닿는 자리는 위쪽 오른편입니다. */
+  .map__tools { top: 76px; right: 14px; bottom: auto; }
+  .map__zoom { grid-template-columns: 38px 46px 38px; }
   .map__zoom button { height: 38px; }
   .map__zoom-reset { display: none !important; }
 }
