@@ -582,15 +582,17 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
       .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
   assert.match(canvas, /className="map__layer map__viewport"/);
+  assert.match(canvas, /className="map__layer map__regions"/);
   assert.match(canvas, /className="map__layer map__pins"/);
-  // 두 겹이 같은 값을 봐야 한 몸으로 움직입니다.
+  // 세 겹이 같은 값을 봐야 한 몸으로 움직입니다.
   assert.match(canvas, /const mapVars = \{ "--map-zoom": view\.zoom/);
-  assert.equal((canvas.match(/style=\{mapVars\}/g) ?? []).length, 2);
+  assert.equal((canvas.match(/style=\{mapVars\}/g) ?? []).length, 3);
   // 변형과 전이는 공통 겹에, 승격은 지형에만.
   assert.match(css, /\.map__layer\s*\{[^}]*transform: translate3d\(var\(--map-pan-x\), var\(--map-pan-y\), 0\) scale\(var\(--map-zoom\)\)/s);
   assert.match(css, /\.map__viewport\s*\{\n\s*will-change: transform;\n\}/);
-  const pins = css.slice(css.indexOf(".map__pins {"), css.indexOf(".map.is-dragging .map__layer"));
-  assert.doesNotMatch(pins, /will-change/);
+  // 핀도 강조 경계도 승격하지 않습니다 — 둘 다 확대할 때마다 다시 그려야 선이 삽니다.
+  const light = css.slice(css.indexOf(".map__pins {"), css.indexOf(".map.is-dragging .map__layer"));
+  assert.doesNotMatch(light, /will-change/);
   // 겹이 커지는 만큼 마커는 되돌려, 배율과 무관하게 같은 크기로 섭니다.
   assert.match(css, /\.map-marker \{ transform: translate\(-50%, -50%\) scale\(calc\(1 \/ var\(--map-zoom\)\)\); \}/);
   assert.doesNotMatch(css, /--map-inverse|--marker-scale/);
@@ -636,7 +638,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   );
   assert.match(canvas, /const DETAIL_ZOOM = 1\.6;/);
   assert.match(canvas, /const zoomedIn = view\.zoom >= DETAIL_ZOOM;/);
-  assert.match(canvas, /if \(!zoomedIn && !savedMarkers\[cafe\.id\] && cafe\.id !== activeId\) return false;/);
+  assert.match(canvas, /if \(!zoomedIn && !savedMarkers\[cafe\.id\] && cafe\.id !== activeId && !hoveredIds\?\.has\(cafe\.id\)\) return false;/);
   assert.match(canvas, /\{shownCafes\.map\(\(cafe\) => \{/);
 
   // 지도에서 도드라지는 건 지금 고른 도감뿐입니다 — 탭을 옮기면 지도도 옮겨 갑니다.
@@ -684,4 +686,124 @@ test("큐레이터 픽은 날짜에서 계산되고 손댈 수 없다", async ()
   assert.match(codex, /\{readOnly \? null : \(\s*\n\s*<input className="codex__note"/);
   assert.match(codex, /disabled=\{readOnly \|\| collections\.length < 2\}/);
   assert.match(codex, /큐레이터 픽은 지울 수 없어/);
+});
+
+/** app/data/geo.ts 의 BOUNDS. 지형·핀·경계가 전부 이 한 식을 씁니다. */
+const BOUNDS = { west: 126.42, east: 127.64, north: 37.8, south: 37.02 };
+const projectTo100 = (lng, lat) => [
+  ((lng - BOUNDS.west) / (BOUNDS.east - BOUNDS.west)) * 100,
+  ((BOUNDS.north - lat) / (BOUNDS.north - BOUNDS.south)) * 100,
+];
+
+/** "M1 2L3 4Z" → 고리들. 경계는 전부 직선이라 이렇게 풀립니다. */
+function loopsOfPath(path) {
+  return path
+    .split("M")
+    .filter((part) => part.trim())
+    .map((part) => part.replace("Z", "").split("L").map((point) => point.split(" ").map(Number)));
+}
+
+/** 교차수 판정. app/data/districts.ts 의 inside 와 같은 식입니다. */
+function pointInLoops(loops, x, y) {
+  let crossings = 0;
+  for (const loop of loops) {
+    for (let i = 0; i < loop.length; i += 1) {
+      const [x0, y0] = loop[i];
+      const [x1, y1] = loop[(i + 1) % loop.length];
+      if (y0 > y !== y1 > y && x < x0 + ((y - y0) / (y1 - y0)) * (x1 - x0)) crossings += 1;
+    }
+  }
+  return crossings % 2 === 1;
+}
+
+function parseDistricts(terrain) {
+  const block = terrain.slice(terrain.indexOf("export const districts: District[] = ["));
+  return [...block.matchAll(
+    /id: "([^"]*)", name: "([^"]*)", sido: "([^"]*)", label: \[([-\d.]+), ([-\d.]+)\], cafeIds: \[([^\]]*)\], path: "([^"]+)"/g,
+  )].map((m) => ({
+    id: m[1], name: m[2], sido: m[3],
+    label: [Number(m[4]), Number(m[5])],
+    cafeIds: [...m[6].matchAll(/"([^"]+)"/g)].map((id) => id[1]),
+    path: m[7],
+  }));
+}
+
+test("시·구 경계는 그 안의 카페에서 만들어진다", async () => {
+  const [terrain, cafes] = await Promise.all(
+    ["../app/data/terrain.ts", "../app/data/cafes.ts"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  const districts = parseDistricts(terrain);
+  const named = districts.filter((district) => district.name);
+  assert.ok(named.length >= 30, `이름 붙은 시·구가 ${named.length}칸뿐입니다`);
+
+  // 서울 중구와 인천 중구가 둘 다 있으므로 이름만으로는 안 갈립니다.
+  assert.equal(new Set(named.map((district) => district.id)).size, named.length);
+  assert.ok(named.some((district) => district.id === "서울 중구"));
+  assert.ok(named.some((district) => district.id === "인천 중구"));
+
+  // 카페는 정확히 한 칸에만 들어갑니다. 빠지면 그 카페는 어느 동네를 짚어도 안 나오고,
+  // 겹치면 한 곳이 두 동네에 사는 셈이 됩니다.
+  const positions = new Map(
+    [...cafes.matchAll(/id: "(demo-\d+)".*?address: "([^"]+)".*?pos: \[([-\d.]+), ([-\d.]+)\]/g)]
+      .map((m) => [m[1], { address: m[2], point: projectTo100(Number(m[3]), Number(m[4])) }]),
+  );
+  const placed = named.flatMap((district) => district.cafeIds);
+  assert.equal(placed.length, positions.size);
+  assert.equal(new Set(placed).size, placed.length);
+  assert.deepEqual([...placed].sort(), [...positions.keys()].sort());
+
+  for (const district of named) {
+    const loops = loopsOfPath(district.path);
+    // 이름표가 구역 밖으로 나가면 엉뚱한 동네 위에 이름이 떠 있게 됩니다.
+    assert.ok(
+      pointInLoops(loops, district.label[0], district.label[1]),
+      `${district.id} 이름표가 구역 밖입니다`,
+    );
+    for (const cafeId of district.cafeIds) {
+      const { address, point } = positions.get(cafeId);
+      // 주소의 시·구와 경계가 같은 이야기를 해야 합니다.
+      assert.ok(address.includes(district.name.split(" ").at(-1)), `${cafeId} 주소(${address})와 ${district.id} 가 안 맞습니다`);
+      assert.ok(pointInLoops(loops, point[0], point[1]), `${cafeId} 핀이 ${district.id} 경계 밖입니다`);
+    }
+  }
+});
+
+test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페가 펴진다", async () => {
+  const [canvas, lookup, css] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/data/districts.ts", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 판정은 DOM 이 아니라 꼭짓점으로 합니다 — 매 프레임 불러도 되고 서버에서도 같은 답입니다.
+  assert.match(lookup, /export function districtAt\(x: number, y: number\): District \| null/);
+  assert.match(lookup, /crossings % 2 === 1/);
+  assert.doesNotMatch(lookup, /isPointInFill|document\./);
+  assert.match(lookup, /districts\s*\n?\s*\.filter\(\(district\) => district\.name\)/);
+
+  // 화면 좌표를 겹의 변형 그대로 되돌립니다. 확대·이동 중에도 커서 밑을 짚습니다.
+  assert.match(canvas, /function districtUnder\(clientX: number, clientY: number\)/);
+  assert.match(canvas, /\(\(clientX - rect\.left - current\.x\) \/ current\.zoom \/ rect\.width\) \* 100/);
+  assert.match(canvas, /\(\(clientY - rect\.top - current\.y\) \/ current\.zoom \/ rect\.height\) \* 100/);
+
+  // 이름이 아니라 id 로 견줍니다 — 중구가 둘이라 이름으로 보면 같은 곳이 됩니다.
+  assert.match(canvas, /setHovered\(\(current\) => \(current\?\.id === next\?\.id \? current : next\)\)/);
+  assert.match(canvas, /<path key=\{hovered\.id\} d=\{hovered\.path\} \/>/);
+  assert.match(canvas, /\{hovered\.sido\} · <span className="tabular">카페 \{hovered\.cafeIds\.length\}곳<\/span>/);
+
+  // 손가락에는 "올려 두기"가 없어 켜진 채로 남습니다.
+  assert.match(canvas, /if \(event\.pointerType !== "mouse"\) return;/);
+  // 끌기 시작하면 내려놓고, 지도를 벗어나면 끕니다.
+  assert.match(canvas, /setDragging\(true\);\s*\n\s*setHovered\(null\);/);
+  assert.match(canvas, /onPointerLeave=\{\(\) => setHovered\(null\)\}/);
+
+  // 줌아웃 상태에서도 얹은 동네는 통째로 펴집니다.
+  assert.match(canvas, /const hoveredIds = hovered \? new Set\(hovered\.cafeIds\) : null;/);
+
+  // 강조 겹은 지형과 따로 둡니다 — 같이 두면 확대할 때 선이 늘어나고 옅은 채움이 강에 얹힙니다.
+  assert.match(canvas, /<div className="map__layer map__regions"/);
+  assert.match(css, /\.map__regions \{\s*\n\s*z-index: 3;/);
+  assert.match(css, /\.map__pins,\s*\n\.map__places,\s*\n\.map__regions \{\s*\n\s*pointer-events: none;/);
+  assert.match(css, /\.map\.is-dragging \.map__regions \{\s*\n\s*display: none;/);
+  // 이름표는 배율을 되돌려 늘 같은 크기로 섭니다.
+  assert.match(css, /\.region-label \{[^}]*scale\(calc\(1 \/ var\(--map-zoom\)\)\)/s);
 });

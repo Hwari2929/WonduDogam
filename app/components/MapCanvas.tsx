@@ -11,8 +11,9 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
+import { districtAt } from "../data/districts";
 import { project } from "../data/geo";
-import { districts, minorRoads, river, sea, tributaries, trunkRoads } from "../data/terrain";
+import { districts, minorRoads, river, sea, tributaries, trunkRoads, type District } from "../data/terrain";
 import type { CodexIconId } from "../marks";
 import { CodexIcon } from "./CodexIcon";
 
@@ -73,6 +74,8 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    * 걸러내지 않습니다 — 0으로 재고 시작하면 첫 프레임이 텅 빕니다.
    */
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  /** 마우스가 얹힌 시·구. 경계를 밝히고, 그 안의 카페를 줌아웃 상태에서도 꺼냅니다. */
+  const [hovered, setHovered] = useState<District | null>(null);
 
   useEffect(() => {
     const element = mapRef.current;
@@ -122,13 +125,35 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, view: viewRef.current };
     setDragging(true);
+    setHovered(null);
+  }
+
+  /**
+   * 화면 좌표 → 지도 좌표(0..100). 겹에 걸린 변형을 그대로 되돌린 식이라
+   * 확대·이동 중에도 커서 밑의 동네를 정확히 짚습니다.
+   */
+  function districtUnder(clientX: number, clientY: number) {
+    const rect = mapRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const current = viewRef.current;
+    return districtAt(
+      ((clientX - rect.left - current.x) / current.zoom / rect.width) * 100,
+      ((clientY - rect.top - current.y) / current.zoom / rect.height) * 100,
+    );
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLElement>) {
     const drag = dragRef.current;
     const rect = mapRef.current?.getBoundingClientRect();
-    if (!drag || drag.pointerId !== event.pointerId || !rect) return;
-    commitView(clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height));
+    if (drag && drag.pointerId === event.pointerId && rect) {
+      commitView(clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height));
+      return;
+    }
+    // 손가락에는 "올려 두기"가 없습니다. 눌러야 좌표가 오니 지나간 자리마다 동네가
+    // 켜졌다 꺼지고, 떼면 그대로 남습니다. 마우스에만 답니다.
+    if (event.pointerType !== "mouse") return;
+    const next = districtUnder(event.clientX, event.clientY);
+    setHovered((current) => (current?.id === next?.id ? current : next));
   }
 
   function endDrag(event: ReactPointerEvent<HTMLElement>) {
@@ -165,9 +190,13 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     );
   }
 
+  // 마우스를 얹은 동네는 배율과 상관없이 통째로 펴 보입니다 — 어느 동네에 무엇이
+  // 있는지 보려고 굳이 확대까지 하게 만들 이유가 없습니다.
+  const hoveredIds = hovered ? new Set(hovered.cafeIds) : null;
+
   const shownCafes = cafes.filter((cafe) => {
     // 줌아웃 상태에서는 지금 고른 도감에 담긴 곳과 열어 둔 카페만 남습니다.
-    if (!zoomedIn && !savedMarkers[cafe.id] && cafe.id !== activeId) return false;
+    if (!zoomedIn && !savedMarkers[cafe.id] && cafe.id !== activeId && !hoveredIds?.has(cafe.id)) return false;
     const { x, y } = project(cafe.pos[0], cafe.pos[1]);
     return inView(x, y);
   });
@@ -190,21 +219,41 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onPointerLeave={() => setHovered(null)}
       onKeyDown={onMapKeyDown}
     >
-      {/* 지형과 핀을 두 겹으로 가릅니다. 변형도 전이도 똑같아 한 몸처럼 움직이지만,
-          지형만 합성 레이어로 올립니다. 핀까지 같은 레이어에 두면 확대할 때
-          브라우저가 이미 그려 둔 그림을 늘려 버려서 아이콘과 이름이 뭉갭니다. */}
+      {/* 지형·강조·핀을 세 겹으로 가릅니다. 변형도 전이도 똑같아 한 몸처럼 움직이지만,
+          지형만 합성 레이어로 올립니다. 나머지까지 같은 레이어에 두면 확대할 때
+          브라우저가 이미 그려 둔 그림을 늘려 버려서 아이콘과 선이 뭉갭니다. */}
       <div className="map__layer map__viewport" style={mapVars}>
         <svg className="map__terrain" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {minorRoads.map((d, index) => <path key={`minor-${index}`} className="terrain__road terrain__road--minor" d={d} />)}
           {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
-          {districts.map((d, index) => <path key={`district-${index}`} className={`terrain__district terrain__district--${index % 3}`} d={d} />)}
+          {districts.map((district, index) => <path key={`district-${index}`} className={`terrain__district terrain__district--${index % 3}`} d={district.path} />)}
           {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
           <path className="terrain__river" d={river} /><path className="terrain__sea" d={sea} fillRule="evenodd" />
         </svg>
       </div>
       <div className="map__grain" aria-hidden="true" />
+
+      {/* 얹힌 동네 하나만 그립니다. 지형 겹에 같이 넣으면 확대할 때 이 선까지
+          늘어나 뭉개지고, 옅은 채움이 강 위에도 얹힙니다. */}
+      <div className="map__layer map__regions" style={mapVars} aria-hidden="true">
+        {hovered ? (
+          <>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              {/* key 를 갈아 끼우면 옆 동네로 넘어갈 때 새 요소가 되어
+                  모양이 뭉개지며 변하지 않고 제자리에서 다시 밝아집니다. */}
+              <path key={hovered.id} d={hovered.path} />
+            </svg>
+            {/* 중구는 서울에도 인천에도 있습니다. 시도를 같이 적어야 어디인지 압니다. */}
+            <span className="region-label" style={{ left: `${hovered.label[0]}%`, top: `${hovered.label[1]}%` }}>
+              <b>{hovered.name}</b>
+              <i>{hovered.sido} · <span className="tabular">카페 {hovered.cafeIds.length}곳</span></i>
+            </span>
+          </>
+        ) : null}
+      </div>
 
       <div className="map__layer map__pins" style={mapVars}>
         <div className="map__places" aria-hidden="true">{PLACES.map((place) => { const { x, y } = project(place.lng, place.lat); return <span key={place.label} className={place.sea ? "map__sea-label" : undefined} style={{ left: `${x}%`, top: `${y}%` }}>{place.label}</span>; })}</div>
