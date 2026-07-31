@@ -330,7 +330,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /MAX_ZOOM = 5/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{12\}/);
-  assert.match(css, /\.map__places span\s*\{[^}]*scale\(calc\(1 \/ var\(--map-zoom\)\)\)/s);
+  assert.match(css, /\.map__places span \{ transform: translate\(-50%, -50%\); \}/);
   assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
   assert.match(receipt, /https:\/\/map\.kakao\.com/);
@@ -577,8 +577,9 @@ test("숫자 옆에 무엇을 센 것인지가 적힌다", async () => {
 });
 
 test("확대해도 핀은 뭉개지지 않는다", async () => {
-  // 지형과 핀이 한 레이어에 있으면, 브라우저가 한 번 그려 둔 그림을 늘려서
-  // 배율이 올라갈수록 아이콘과 이름이 흐려집니다. 겹을 갈라 지형만 승격합니다.
+  // 겹을 transform: scale() 로 키우면 브라우저는 이미 그려 둔 그림을 늘립니다.
+  // 아이패드·모바일 사파리는 겹을 훨씬 적극적으로 이미지로 구워 두어서, 배율을
+  // 올릴수록 경계선도 글자도 뭉갭니다. 늘려 붙이는 단계를 아예 두지 않습니다.
   const [canvas, css] = await Promise.all(
     ["../app/components/MapCanvas.tsx", "../app/globals.css"]
       .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
@@ -586,19 +587,42 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   assert.match(canvas, /className="map__layer map__viewport"/);
   assert.match(canvas, /className="map__layer map__regions"/);
   assert.match(canvas, /className="map__layer map__pins"/);
-  // 세 겹이 같은 값을 봐야 한 몸으로 움직입니다.
-  assert.match(canvas, /const mapVars = \{ "--map-zoom": view\.zoom/);
-  assert.equal((canvas.match(/style=\{mapVars\}/g) ?? []).length, 3);
-  // 변형과 전이는 공통 겹에, 승격은 지형에만.
-  assert.match(css, /\.map__layer\s*\{[^}]*transform: translate3d\(var\(--map-pan-x\), var\(--map-pan-y\), 0\) scale\(var\(--map-zoom\)\)/s);
-  assert.match(css, /\.map__viewport\s*\{\n\s*will-change: transform;\n\}/);
-  // 핀도 강조 경계도 승격하지 않습니다 — 둘 다 확대할 때마다 다시 그려야 선이 삽니다.
-  const light = css.slice(css.indexOf(".map__pins {"), css.indexOf(".map.is-dragging .map__layer"));
-  assert.doesNotMatch(light, /will-change/);
-  // 겹이 커지는 만큼 마커는 되돌려, 배율과 무관하게 같은 크기로 섭니다.
-  assert.match(css, /\.map-marker \{ transform: translate\(-50%, -50%\) scale\(calc\(1 \/ var\(--map-zoom\)\)\); \}/);
-  assert.doesNotMatch(css, /--map-inverse|--marker-scale/);
-  assert.doesNotMatch(canvas, /--map-inverse|--marker-scale/);
+
+  // 확대는 SVG 의 창문이 좁아지는 것으로 일어납니다. 두 그림이 같은 창문을 봐야
+  // 강조된 경계가 지형 위에 정확히 겹칩니다.
+  assert.match(canvas, /const viewBox = size\s*\n\s*\? `\$\{\(-view\.x \/ \(size\.width \* view\.zoom\)\) \* 100\}/);
+  assert.match(canvas, /\$\{100 \/ view\.zoom\} \$\{100 \/ view\.zoom\}`/);
+  assert.match(canvas, /: "0 0 100 100";/);
+  assert.equal((canvas.match(/viewBox=\{viewBox\}/g) ?? []).length, 2);
+
+  // 핀과 이름표는 자기 자리를 셈해서 놓입니다.
+  assert.match(canvas, /function toScreen\(x: number, y: number\)/);
+  assert.match(canvas, /x: x \* view\.zoom \+ \(view\.x \/ size\.width\) \* 100/);
+  assert.match(canvas, /const \{ x, y \} = toScreen\(spot\.x, spot\.y\);/);
+
+  // 겹에는 변형도 되돌리기도 남지 않습니다 — 남아 있으면 그게 다시 뭉개는 원인입니다.
+  assert.doesNotMatch(css, /--map-zoom|--map-pan-x|--map-pan-y/);
+  assert.doesNotMatch(css, /will-change: transform/);
+  assert.doesNotMatch(canvas, /mapVars/);
+  assert.match(css, /\.map__layer \{\s*\n\s*position: absolute;\s*\n\s*inset: 0;\s*\n\}/);
+  assert.match(css, /\.map-marker \{ transform: translate\(-50%, -50%\); \}/);
+
+  // 변형을 걷어내면서 CSS 전이도 같이 없어졌습니다. 단추는 1.4배씩 뛰므로 그냥
+  // 갈아 끼우면 툭 끊기고, 그렇다고 전이를 되살리면 그게 다시 뭉개는 원인입니다.
+  // 값을 프레임마다 옮겨, 부드러우면서 매 프레임 벡터에서 다시 그리게 둡니다.
+  assert.match(canvas, /const GLIDE_MS = 140;/);
+  assert.match(canvas, /function glideTo\(target: View\)/);
+  assert.match(canvas, /glideRef\.current = t < 1 \? requestAnimationFrame\(step\) : null;/);
+  assert.match(canvas, /if \(next\) glideTo\(next\);/);
+  const mapLayer = css.slice(css.indexOf(".map__layer {"), css.indexOf(".map__pins {"));
+  assert.doesNotMatch(mapLayer, /transition|transform/);
+  // 끌기와 휠은 이미 손을 따라오므로 미끄러짐을 끼우지 않고 즉시 놓아 줍니다.
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*const next = zoomedView\(viewRef\.current\.zoom \* Math\.exp/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*event\.currentTarget\.setPointerCapture/);
+  // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
+  assert.match(canvas, /useEffect\(\(\) => \(\) => stopGlide\(\), \[\]\);/);
+  // 모션을 줄인 사람에게는 미끄러지지 않고 곧바로 놓습니다.
+  assert.match(canvas, /prefers-reduced-motion: reduce/);
 });
 
 test("지도 연장은 우하단 한 덩어리로 모이고, 종이가 덮지 않는다", async () => {
@@ -658,7 +682,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
 
   // 100%에서 500%까지 다섯 번이면 닿습니다. 더하기로 올리면 열여섯 번입니다.
   assert.match(canvas, /const ZOOM_FACTOR = 1\.4;/);
-  assert.match(canvas, /zoomAt\(viewRef\.current\.zoom \* \(direction > 0 \? ZOOM_FACTOR : 1 \/ ZOOM_FACTOR\)\);/);
+  assert.match(canvas, /zoomedView\(viewRef\.current\.zoom \* \(direction > 0 \? ZOOM_FACTOR : 1 \/ ZOOM_FACTOR\)\)/);
   assert.doesNotMatch(canvas, /ZOOM_STEP/);
   // 축척은 막대를 늘리지 않고 거리를 줄입니다 — 500%에서 막대가 280px 로 자랍니다.
   assert.match(canvas, /\{\(10 \/ view\.zoom\)\.toFixed\(view\.zoom >= 2 \? 1 : 0\)\} km/);
@@ -794,20 +818,29 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
 
   // 손가락에는 "올려 두기"가 없어 켜진 채로 남습니다.
   assert.match(canvas, /if \(event\.pointerType !== "mouse"\) return;/);
-  // 끌기 시작하면 내려놓고, 지도를 벗어나면 끕니다.
-  assert.match(canvas, /setDragging\(true\);\s*\n\s*setHovered\(null\);/);
-  assert.match(canvas, /onPointerLeave=\{\(\) => setHovered\(null\)\}/);
+  // 짚어 둔 동네는 지도를 실제로 옮기기 시작할 때 놓습니다. 누르는 순간에 놓아
+  // 버리면 손가락으로 톡 쳤을 때 방금 켠 것인지 원래 켜져 있던 것인지 알 수 없습니다.
+  assert.match(canvas, /if \(Math\.hypot\(event\.clientX - drag\.startX, event\.clientY - drag\.startY\) > TAP_SLOP\) setHovered\(null\);/);
+  assert.doesNotMatch(canvas, /setDragging\(true\);\s*\n\s*setHovered\(null\);/);
+  assert.match(canvas, /onPointerLeave=\{onPointerLeave\}/);
 
   // 줌아웃 상태에서도 얹은 동네는 통째로 펴집니다.
   assert.match(canvas, /const hoveredIds = hovered \? new Set\(hovered\.cafeIds\) : null;/);
 
-  // 강조 겹은 지형과 따로 둡니다 — 같이 두면 확대할 때 선이 늘어나고 옅은 채움이 강에 얹힙니다.
+  // 강조 겹은 지형과 따로 둡니다 — 같이 두면 옅은 채움이 강 위에도 얹힙니다.
   assert.match(canvas, /<div className="map__layer map__regions"/);
   assert.match(css, /\.map__regions \{\s*\n\s*z-index: 3;/);
   assert.match(css, /\.map__pins,\s*\n\.map__places,\s*\n\.map__regions \{\s*\n\s*pointer-events: none;/);
   assert.match(css, /\.map\.is-dragging \.map__regions \{\s*\n\s*display: none;/);
-  // 이름표는 배율을 되돌려 늘 같은 크기로 섭니다.
-  assert.match(css, /\.region-label \{[^}]*scale\(calc\(1 \/ var\(--map-zoom\)\)\)/s);
+  // 이름표도 자기 자리를 셈해서 놓입니다. 되돌리기는 없습니다.
+  assert.match(canvas, /const labelSpot = hovered \? toScreen\(hovered\.label\[0\], hovered\.label\[1\]\) : \{ x: 0, y: 0 \};/);
+  assert.match(canvas, /style=\{\{ left: `\$\{labelSpot\.x\}%`, top: `\$\{labelSpot\.y\}%` \}\}/);
+
+  // 손가락에는 올려 두기가 없으니 톡 쳐서 고릅니다. 떼는 순간 따라오는
+  // pointerleave 를 그대로 받으면 방금 고른 동네가 켜지자마자 꺼집니다.
+  assert.match(canvas, /const TAP_SLOP = 10;/);
+  assert.match(canvas, /if \(moved > TAP_SLOP\) return;\s*\n\s*setHovered\(districtUnder\(event\.clientX, event\.clientY\)\);/);
+  assert.match(canvas, /function onPointerLeave\(event: ReactPointerEvent<HTMLElement>\) \{\s*\n\s*if \(event\.pointerType === "mouse"\) setHovered\(null\);/);
 });
 
 test("에셋 주소는 사이트가 선 자리를 따라간다", async () => {

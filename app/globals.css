@@ -2175,25 +2175,15 @@ a:focus-visible,
 /* ── 지도 확대와 카페 아이콘 ── */
 .map { cursor: grab; touch-action: none; }
 .map.is-dragging { cursor: grabbing; }
-/* 지형 겹과 핀 겹. 변형도 전이도 같은 값이라 한 몸으로 움직입니다. */
+/* 지형 겹과 핀 겹.
+   확대는 CSS 변형이 아니라 SVG 의 viewBox 와 핀의 좌표가 맡습니다. transform:
+   scale() 로 키우면 브라우저는 이미 그려 둔 그림을 늘리고, 아이패드·모바일
+   사파리는 겹을 훨씬 적극적으로 이미지로 구워 두어서 배율을 올릴수록 경계선도
+   글자도 뭉갭니다. 늘려 붙이는 단계를 아예 없애야 어느 기기에서든 선이 삽니다. */
 .map__layer {
-  --map-zoom: 1;
-  --map-pan-x: 0px;
-  --map-pan-y: 0px;
   position: absolute;
   inset: 0;
-  transform: translate3d(var(--map-pan-x), var(--map-pan-y), 0) scale(var(--map-zoom));
-  transform-origin: 0 0;
-  transition: transform 100ms cubic-bezier(.2, .75, .25, 1);
 }
-/* 지형만 합성 레이어로 올립니다. 선이 흐려지는 건 티가 안 나고, 넓은 면을
-   매 프레임 다시 칠하는 값이 큽니다. */
-.map__viewport {
-  will-change: transform;
-}
-/* 핀 겹은 승격하지 않습니다. will-change 를 붙이면 브라우저가 한 번 그려 둔
-   그림을 늘려서 확대할수록 아이콘과 이름이 뭉갭니다 — 여기서는 매번 다시
-   그리게 두어야 배율이 올라가도 선이 삽니다. 핀은 몇 개뿐이라 값도 쌉니다. */
 .map__pins {
   z-index: 4;
 }
@@ -2238,8 +2228,7 @@ a:focus-visible,
   padding: 4px 8px 5px;
   border: 1px solid var(--rule);
   background: var(--paper);
-  transform: translate(-50%, -50%) scale(calc(1 / var(--map-zoom)));
-  transform-origin: center;
+  transform: translate(-50%, -50%);
   animation: region-in 160ms ease-out;
   white-space: nowrap;
 }
@@ -2263,13 +2252,10 @@ a:focus-visible,
 .map-marker {
   pointer-events: auto;
 }
-.map.is-dragging .map__layer { transition: none; }
-/* 이름표와 마커는 확대해도 같은 크기로 섭니다. 겹이 커지는 만큼 되돌립니다. */
-.map__places span {
-  transform: translate(-50%, -50%) scale(calc(1 / var(--map-zoom)));
-  transform-origin: center;
-}
-.map-marker { transform: translate(-50%, -50%) scale(calc(1 / var(--map-zoom))); }
+/* 이름표와 마커는 확대해도 같은 크기로 섭니다. 겹이 안 커지니 되돌릴 것도
+   없습니다 — 자리만 옮겨 놓으면 글자는 늘 제 크기로 그려집니다. */
+.map__places span { transform: translate(-50%, -50%); }
+.map-marker { transform: translate(-50%, -50%); }
 .map-marker--plain { width: 34px; height: 34px; }
 .map-marker__dot {
   position: relative;
