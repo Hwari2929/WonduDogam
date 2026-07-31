@@ -1,5 +1,6 @@
 "use client";
 
+import { asset } from "./base-path";
 import type { Mark } from "./marks";
 
 /**
@@ -169,7 +170,7 @@ async function grain(ctx: CanvasRenderingContext2D, height: number) {
     image.onerror = () => resolve(false);
     setTimeout(() => resolve(false), 700);
   });
-  image.src = "/tex/grain-128.png";
+  image.src = asset("/tex/grain-128.png");
 
   if (!(await ready) || !image.naturalWidth) return;
 

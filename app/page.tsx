@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { BASE_PATH } from "./base-path";
 import { Bibin, CodexMark } from "./components/BeanArt";
 import { Codex } from "./components/Codex";
 import { Drawer } from "./components/Drawer";
@@ -105,23 +106,6 @@ function subscribeLocation(onChange: () => void) {
     window.removeEventListener(NAVIGATE_EVENT, onChange);
   };
 }
-
-/**
- * 앱이 루트가 아니라 하위 경로에 놓일 수도 있습니다 (정적 미리보기는
- * `/WonduDogam/` 아래에 섭니다). 주소가 상태의 원본이므로 그 자리를 한 번만
- * 재어 두고 안팎에서 떼었다 붙입니다.
- *
- * 기준은 문서의 <base> 태그 하나뿐입니다. 문서의 기준 주소를 그냥 읽으면 태그가
- * 없을 때 지금 보고 있는 주소 자체가 나오고, 그러면 /c/demo 에서 새로고침한
- * 순간 그게 통째로 기준이 되어 버립니다. 태그가 없으면 빈 문자열 — 지금까지와
- * 완전히 같습니다.
- */
-const BASE_PATH = (() => {
-  if (typeof document === "undefined") return "";
-  const href = document.querySelector("base")?.getAttribute("href");
-  if (!href) return "";
-  return new URL(href, window.location.origin).pathname.replace(/\/+$/, "");
-})();
 
 function readPathname() {
   const path = window.location.pathname;
@@ -247,11 +231,16 @@ export default function Home() {
   const sheet = useSheetDrag({ enabled: isSheet, onClose: closePanel });
 
   // 02 §7.3 — 한 화면에 비빈은 하나뿐. 급한 순서대로 자리를 넘겨줍니다.
+  //
+  // 도감 자리는 "펴 놓은 도감이 비었을 때"입니다. 전체 기록으로 세면 큐레이터
+  // 픽이 늘 열 곳을 채우고 있어서 영영 0이 되지 않고, 정작 빈 도감을 펴 놓은
+  // 사람만 비빈을 못 봅니다.
+  const activeCollectionEmpty = !marks.some((mark) => mark.collectionIds.includes(activeCollection.id));
   const mascotSlot: "toast" | "empty" | "codex" | null = notice
     ? "toast"
     : emptyResult
       ? "empty"
-      : panelOpen && panel === "codex" && marks.length === 0
+      : panelOpen && panel === "codex" && activeCollectionEmpty
         ? "codex"
         : null;
 

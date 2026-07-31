@@ -227,8 +227,10 @@ test("공유 링크와 새로고침이 살아 있다", async () => {
   // 하위 경로(정적 미리보기)에 놓여도 주소가 상태로 남습니다. 기준은 <base> 태그
   // 하나뿐이어야 합니다 — document.baseURI 를 그냥 쓰면 <base> 가 없을 때 지금
   // 보고 있는 주소가 통째로 기준이 되어 /c/{id} 새로고침이 깨집니다.
-  assert.match(page, /document\.querySelector\("base"\)\?\.getAttribute\("href"\)/);
-  assert.match(page, /if \(!href\) return "";/);
+  const basePath = await readFile(new URL("../app/base-path.ts", import.meta.url), "utf8");
+  assert.match(basePath, /document\.querySelector\("base"\)\?\.getAttribute\("href"\)/);
+  assert.match(basePath, /if \(!href\) return "";/);
+  assert.doesNotMatch(basePath, /document\.baseURI/);
   assert.doesNotMatch(page, /document\.baseURI/);
   assert.match(page, /window\.history\.pushState\(\{\}, "", `\$\{BASE_PATH\}\$\{pathname\}`\)/);
 });
@@ -345,7 +347,7 @@ test("selection ring remains circular and supplied Bibin boings accessibly", asy
   assert.doesNotMatch(css, /\.map-marker\.is-active::after\s*\{[^}]*border:/s);
   assert.match(css, /@keyframes\s+bibin-boing/);
   assert.match(beanArt, /<button[\s\S]*type="button"[\s\S]*onClick=\{boing\}/);
-  assert.match(beanArt, /<img src=\{preset\.src\}/);
+  assert.match(beanArt, /<img src=\{asset\(preset\.src\)\}/);
   assert.match(beanArt, /isBoinging \? bibinPresets\.surprised/);
   assert.match(beanArt, /\/mascot\/bibean-delighted\.webp/);
   // 화면에는 WebP 를 쓰고, 원본 PNG 는 OG·인쇄물용으로 함께 남겨 둡니다.
@@ -806,4 +808,51 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
   assert.match(css, /\.map\.is-dragging \.map__regions \{\s*\n\s*display: none;/);
   // 이름표는 배율을 되돌려 늘 같은 크기로 섭니다.
   assert.match(css, /\.region-label \{[^}]*scale\(calc\(1 \/ var\(--map-zoom\)\)\)/s);
+});
+
+test("에셋 주소는 사이트가 선 자리를 따라간다", async () => {
+  const [basePath, beanArt, exporter, page] = await Promise.all(
+    ["../app/base-path.ts", "../app/components/BeanArt.tsx", "../app/codex-export.ts", "../app/page.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 기준은 <base> 태그 하나. 없으면 빈 문자열이라 뿌리에 선 사이트는 지금까지와 같습니다.
+  assert.match(basePath, /export const BASE_PATH = \(\(\) => \{/);
+  assert.match(basePath, /if \(typeof document === "undefined"\) return "";/);
+  assert.match(basePath, /document\.querySelector\("base"\)\?\.getAttribute\("href"\)/);
+  assert.match(basePath, /export function asset\(path: string\) \{\s*\n\s*return `\$\{BASE_PATH\}\$\{path\}`;/);
+  // 주소 다루는 자리와 파일 가리키는 자리가 같은 값을 봐야 합니다.
+  assert.match(page, /import \{ BASE_PATH \} from "\.\/base-path";/);
+  assert.doesNotMatch(page, /const BASE_PATH = /);
+
+  // 코드에 박은 경로는 번들러가 안 고칩니다 — CSS 의 url() 만 빌드가 고쳐 줍니다.
+  // 그래서 파일을 부르는 자리는 전부 asset() 을 거쳐야 합니다.
+  assert.match(beanArt, /<img src=\{asset\(preset\.src\)\}/);
+  assert.match(exporter, /image\.src = asset\("\/tex\/grain-128\.png"\);/);
+
+  // 앞에 빗금을 단 경로를 그대로 넘기는 자리가 남아 있으면 하위 경로에서 404 가 됩니다.
+  const sources = await Promise.all(
+    ["../app/page.tsx", "../app/codex-export.ts", "../app/components/BeanArt.tsx", "../app/components/Codex.tsx",
+     "../app/components/Receipt.tsx", "../app/components/MapCanvas.tsx", "../app/components/Drawer.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  for (const source of sources) {
+    // 표에 적어 둔 경로는 그대로 둡니다 — 자리는 데이터고, 기준은 쓰는 자리에서 붙습니다.
+    // 잡아야 하는 건 그 경로를 그대로 브라우저에 넘기는 자리입니다.
+    const raw = source.match(/(?:\.src\s*=\s*|src=\{?)"\/(?:mascot|tex)\//g) ?? [];
+    assert.deepEqual(raw, [], `asset() 없이 쓴 경로가 남아 있습니다: ${raw.join(", ")}`);
+  }
+});
+
+test("빈 도감을 편 사람에게 비빈이 보인다", async () => {
+  const [page, codex] = await Promise.all(
+    ["../app/page.tsx", "../app/components/Codex.tsx"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  // 전체 기록으로 세면 큐레이터 픽이 늘 열 곳을 채우고 있어 영영 0이 되지 않습니다.
+  assert.match(page, /const activeCollectionEmpty = !marks\.some\(\(mark\) => mark\.collectionIds\.includes\(activeCollection\.id\)\);/);
+  assert.match(page, /panelOpen && panel === "codex" && activeCollectionEmpty/);
+  assert.doesNotMatch(page, /panel === "codex" && marks\.length === 0/);
+  // 도감 쪽의 빈 자리 판정과 같은 이야기를 해야 비빈이 실제로 그 자리에 섭니다.
+  assert.match(codex, /activeMarks\.length === 0 \? \(/);
+  assert.match(codex, /\{showMascot \? <Bibin variant="diary-writing" size=\{88\} \/> : null\}/);
 });

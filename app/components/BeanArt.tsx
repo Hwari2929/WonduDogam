@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { asset } from "../base-path";
 
 /**
  * 원두 조형 3종.
@@ -178,7 +179,8 @@ export function Bibin({
         event.currentTarget.classList.remove("is-boinging");
       }}
     >
-      <img src={preset.src} alt="" width="256" height="256" draggable="false" loading="lazy" decoding="async" />
+      {/* 사이트가 하위 경로에 서면 앞의 빗금이 저장소를 건너뛰므로, 쓰는 자리에서 붙입니다. */}
+      <img src={asset(preset.src)} alt="" width="256" height="256" draggable="false" loading="lazy" decoding="async" />
     </button>
   );
 }
