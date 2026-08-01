@@ -17,10 +17,10 @@
  * 뒤에 숨습니다. 바다도 인천 앞바다가 보일 만큼만 남깁니다.
  */
 export const BOUNDS = {
-  west: 126.42,
-  east: 127.64,
-  north: 37.8,
-  south: 37.02,
+  west: 126.12,
+  east: 127.85,
+  north: 37.85,
+  south: 37.0,
 } as const;
 
 export const CENTER: [number, number] = [

@@ -458,6 +458,13 @@ a:focus-visible,
   stroke: color-mix(in srgb, var(--ink-faint) 62%, transparent);
   stroke-width: 1;
 }
+/* 수도권 밖 (강원·충청 언저리). 경계 데이터가 없어서 바다 도려내기에 같이 뚫리는
+   자리라, 뭍 색으로 덮어 둡니다. 선은 긋지 않습니다 — 그건 경계가 아니라 자료가
+   끝나는 자리일 뿐이라, 선을 그으면 없는 행정경계를 그린 셈이 됩니다. */
+.terrain__outside {
+  fill: var(--desk);
+  stroke: none;
+}
 /* 경계는 아주 옅게. 스물한 개가 또렷하면 지도가 아니라 그물이 됩니다. */
 .terrain__district {
   fill: color-mix(in srgb, var(--paper) 7%, transparent);

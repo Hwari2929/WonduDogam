@@ -682,7 +682,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /\{ from: 2\.25, level: 3 \}/);
   assert.match(canvas, /\{ from: 1\.5, level: 2 \}/);
   assert.match(canvas, /const shownDistricts = districtsAtLevel\(level\);/);
-  assert.match(canvas, /levelOf\(current\.zoom\),/);
+  assert.match(canvas, /levelRef\.current,/);
 
   // 지도에서 도드라지는 건 지금 고른 도감뿐입니다 — 탭을 옮기면 지도도 옮겨 갑니다.
   assert.match(page, /if \(!mark\.collectionIds\.includes\(activeCollection\.id\)\) continue;/);
@@ -767,67 +767,49 @@ function pointInLoops(loops, x, y) {
   return crossings % 2 === 1;
 }
 
-function parseDistricts(terrain) {
-  const block = terrain.slice(terrain.indexOf("export const districts: District[] = ["));
-  return [...block.matchAll(
-    /id: "([^"]*)", level: (\d), name: "([^"]*)", sido: "([^"]*)", label: \[([-\d.]+), ([-\d.]+)\], cafeIds: \[([^\]]*)\], path: "([^"]+)"/g,
+function parseDistricts(source) {
+  return [...source.matchAll(
+    /id: "([^"]*)", level: (\d), name: "([^"]*)", parent: "([^"]*)", label: \[([-\d.]+), ([-\d.]+)\], path: "([^"]+)"/g,
   )].map((m) => ({
-    id: m[1], level: Number(m[2]), name: m[3], sido: m[4],
+    id: m[1], level: Number(m[2]), name: m[3], parent: m[4],
     label: [Number(m[5]), Number(m[6])],
-    cafeIds: [...m[7].matchAll(/"([^"]+)"/g)].map((id) => id[1]),
-    path: m[8],
+    path: m[7],
   }));
 }
 
-test("시·구 경계는 그 안의 카페에서 만들어진다", async () => {
-  const [terrain, cafes] = await Promise.all(
-    ["../app/data/terrain.ts", "../app/data/cafes.ts"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+test("행정경계는 통계청 읍면동을 합쳐 만든 실제 경계다", async () => {
+  const [core, dong, generator] = await Promise.all(
+    ["../app/data/districts-data.ts", "../app/data/districts-dong.ts", "../build/districts.py"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
-  const districts = parseDistricts(terrain);
-  const positions = new Map(
-    [...cafes.matchAll(/id: "(demo-\d+)".*?address: "([^"]+)".*?pos: \[([-\d.]+), ([-\d.]+)\]/g)]
-      .map((m) => [m[1], { address: m[2], point: projectTo100(Number(m[3]), Number(m[4])) }]),
-  );
-
-  // 확대하면 시도 → 시·군 → 구 순으로 쪼개집니다. 단계가 올라갈수록 칸은 늘어나고,
-  // 카페 합계는 언제나 그대로여야 합니다 — 어느 단계에서도 빠지는 카페가 없어야 하니까요.
-  const levels = [1, 2, 3].map((level) => districts.filter((district) => district.level === level));
-  assert.deepEqual(levels.map((entries) => entries.length), [3, 19, 33]);
+  const districts = [...parseDistricts(core), ...parseDistricts(dong)];
+  const levels = [1, 2, 3].map((level) => districts.filter((entry) => entry.level === level));
+  // 시도 셋, 시군구 일흔몇, 읍면동 천 몇백. 지어낸 경계였을 때와 자릿수가 다릅니다.
   assert.deepEqual(levels[0].map((entry) => entry.name).sort(), ["경기", "서울", "인천"]);
+  assert.ok(levels[1].length > 60, `시군구가 ${levels[1].length}칸뿐입니다`);
+  assert.ok(levels[2].length > 900, `읍면동이 ${levels[2].length}칸뿐입니다`);
 
-  for (const [index, entries] of levels.entries()) {
-    const level = index + 1;
-    // 이름은 겹쳐도 (서울 중구·인천 중구) id 는 갈려야 합니다.
-    assert.equal(new Set(entries.map((entry) => entry.id)).size, entries.length, `${level}단계 id 가 겹칩니다`);
+  // 이름은 겹쳐도 (서울 중구·인천 중구) id 는 갈려야 합니다.
+  assert.equal(new Set(districts.map((entry) => entry.id)).size, districts.length);
+  assert.ok(levels[1].some((entry) => entry.id === "2 서울 중구"));
+  assert.ok(levels[1].some((entry) => entry.id === "2 인천 중구"));
 
-    // 카페는 각 단계에서 정확히 한 칸에만 들어갑니다. 빠지면 그 카페는 어느 동네를
-    // 짚어도 안 나오고, 겹치면 한 곳이 두 동네에 사는 셈이 됩니다.
-    const placed = entries.flatMap((entry) => entry.cafeIds);
-    assert.equal(new Set(placed).size, placed.length, `${level}단계에 겹쳐 담긴 카페가 있습니다`);
-    assert.deepEqual([...placed].sort(), [...positions.keys()].sort(), `${level}단계에서 빠진 카페가 있습니다`);
-
-    for (const district of entries) {
-      const loops = loopsOfPath(district.path);
-      // 이름표가 구역 밖으로 나가면 엉뚱한 동네 위에 이름이 떠 있게 됩니다.
-      assert.ok(
-        pointInLoops(loops, district.label[0], district.label[1]),
-        `${district.id} 이름표가 구역 밖입니다`,
-      );
-      for (const cafeId of district.cafeIds) {
-        const { address, point } = positions.get(cafeId);
-        // 주소와 경계가 같은 이야기를 해야 합니다. 1단계는 주소 첫 낱말이 곧 칸 이름이고,
-        // 2·3단계는 칸 이름의 마지막 낱말(성남시 / 분당구)이 주소 안에 있어야 합니다.
-        const expected = district.level === 1 ? address.split(" ")[0] : district.name.split(" ").at(-1);
-        assert.ok(address.includes(expected) && (district.level > 1 || district.name === expected),
-          `${cafeId} 주소(${address})와 ${district.id} 가 안 맞습니다`);
-        assert.ok(pointInLoops(loops, point[0], point[1]), `${cafeId} 핀이 ${district.id} 경계 밖입니다`);
-      }
-    }
+  for (const district of districts) {
+    // 이름표가 구역 밖으로 나가면 엉뚱한 동네 위에 이름이 떠 있게 됩니다.
+    assert.ok(
+      pointInLoops(loopsOfPath(district.path), district.label[0], district.label[1]),
+      `${district.id} 이름표가 구역 밖입니다`,
+    );
   }
 
-  // 3단계에는 이름이 같은 구가 둘 있습니다 — 이름만으로 견주면 같은 곳이 됩니다.
-  assert.ok(levels[2].some((entry) => entry.id === "3 서울 중구"));
-  assert.ok(levels[2].some((entry) => entry.id === "3 인천 중구"));
+  // 시군구·시도는 읍면동을 합쳐 만듭니다. 따로 그리면 단계가 바뀔 때 윤곽이 어긋납니다.
+  assert.match(generator, /def dissolve\(rings\):/);
+  assert.match(generator, /if count == 1/);
+  assert.match(generator, /raise SystemExit\(f"윤곽이 안 닫힙니다/);
+  // 읍면동은 천 칸이 넘어 따로 굽고, 그 배율에 닿을 때 불러옵니다.
+  assert.match(core, /export const districts: District\[\]/);
+  assert.match(dong, /export const dongDistricts: District\[\]/);
+  assert.doesNotMatch(core, /dongDistricts/);
 });
 
 test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페가 펴진다", async () => {
@@ -839,9 +821,14 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
   // 판정은 DOM 이 아니라 꼭짓점으로 합니다 — 매 프레임 불러도 되고 서버에서도 같은 답입니다.
   assert.match(lookup, /export function districtAt\(x: number, y: number, level: DistrictLevel\): District \| null/);
   assert.match(lookup, /export function districtsAtLevel\(level: DistrictLevel\): District\[\]/);
+  // 카페는 경계 데이터에 적어 두지 않습니다 — 경계는 통계청, 카페는 따로 모으는
+  // 것이라 한 파일에 묶으면 한쪽이 바뀔 때마다 다른 쪽을 다시 구워야 합니다.
+  assert.match(lookup, /export function cafesIn\(district: District\): Cafe\[\]/);
+  assert.match(lookup, /export function loadDongDistricts\(\): Promise<void>/);
+  assert.match(lookup, /import\("\.\/districts-dong"\)/);
   assert.match(lookup, /crossings % 2 === 1/);
   assert.doesNotMatch(lookup, /isPointInFill|document\./);
-  assert.match(lookup, /if \(shape\.district\.level !== level\) continue;/);
+
 
   // 화면 좌표를 겹의 변형 그대로 되돌립니다. 확대·이동 중에도 커서 밑을 짚습니다.
   assert.match(canvas, /function districtUnder\(clientX: number, clientY: number\)/);
@@ -851,7 +838,7 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
   // 이름이 아니라 id 로 견줍니다 — 중구가 둘이라 이름으로 보면 같은 곳이 됩니다.
   assert.match(canvas, /setHovered\(\(current\) => \(current\?\.id === next\?\.id \? current : next\)\)/);
   assert.match(canvas, /<path key=\{hovered\.id\} d=\{hovered\.path\} \/>/);
-  assert.match(canvas, /\{hovered\.sido \? `\$\{hovered\.sido\} · ` : ""\}<span className="tabular">카페 \{hovered\.cafeIds\.length\}곳<\/span>/);
+  assert.match(canvas, /\{hovered\.parent \? `\$\{hovered\.parent\} · ` : ""\}<span className="tabular">카페 \{hoveredCafes\.length\}곳<\/span>/);
 
   // 손가락에는 "올려 두기"가 없어 켜진 채로 남습니다.
   assert.match(canvas, /if \(event\.pointerType !== "mouse"\) return;/);
@@ -862,7 +849,7 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
   assert.match(canvas, /onPointerLeave=\{onPointerLeave\}/);
 
   // 줌아웃 상태에서도 얹은 동네는 통째로 펴집니다.
-  assert.match(canvas, /const hoveredIds = hovered && level === 3 \? new Set\(hovered\.cafeIds\) : null;/);
+  assert.match(canvas, /const hoveredIds = hovered && level === 3 \? new Set\(hoveredCafes\.map\(\(cafe\) => cafe\.id\)\) : null;/);
   // 확대하다 단계가 바뀌면 짚어 둔 칸은 이제 지도에 없는 모양입니다.
   assert.match(canvas, /if \(!current \|\| current\.level === level\) return current;/);
 

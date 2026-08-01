@@ -12,9 +12,10 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
-import { districtAt, districtsAtLevel, type DistrictLevel } from "../data/districts";
+import { cafesIn, districtAt, districtsAtLevel, hasLevel, loadDongDistricts, type DistrictLevel } from "../data/districts";
 import { project } from "../data/geo";
-import { minorRoads, river, sea, tributaries, trunkRoads, type District } from "../data/terrain";
+import { outside, sea, type District } from "../data/districts-data";
+import { minorRoads, river, tributaries, trunkRoads } from "../data/terrain";
 import type { CodexIconId } from "../marks";
 import { CodexIcon } from "./CodexIcon";
 
@@ -131,11 +132,16 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   const glideRef = useRef<number | null>(null);
   /** 마지막으로 마우스가 있던 자리. 단계가 바뀌면 여기서 다시 짚습니다. */
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
-  /** 마우스가 얹힌 시·구. 경계를 밝히고, 그 안의 카페를 줌아웃 상태에서도 꺼냅니다. */
+  /** 마우스가 얹힌 행정구역. 경계를 밝히고, 그 안의 카페를 꺼냅니다. */
   const [hovered, setHovered] = useState<District | null>(null);
+  /** 읍면동이 도착했는가. 오는 동안에는 한 단계 위(시군구)가 그대로 보입니다. */
+  const [dongReady, setDongReady] = useState(() => hasLevel(3));
 
-  const level = levelOf(view.zoom);
+  const wanted = levelOf(view.zoom);
+  const level = (wanted === 3 && !dongReady ? 2 : wanted) as DistrictLevel;
   const shownDistricts = districtsAtLevel(level);
+  // 짚는 건 이벤트에서 일어나므로, 지금 그려져 있는 단계를 ref 로 따로 들고 갑니다.
+  const levelRef = useRef<DistrictLevel>(level);
 
   /**
    * 카페마다 정해진 제 차례(0..1). 해시로 줄을 세운 뒤 등수를 매기므로, 배율이
@@ -160,6 +166,23 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
   useEffect(() => () => stopGlide(), []);
+
+  useEffect(() => {
+    levelRef.current = level;
+  }, [level]);
+
+  // 읍면동은 그 배율에 처음 닿을 때 한 번만 불러옵니다. 첫 화면에 천 칸을 들고
+  // 있을 이유가 없습니다 — 100%에서는 시도 세 칸만 보이니까요.
+  useEffect(() => {
+    if (wanted !== 3 || dongReady) return;
+    let alive = true;
+    loadDongDistricts().then(() => {
+      if (alive) setDongReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [wanted, dongReady]);
 
   // 확대하다 단계가 바뀌면 짚어 둔 칸은 이제 지도에 없는 모양입니다. 마우스가
   // 있던 자리에서 새 단계로 다시 짚습니다 — 안 그러면 서울을 짚어 둔 채 확대해
@@ -269,7 +292,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     return districtAt(
       ((clientX - rect.left - current.x) / current.zoom / rect.width) * 100,
       ((clientY - rect.top - current.y) / current.zoom / rect.height) * 100,
-      levelOf(current.zoom),
+      levelRef.current,
     );
   }
 
@@ -364,7 +387,8 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   // 그 전에는 경계와 이름표만 밝힙니다. 서울이 한 칸인 배율에서 얹자마자 마흔 곳이
   // 쏟아지면, 배율을 따라 조금씩 늘리기로 한 약속이 얹는 순간 무너집니다. 멀리서는
   // 어느 동네에 몇 곳인지면 충분하고 — 그건 이름표가 이미 말하고 있습니다.
-  const hoveredIds = hovered && level === 3 ? new Set(hovered.cafeIds) : null;
+  const hoveredCafes = hovered ? cafesIn(hovered) : [];
+  const hoveredIds = hovered && level === 3 ? new Set(hoveredCafes.map((cafe) => cafe.id)) : null;
 
   const shownCafes = cafes.filter((cafe) => {
     if (savedMarkers[cafe.id] || cafe.id === activeId || hoveredIds?.has(cafe.id)) {
@@ -418,7 +442,11 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
           {shownDistricts.map((district, index) => <path key={district.id} className={`terrain__district terrain__district--${index % 3}`} d={district.path} />)}
           {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
-          <path className="terrain__river" d={river} /><path className="terrain__sea" d={sea} fillRule="evenodd" />
+          {/* 바다는 창에서 뭍을 도려낸 모양이라 evenodd 로 칠합니다. 수도권 밖(강원·충청
+              언저리)은 데이터가 없어 물색이 번지므로 뭍 색으로 덮습니다. */}
+          <path className="terrain__sea" d={sea} fillRule="evenodd" />
+          <path className="terrain__outside" d={outside} />
+          <path className="terrain__river" d={river} />
         </svg>
       </div>
       <div className="map__grain" aria-hidden="true" />
@@ -437,7 +465,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
             <span className="region-label" style={{ left: `${labelSpot.x}%`, top: `${labelSpot.y}%` }}>
               <b>{hovered.name}</b>
               {/* 시도 칸은 위가 자기 자신이라 앞에 붙일 이름이 없습니다. */}
-              <i>{hovered.sido ? `${hovered.sido} · ` : ""}<span className="tabular">카페 {hovered.cafeIds.length}곳</span></i>
+              <i>{hovered.parent ? `${hovered.parent} · ` : ""}<span className="tabular">카페 {hoveredCafes.length}곳</span></i>
             </span>
           </>
         ) : null}

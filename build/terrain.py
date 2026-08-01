@@ -3,16 +3,13 @@
 이 지도는 임시가 아닙니다. 상용 지도 SDK를 붙여 보니 결국 그 지도가 되어 버려서,
 직접 그리는 쪽으로 갔습니다. 그러니 여기서 나오는 그림이 곧 제품의 지도입니다.
 
-손으로 쓴 다각형이 지도로 안 읽히는 이유는 단순합니다 — 실제 해안선과 행정경계는
-프랙탈이라 꼭짓점이 수백 개인데, 손으로 쓰면 여덟 개짜리 타원이 됩니다. 그래서
-경계를 직접 그리지 않고 **격자에서 영역을 키운 뒤 윤곽을 추출**합니다.
+해안선과 시군구 경계는 실제 데이터에서 나옵니다 (build/districts.py). 여기서는
+물길과 길만 만듭니다 — 한강·지천·간선도로는 공개 데이터를 받기 전까지 실제
+좌표를 손으로 찍어 그립니다.
 
-  1. 잡음을 섞은 거리장으로 땅/바다를 가른다        → 들쭉날쭉한 해안선
-  2. 잡음을 섞은 보로노이로 시군구를 나눈다          → 이웃과 변을 공유하는 경계
-  3. 한강 남/북을 건너면 벌점 → 경계가 강을 따라간다
-  4. 계단 모양 윤곽을 Chaikin 으로 부드럽게, D-P 로 솎아낸다
+땅/바다 판정은 남겨 두었습니다. 길이 바다로 뻗어 나가지 않게 하는 데 씁니다.
 
-시드가 고정이라 돌릴 때마다 같은 지형이 나옵니다.
+시드가 고정이라 돌릴 때마다 같은 그림이 나옵니다.
 
 실행:  node 없이 파이썬만 있으면 됩니다.
        python build/terrain.py app/data/terrain.ts
@@ -28,8 +25,8 @@ SIZE = 100.0          # SVG 사용자 좌표. 마커의 % 좌표와 같은 공�
 
 # app/data/geo.ts 의 BOUNDS 와 반드시 같아야 합니다. 여기서 어긋나면 카페 마커가
 # 강 위에 떠 있거나 바다에 빠집니다.
-WEST, EAST = 126.42, 127.64
-NORTH, SOUTH = 37.80, 37.02
+WEST, EAST = 126.12, 127.85
+NORTH, SOUTH = 37.85, 37.00
 
 
 def px(lng):
@@ -129,49 +126,6 @@ COAST_LL = [
     (126.88, 37.05),
 ]
 
-CAFE_SOURCE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                           "app", "data", "cafes.ts")
-CAFE_PATTERN = re.compile(
-    r'id:\s*"(?P<id>[^"]+)".*?name:\s*"(?P<name>[^"]+)".*?'
-    r'address:\s*"(?P<address>[^"]+)".*?pos:\s*\[(?P<lng>[-\d.]+),\s*(?P<lat>[-\d.]+)\]'
-)
-
-
-def load_cafes(path=CAFE_SOURCE):
-    """카페 목록을 원본 파일에서 그대로 읽습니다.
-
-    좌표를 여기에 베껴 두면 카페가 하나 늘 때마다 두 곳을 고쳐야 하고, 잊으면
-    지형은 옛날 카페를 기준으로 만들어집니다. 한쪽만 원본으로 둡니다.
-    """
-    with open(path, encoding="utf-8") as handle:
-        source = handle.read()
-    cafes = [
-        (m["id"], m["name"], m["address"], float(m["lng"]), float(m["lat"]))
-        for m in CAFE_PATTERN.finditer(source)
-    ]
-    if not cafes:
-        raise SystemExit(f"{path} 에서 카페를 하나도 읽지 못했습니다.")
-    return cafes
-
-
-def district_of(address):
-    """주소 → 이 지도가 한 칸으로 다루는 시·구.
-
-    "서울 마포구 …"      → 서울, 마포구
-    "경기 성남시 분당구 …" → 경기, 성남시 분당구
-    "경기 파주시 …"       → 경기, 파주시
-    """
-    tokens = address.split()
-    parts = []
-    for token in tokens[1:]:
-        if token[-1] not in "시군구":
-            break
-        parts.append(token)
-    if not parts:
-        raise SystemExit(f"시·구를 못 읽었습니다: {address}")
-    return tokens[0], " ".join(parts)
-
-
 def river_y(x):
     """주어진 x 에서 한강의 중심 y. 남/북 판정에 씁니다."""
     pts = RIVER
@@ -203,103 +157,6 @@ def ribbon(points, half_widths):
         right.append((x - nx * half, y - ny * half))
     return left + right[::-1]
 
-
-# ── 도시 씨앗 ─────────────────────────────────────────────────────────
-
-# 씨앗은 카페 주소에서 나옵니다. 카페 하나가 씨앗 하나가 되고, 같은 시·구의 칸을
-# 나중에 합칩니다. 그래야 마우스를 올렸을 때 강조되는 경계 안에 그 동네의 카페가
-# 반드시 들어 있습니다 — 경계를 따로 그려 두면 언젠가 어긋납니다.
-#
-# 가중치는 거리를 나누는 값이라 클수록 구역이 넓어집니다. 크기가 고르면 벌집이
-# 됩니다 — 실제 수도권은 가운데가 잘게 쪼개져 있고 바깥으로 갈수록 덩어리가
-# 커집니다. 그 대비가 지도로 읽히게 하는 핵심입니다.
-#
-# 거리에서 빼지 않고 나누는 이유: 빼면 큰 구역이 먼 곳에서도 일정 거리만큼
-# 밀고 들어와서, 촘촘한 서울 한복판까지 광명시가 삼킵니다. 나누면 씨앗 바로
-# 옆에서는 거리가 0에 가까워 아무도 못 이깁니다.
-SEOUL_W = 1.05
-INNER_W = 1.20
-OUTER_W = 1.60
-
-# 잡음 진폭(사용자 좌표)과, 씨앗 가까이에서 잡음을 죽이는 반경.
-#
-# 반경이 진폭보다 커야 합니다. 잡음은 씨앗에서 멀어질수록 거리에 비례해 살아나므로
-# 반경 > 진폭이면 어떤 잡음도 거리를 음수로 못 만들고, 그래서 씨앗은 언제나 제
-# 구역 안에 남습니다 — 카페가 자기 동네 밖으로 밀려나지 않는다는 보장이 여기서
-# 나옵니다. 뒤집히면 씨앗 바로 위에 남의 구역이 얼룩처럼 뜹니다.
-REGION_NOISE = 3.4
-NOISE_CALM = 4.0
-
-
-# 확대하면서 차례로 쪼개지는 세 단계. 각 단계는 구 하나(district_list 의 한 칸)를
-# 어느 묶음에 넣을지만 말하고, 경계는 그 묶음의 칸들을 합쳐서 뽑습니다.
-#
-#   1단계 시도   서울 · 경기 · 인천
-#   2단계 시·군  서울 · 인천 · 경기의 각 시 (성남시, 파주시, …)
-#   3단계 구     마포구 · 분당구 · 파주시 …
-#
-# 파주시처럼 구가 없는 시는 2·3단계가 같은 모양입니다 — 실제로 안 쪼개지니까요.
-DISTRICT_LEVELS = [
-    lambda entry: (entry["sido"], ""),
-    lambda entry: (
-        (entry["name"].split()[0], entry["sido"]) if entry["name"].split()[0].endswith(("시", "군"))
-        else (entry["sido"], "")
-    ),
-    lambda entry: (entry["name"], entry["sido"]),
-]
-
-
-def district_weight(sido, name):
-    """서울의 구가 가장 잘고, 큰 시의 구가 그다음, 시 하나가 통째면 가장 큽니다."""
-    if sido == "서울":
-        return SEOUL_W
-    if sido == "인천" or name.endswith("구"):
-        return INNER_W
-    return OUTER_W
-
-
-def build_sites(cafes):
-    """씨앗은 시·구 하나가 아니라 **카페 하나**입니다.
-
-    시·구의 한가운데에 씨앗을 하나만 두면, 목업 데이터처럼 연남동(마포구)과
-    연희동(서대문구)이 붙어 있는 곳에서 카페가 옆 구의 칸에 떨어집니다. 카페마다
-    씨앗을 두고 같은 시·구끼리 칸을 합치면, 모든 카페가 제 구역 안에 있는 것이
-    바라는 일이 아니라 만들어지는 성질이 됩니다.
-
-    (구역, 그 구역에 속한 씨앗들) 순서로 돌려줍니다.
-    """
-    districts, sites = [], []
-    index_of = {}
-    for cafe_id, _, address, lng, lat in cafes:
-        sido, name = district_of(address)
-        key = (sido, name)
-        if key not in index_of:
-            index_of[key] = len(districts)
-            districts.append({"sido": sido, "name": name, "cafe_ids": []})
-        districts[index_of[key]]["cafe_ids"].append(cafe_id)
-        sites.append({"x": px(lng), "y": py(lat), "district": index_of[key]})
-
-    # 칸 넓이는 그 구에 카페가 몇 곳 있느냐가 아니라 어떤 구냐로 정해져야 합니다.
-    # 씨앗마다 같은 가중치를 주면 카페 여덟 곳인 마포구가 두 곳인 서대문구를 밀어내
-    # 서대문구가 아예 사라집니다. 곱셈 보로노이에서 칸 반지름은 가중치에 비례하므로,
-    # 넓이(반지름²×개수)를 맞추려면 √개수로 나눕니다. 두 곳이 보통이라 기준으로 둡니다.
-    for site in sites:
-        entry = districts[site["district"]]
-        count = len(entry["cafe_ids"])
-        site["weight"] = district_weight(entry["sido"], entry["name"]) * math.sqrt(2.0 / count)
-
-    # 이름 없는 채움 씨앗. 카페가 한 곳도 없는 자리까지 실제 시·구가 삼키면
-    # 강조된 경계가 그 동네와 상관없는 땅까지 덮습니다. 화면 밖 씨앗은 가장자리
-    # 구역이 액자를 따라 잘린 것처럼 보이지 않게 합니다.
-    for lng, lat in [
-        (126.55, 37.72), (126.62, 37.62), (127.42, 37.72), (127.45, 37.45),
-        (127.40, 37.20), (126.95, 37.02), (127.55, 37.80), (127.55, 37.10),
-        (126.60, 37.00), (127.30, 37.92),
-    ]:
-        districts.append({"sido": "", "name": "", "cafe_ids": []})
-        sites.append({"x": px(lng), "y": py(lat), "weight": OUTER_W,
-                      "district": len(districts) - 1})
-    return districts, sites
 
 # 도로망은 도시 사이만 잇습니다. 서울 구 씨앗까지 전부 이으면 가운데가 거미줄이 됩니다.
 ROAD_NODES_LL = [
@@ -483,101 +340,7 @@ def build():
         return value
 
     land = [[landness(x, y) > 0 for x in center] for y in center]
-    sea_mask = [[not cell for cell in row] for row in land]
-
-    cafes = load_cafes()
-    district_list, sites = build_sites(cafes)
-
-    stranded = [name for _, name, _, lng, lat in cafes if landness(px(lng), py(lat)) <= 0]
-    if stranded:
-        raise SystemExit(f"바다에 빠진 카페: {', '.join(stranded)} — 해안선이나 좌표를 조정하세요.")
-
-    # 2) 시군구 — 가중치 보로노이에 잡음을 섞습니다. 가중치가 크기 대비를 만들고,
-    #    잡음이 직선 경계를 무너뜨리고, 한강 벌점이 경계를 강에 붙입니다.
-    site_side = [1 if site["y"] > river_y(site["x"]) else -1 for site in sites]
-    site_jitter = [rng.uniform(0, 100) for _ in sites]
-
-    def district_at(x, y):
-        side_here = 1 if y > river_y(x) else -1
-        best, best_index = 1e9, -1
-        for k, site in enumerate(sites):
-            distance = math.hypot(x - site["x"], y - site["y"])
-            calm = min(1.0, distance / NOISE_CALM)
-            cost = distance + region_noise(x + site_jitter[k], y + site_jitter[k]) * REGION_NOISE * calm
-            if site_side[k] != side_here:
-                cost += 7.0
-            cost /= site["weight"]
-            if cost < best:
-                best, best_index = cost, site["district"]
-        return best_index
-
-    owner = [[-1] * GRID for _ in range(GRID)]
-    for j, y in enumerate(center):
-        for i, x in enumerate(center):
-            if land[j][i]:
-                owner[j][i] = district_at(x, y)
-
-    # 씨앗을 카페마다 두었으니 이건 통과해야 정상입니다. 그래도 확인은 남깁니다 —
-    # 잡음 진폭을 올리다 반경을 넘기면 조용히 깨지는 종류의 성질이라서요.
-    escaped = []
-    for _, name, address, lng, lat in cafes:
-        _, district = district_of(address)
-        landed = district_list[district_at(px(lng), py(lat))]
-        if landed["name"] != district:
-            escaped.append(f"{name}({district} → {landed['name'] or '빈 칸'})")
-    if escaped:
-        raise SystemExit("자기 구 밖으로 밀려난 카페: " + ", ".join(escaped))
-
-    # 3) 윤곽 추출
-    def loops_of(mask, chaikin_rounds=3, min_points=18):
-        result = []
-        for loop in trace_loops(mask, GRID, GRID):
-            if len(loop) < min_points:
-                continue
-            points = [(-PAD + px * step, -PAD + py * step) for px, py in loop]
-            points = simplify(chaikin(points, chaikin_rounds), EPSILON)
-            if len(points) >= 4:
-                result.append(points)
-        return result
-
-    # 바다는 섬을 구멍으로 갖습니다. 한 path 안에 서브패스로 넣고 evenodd 로 칠해야
-    # 섬이 바다색으로 덮이지 않습니다.
-    sea_loops = loops_of(sea_mask)
-    sea_path = "".join(to_path(loop) for loop in sea_loops)
-
-    # 같은 칸을 어떻게 묶느냐만 바꾸면 시도 → 시·군 → 구가 차례로 나옵니다.
-    # 경계를 세 벌 따로 그리지 않고 한 격자에서 뽑으므로, 확대하며 쪼개질 때
-    # 안쪽 선만 생길 뿐 바깥 윤곽은 한 획도 어긋나지 않습니다.
-    districts = []
-    for level, group_of in enumerate(DISTRICT_LEVELS, start=1):
-        groups = {}
-        for k, entry in enumerate(district_list):
-            if not entry["name"]:
-                continue
-            groups.setdefault(group_of(entry), []).append(k)
-
-        for (name, sido), members in groups.items():
-            owned = set(members)
-            mask = [[owner[j][i] in owned for i in range(GRID)] for j in range(GRID)]
-            # 구는 작아도 반드시 그려야 합니다. 티끌을 걸러내는 기본값을 그대로 쓰면
-            # 가장 좁은 구가 소리 없이 사라지고, 그 구의 카페는 집어들 수 없게 됩니다.
-            loops = loops_of(mask, min_points=10)
-            if not loops:
-                raise SystemExit(f"{name} 이 너무 좁아 경계가 안 나옵니다.")
-            # 이름표는 구역 한가운데에. 다만 구역이 굽어 있으면 평균 자리가 구역 밖으로
-            # 나가므로, 실제로 이 구역이 차지한 칸 중 평균에 가장 가까운 칸을 씁니다.
-            cells = [(i, j) for j in range(GRID) for i in range(GRID) if owner[j][i] in owned]
-            mean_i = sum(i for i, _ in cells) / len(cells)
-            mean_j = sum(j for _, j in cells) / len(cells)
-            anchor = min(cells, key=lambda cell: (cell[0] - mean_i) ** 2 + (cell[1] - mean_j) ** 2)
-            districts.append({
-                "level": level,
-                "name": name,
-                "sido": sido,
-                "label": (center[anchor[0]], center[anchor[1]]),
-                "cafeIds": [cafe_id for k in members for cafe_id in district_list[k]["cafe_ids"]],
-                "path": "".join(to_path(loop) for loop in loops),
-            })
+    # 땅/바다 판정은 길이 바다로 뻗지 않게 하는 데만 씁니다.
 
     # 4) 물길
     river_points = [(x, y) for x, y, _ in RIVER]
@@ -630,28 +393,14 @@ def build():
     trunks = [road_path(a, b) for a, b in trunk_pairs]
     minors = [road_path(a, b) for a, b in minor_pairs]
 
-    return sea_path, districts, river_path, tributaries, trunks, minors
+    return river_path, tributaries, trunks, minors
 
 
 def main():
-    sea, districts, river, tributaries, trunks, minors = build()
+    river, tributaries, trunks, minors = build()
 
     def literal(values):
         return "[\n" + "".join(f'  "{v}",\n' for v in values) + "]"
-
-    def district_literal(entries):
-        lines = []
-        for entry in entries:
-            ids = ", ".join(f'"{cafe_id}"' for cafe_id in entry["cafeIds"])
-            district_id = f'{entry["level"]} {entry["sido"]} {entry["name"]}'.strip()
-            lines.append(
-                f'  {{ id: "{district_id}", level: {entry["level"]}, '
-                f'name: "{entry["name"]}", sido: "{entry["sido"]}", '
-                f'label: [{entry["label"][0]:.2f}, {entry["label"][1]:.2f}], '
-                f"cafeIds: [{ids}], "
-                f'path: "{entry["path"]}" }},\n'
-            )
-        return "[\n" + "".join(lines) + "]"
 
     out = f'''/* 자동 생성 — 손으로 고치지 마세요.
  * 다시 만들려면:  python build/terrain.py app/data/terrain.ts
@@ -660,37 +409,6 @@ def main():
  * 좌표계는 0..100 이고 마커의 % 좌표와 같은 공간입니다. viewBox 바깥까지 그려져
  * 있어서 화면 끝에서 자연스럽게 잘립니다.
  */
-
-/** 서해. 섬은 같은 path 의 서브패스라 fill-rule: evenodd 로 구멍이 됩니다. */
-export const sea = "{sea}";
-
-/**
- * 시·구 한 칸.
- *
- * 카페 하나하나가 씨앗이고 같은 동네의 칸을 합친 것이라, `cafeIds` 의 핀은
- * 반드시 `path` 안에 있습니다 (생성기가 매번 확인합니다). 카페가 한 곳도 없는
- * 자리를 메우는 채움 칸은 아예 실리지 않습니다.
- *
- * 세 단계가 한 배열에 같이 담깁니다. 배율에 따라 `level` 로 골라 쓰면 지도가
- * 시도 → 시·군 → 구 순으로 쪼개집니다. 같은 격자에서 뽑았으므로 단계가 바뀌어도
- * 바깥 윤곽은 한 획도 어긋나지 않고 안쪽 선만 생깁니다.
- */
-export type District = {{
-  /** 단계와 시도까지 붙인 이름. 서울 중구와 인천 중구가 있어서 이름만으로는 안 갈립니다. */
-  id: string;
-  /** 1 = 시도 · 2 = 시·군 · 3 = 구 */
-  level: 1 | 2 | 3;
-  name: string;
-  /** 한 단계 위의 이름. 1단계와 서울·인천처럼 위가 자기 자신이면 빈 문자열입니다. */
-  sido: string;
-  /** 이름표를 놓을 자리. 구역 안쪽입니다. */
-  label: [number, number];
-  cafeIds: string[];
-  /** 섬처럼 떨어진 조각이 있으면 서브패스로 이어 붙습니다. */
-  path: string;
-}};
-
-export const districts: District[] = {district_literal(districts)};
 
 /** 한강. 선이 아니라 면이라 하구로 갈수록 넓어집니다. */
 export const river = "{river}";
@@ -709,9 +427,9 @@ export const minorRoads: string[] = {literal(minors)};
     with open(target, "w", encoding="utf-8") as handle:
         handle.write(out)
     print(f"wrote {target}")
-    print(f"  districts {len(districts)} · tributaries {len(tributaries)} · "
-          f"trunk {len(trunks)} · minor {len(minors)}")
+    print(f"  tributaries {len(tributaries)} · trunk {len(trunks)} · minor {len(minors)}")
     print(f"  {len(out) / 1024:.1f} KB")
 
 
-main()
+if __name__ == "__main__":
+    main()
