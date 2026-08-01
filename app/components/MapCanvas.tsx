@@ -44,8 +44,8 @@ const GLIDE_MS = 140;
  * 멀리서 스물몇 개의 구가 한꺼번에 보이면 경계가 무늬가 되지, 지도가 아닙니다.
  */
 const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
-  { from: 3.5, level: 3 },
-  { from: 2.5, level: 2 },
+  { from: 2.25, level: 3 },
+  { from: 1.5, level: 2 },
   { from: 1, level: 1 },
 ];
 /**

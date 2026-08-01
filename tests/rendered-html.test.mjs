@@ -679,8 +679,8 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /hash = Math\.imul\(hash \^ \(hash >>> 15\), 2246822507\);/);
 
   // 확대하면 시도 → 시·군 → 구 순으로 쪼개집니다.
-  assert.match(canvas, /\{ from: 3\.5, level: 3 \}/);
-  assert.match(canvas, /\{ from: 2\.5, level: 2 \}/);
+  assert.match(canvas, /\{ from: 2\.25, level: 3 \}/);
+  assert.match(canvas, /\{ from: 1\.5, level: 2 \}/);
   assert.match(canvas, /const shownDistricts = districtsAtLevel\(level\);/);
   assert.match(canvas, /levelOf\(current\.zoom\),/);
 
