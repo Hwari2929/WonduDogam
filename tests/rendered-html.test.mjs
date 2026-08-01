@@ -327,7 +327,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /terrain__district/);
   assert.match(canvas, /onWheel=\{onWheel\}/);
   assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
-  assert.match(canvas, /MAX_ZOOM = 5/);
+  assert.match(canvas, /MAX_ZOOM = 15/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{12\}/);
   assert.match(css, /\.map__places span \{ transform: translate\(-50%, -50%\); \}/);
@@ -617,7 +617,7 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   const mapLayer = css.slice(css.indexOf(".map__layer {"), css.indexOf(".map__pins {"));
   assert.doesNotMatch(mapLayer, /transition|transform/);
   // 끌기와 휠은 이미 손을 따라오므로 미끄러짐을 끼우지 않고 즉시 놓아 줍니다.
-  assert.match(canvas, /stopGlide\(\);\s*\n\s*const next = zoomedView\(viewRef\.current\.zoom \* Math\.exp/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
   assert.match(canvas, /stopGlide\(\);\s*\n\s*event\.currentTarget\.setPointerCapture/);
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
   assert.match(canvas, /useEffect\(\(\) => \(\) => stopGlide\(\), \[\]\);/);
@@ -697,11 +697,19 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /return inView\(x, y\);/);
   assert.match(canvas, /new ResizeObserver/);
 
-  // 100%에서 500%까지 다섯 번이면 닿습니다. 더하기로 올리면 열여섯 번입니다.
+  // 곱해서 올립니다. 더하기로 올리면 배율이 높을수록 한 번의 체감이 줄어들어,
+  // 끝으로 갈수록 눌러도 눌러도 그대로인 것처럼 보입니다.
   assert.match(canvas, /const ZOOM_FACTOR = 1\.4;/);
-  assert.match(canvas, /zoomedView\(viewRef\.current\.zoom \* \(direction > 0 \? ZOOM_FACTOR : 1 \/ ZOOM_FACTOR\)\)/);
   assert.doesNotMatch(canvas, /ZOOM_STEP/);
-  // 축척은 막대를 늘리지 않고 거리를 줄입니다 — 500%에서 막대가 280px 로 자랍니다.
+  // 500%부터는 보폭이 조금 커집니다. 어느 쪽으로 가든 두 배율 중 낮은 쪽으로
+  // 보폭을 정해야 확대했다 축소했을 때 밟았던 자리를 그대로 되짚습니다.
+  assert.match(canvas, /const FAST_FROM = 5;/);
+  assert.match(canvas, /const FAST_FACTOR = 1\.6;/);
+  assert.match(canvas, /const fast = direction > 0 \? current >= FAST_FROM : current \/ FAST_FACTOR >= FAST_FROM;/);
+  assert.match(canvas, /const next = zoomedView\(direction > 0 \? current \* factor : current \/ factor\);/);
+  // 휠도 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
+  assert.match(canvas, /const rate = viewRef\.current\.zoom >= FAST_FROM \? 0\.0021 : 0\.0015;/);
+  // 축척은 막대를 늘리지 않고 거리를 줄입니다 — 안 그러면 1500%에서 막대가 화면을 넘습니다.
   assert.match(canvas, /\{\(10 \/ view\.zoom\)\.toFixed\(view\.zoom >= 2 \? 1 : 0\)\} km/);
 });
 

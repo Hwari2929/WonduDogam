@@ -24,12 +24,22 @@ const PLACES: { label: string; lng: number; lat: number; sea?: boolean }[] = [
   { label: "수원", lng: 127.029, lat: 37.263 }, { label: "서해", lng: 126.5, lat: 37.34, sea: true },
 ];
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 5;
+const MAX_ZOOM = 15;
 /**
- * 단추 한 번에 곱해지는 배율. 더하기로 올리면 100%에서 500%까지 열여섯 번을
- * 눌러야 하고, 배율이 높을수록 한 번의 체감이 줄어듭니다.
+ * 단추 한 번에 곱해지는 배율. 더하기로 올리면 배율이 높을수록 한 번의 체감이
+ * 줄어들어, 끝으로 갈수록 눌러도 눌러도 그대로인 것처럼 보입니다.
  */
 const ZOOM_FACTOR = 1.4;
+/**
+ * 여기서부터는 한 번에 조금 더 크게 뜁니다. 500%를 넘어가면 이미 동네 하나를
+ * 들여다보는 중이라, 같은 보폭으로는 끝까지 가는 데 손만 아픕니다.
+ *
+ * 어느 쪽으로 가든 낮은 쪽 배율로 보폭을 정합니다 — 그래야 확대했다 축소했을 때
+ * 밟았던 자리를 그대로 되짚습니다. 천장에 부딪혀 한 번 잘리고 나면 그 뒤로는
+ * 사다리가 어긋나는데, 그건 천장이 있는 이상 어쩔 수 없습니다.
+ */
+const FAST_FROM = 5;
+const FAST_FACTOR = 1.6;
 /** 화면 밖으로 이만큼까지는 핀을 남겨 둡니다 — 끌 때 가장자리에서 툭 튀지 않게. */
 const CULL_MARGIN = 0.2;
 /**
@@ -215,7 +225,12 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }
 
   function changeZoom(direction: -1 | 1) {
-    const next = zoomedView(viewRef.current.zoom * (direction > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR));
+    const current = viewRef.current.zoom;
+    // 오갈 때 같은 자리를 밟으려면 두 배율 중 낮은 쪽으로 보폭을 정해야 합니다.
+    // 올라갈 땐 지금 자리가, 내려갈 땐 가려는 자리가 낮은 쪽입니다.
+    const fast = direction > 0 ? current >= FAST_FROM : current / FAST_FACTOR >= FAST_FROM;
+    const factor = fast ? FAST_FACTOR : ZOOM_FACTOR;
+    const next = zoomedView(direction > 0 ? current * factor : current / factor);
     if (next) glideTo(next);
   }
 
@@ -228,7 +243,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // 휠은 이미 조금씩 연달아 들어오므로 그대로 따라갑니다 — 여기에 미끄러짐을
     // 얹으면 손보다 지도가 늦게 따라와 미끄덩거립니다.
     stopGlide();
-    const next = zoomedView(viewRef.current.zoom * Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
+    // 단추와 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
+    const rate = viewRef.current.zoom >= FAST_FROM ? 0.0021 : 0.0015;
+    const next = zoomedView(viewRef.current.zoom * Math.exp(-event.deltaY * rate), event.clientX, event.clientY);
     if (next) commitView(next);
   }
 
