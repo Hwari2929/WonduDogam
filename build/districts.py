@@ -393,8 +393,12 @@ def build():
             shape = shape_of(merged, level)
             if shape is None:
                 continue
+            # 시도는 지도에서 한 칸으로 안 씁니다. 구·동 두 단계면 충분하고, 셋이면
+            # 확대하는 동안 경계가 두 번 바뀌어 어지럽습니다. 다만 뭍 전체의 윤곽은
+            # 여기서만 나오므로 바다를 도려내는 데 씁니다.
             if level == 1:
                 land_loops.extend(shape["loops"])
+                continue
             districts.append({
                 "level": level, "name": name, "parent": parent,
                 "label": shape["label"], "path": shape["path"], "points": shape["points"],
@@ -419,14 +423,14 @@ TYPE = """
 /**
  * 행정구역 한 칸. 통계청 읍면동 경계에서 나온 실제 경계입니다.
  *
- * 세 단계가 있고 배율에 따라 골라 씁니다. 시군구·시도는 읍면동을 합쳐 만들었으므로
+ * 두 단계가 있고 배율에 따라 골라 씁니다. 시군구는 읍면동을 합쳐 만들었으므로
  * 단계가 바뀌어도 바깥 윤곽은 한 획도 어긋나지 않고 안쪽 선만 생깁니다.
  */
 export type District = {
   /** 단계와 윗동네까지 붙인 이름. 서울 중구와 인천 중구가 있어 이름만으로는 안 갈립니다. */
   id: string;
-  /** 1 = 시도 · 2 = 시군구 · 3 = 읍면동 */
-  level: 1 | 2 | 3;
+  /** 2 = 시군구 · 3 = 읍면동. 시도는 너무 커서 한 칸으로 안 씁니다. */
+  level: 2 | 3;
   name: string;
   /** 한 단계 위의 이름. 1단계는 위가 없어 빈 문자열입니다. */
   parent: string;
@@ -454,13 +458,13 @@ def literal(entries):
 def main():
     districts, sea, outside = build()
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    core = [d for d in districts if d["level"] < 3]
+    core = [d for d in districts if d["level"] == 2]
     dong = [d for d in districts if d["level"] == 3]
 
     core_path = os.path.join(root, "app", "data", "districts-data.ts")
     with open(core_path, "w", encoding="utf-8") as handle:
         handle.write(HEADER + TYPE + f"""
-/** 시도·시군구. 처음부터 들고 있습니다 — 지도를 열면 바로 보이는 선입니다. */
+/** 시군구. 처음부터 들고 있습니다 — 지도를 열면 바로 보이는 선입니다. */
 export const districts: District[] = {literal(core)};
 
 /** 서해. 창에서 뭍을 도려낸 모양이라 fill-rule: evenodd 로 칠합니다. */
@@ -485,7 +489,7 @@ export const outside = "{outside}";
     for path in (core_path, dong_path):
         print(f"  {os.path.relpath(path, root)}  {os.path.getsize(path) / 1024:.0f} KB")
     counted = collections.Counter(d["level"] for d in districts)
-    print(f"  1단계 {counted[1]}칸 · 2단계 {counted[2]}칸 · 3단계 {counted[3]}칸")
+    print(f"  시군구 {counted[2]}칸 · 읍면동 {counted[3]}칸")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
-import { cafesIn, districtAt, districtsAtLevel, hasLevel, loadDongDistricts, type DistrictLevel } from "../data/districts";
+import { BASE_LEVEL, cafesIn, districtAt, districtsAtLevel, hasLevel, loadDongDistricts, type DistrictLevel } from "../data/districts";
 import { project } from "../data/geo";
 import { outside, sea, type District } from "../data/districts-data";
 import { minorRoads, river, tributaries, trunkRoads } from "../data/terrain";
@@ -51,13 +51,12 @@ const TAP_SLOP = 10;
 /** 단추로 배율을 바꿀 때 미끄러지는 시간(ms). 예전 CSS 전이와 같은 체감입니다. */
 const GLIDE_MS = 140;
 /**
- * 지도가 쪼개지는 배율. 확대하면 시도 → 시·군 → 구 순으로 나뉩니다.
- * 멀리서 스물몇 개의 구가 한꺼번에 보이면 경계가 무늬가 되지, 지도가 아닙니다.
+ * 지도가 쪼개지는 배율. 구로 시작해 500%부터 동으로 갈립니다.
+ * 시도까지 세 단계로 두면 확대하는 동안 경계가 두 번 바뀌어 어지럽습니다.
  */
 const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
-  { from: 2.25, level: 3 },
-  { from: 1.5, level: 2 },
-  { from: 1, level: 1 },
+  { from: 5, level: 3 },
+  { from: 1, level: 2 },
 ];
 /**
  * 담기지 않은 카페가 나오기 시작하는 배율과, 전부 나오는 배율.
@@ -66,8 +65,8 @@ const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
  * 카페마다 정해진 제 차례에 하나씩 나옵니다 — 차례를 id 로 정하므로 끌거나
  * 확대를 되돌려도 나왔다 들어갔다 깜박이지 않습니다.
  */
-const REVEAL_FROM = 2;
-const REVEAL_ALL = 4;
+const REVEAL_FROM = 3;
+const REVEAL_ALL = 15;
 type View = { zoom: number; x: number; y: number };
 
 const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
@@ -98,7 +97,7 @@ function scatter(id: string) {
 
 /** 이 배율에서 지도를 나누는 단계. */
 function levelOf(zoom: number): DistrictLevel {
-  return LEVEL_AT.find((entry) => zoom >= entry.from)?.level ?? 1;
+  return LEVEL_AT.find((entry) => zoom >= entry.from)?.level ?? BASE_LEVEL;
 }
 
 function clampView(view: View, width: number, height: number): View {
@@ -138,7 +137,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   const [dongReady, setDongReady] = useState(() => hasLevel(3));
 
   const wanted = levelOf(view.zoom);
-  const level = (wanted === 3 && !dongReady ? 2 : wanted) as DistrictLevel;
+  const level = (wanted === 3 && !dongReady ? BASE_LEVEL : wanted) as DistrictLevel;
   const shownDistricts = districtsAtLevel(level);
   // 짚는 건 이벤트에서 일어나므로, 지금 그려져 있는 단계를 ref 로 따로 들고 갑니다.
   const levelRef = useRef<DistrictLevel>(level);
@@ -172,7 +171,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }, [level]);
 
   // 읍면동은 그 배율에 처음 닿을 때 한 번만 불러옵니다. 첫 화면에 천 칸을 들고
-  // 있을 이유가 없습니다 — 100%에서는 시도 세 칸만 보이니까요.
+  // 있을 이유가 없습니다 — 500% 아래에서는 시군구만 보이니까요.
   useEffect(() => {
     if (wanted !== 3 || dongReady) return;
     let alive = true;
@@ -185,8 +184,8 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }, [wanted, dongReady]);
 
   // 확대하다 단계가 바뀌면 짚어 둔 칸은 이제 지도에 없는 모양입니다. 마우스가
-  // 있던 자리에서 새 단계로 다시 짚습니다 — 안 그러면 서울을 짚어 둔 채 확대해
-  // 구가 그려진 지도 위에 서울 경계가 홀로 남습니다.
+  // 있던 자리에서 새 단계로 다시 짚습니다 — 안 그러면 구를 짚어 둔 채 확대해
+  // 동이 그려진 지도 위에 구 경계가 홀로 남습니다.
   useEffect(() => {
     setHovered((current) => {
       if (!current || current.level === level) return current;
@@ -349,11 +348,22 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
 
   /**
-   * 담기지 않은 카페가 얼마나 나와 있는가 (0..1). 200%에서 하나도 없고 400%에서
-   * 전부입니다. 열어 둔 카페와 내 도감의 카페는 이것과 무관하게 늘 남습니다 —
-   * 검색으로 막 고른 곳이 사라지면 안 되니까요.
+   * 담기지 않은 카페가 얼마나 나와 있는가 (0..1). 300%에서 하나도 없고 1500%에서
+   * 전부입니다.
+   *
+   * 배율에 그대로 비례시키지 않고 **제곱**에 비례시킵니다. 확대하면 화면에 남는
+   * 땅이 배율의 제곱에 반비례해 줄어드는데, 나오는 비율만 곧게 늘리면 중간에서
+   * 한 번 붐볐다가 끝으로 갈수록 도로 휑해집니다. 제곱으로 늘리면 줄어드는 땅과
+   * 상쇄되어, 확대하는 내내 화면에 찍힌 핀 수가 고르게 유지됩니다.
+   *
+   * 열어 둔 카페와 내 도감의 카페는 이것과 무관하게 늘 남습니다 — 검색으로 막
+   * 고른 곳이 사라지면 안 되니까요.
    */
-  const revealed = clamp((view.zoom - REVEAL_FROM) / (REVEAL_ALL - REVEAL_FROM), 0, 1);
+  const revealed = clamp(
+    (view.zoom ** 2 - REVEAL_FROM ** 2) / (REVEAL_ALL ** 2 - REVEAL_FROM ** 2),
+    0,
+    1,
+  );
   const zoomedIn = revealed > 0;
 
   /**
@@ -382,13 +392,13 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     return screen.x >= -margin && screen.x <= 100 + margin && screen.y >= -margin && screen.y <= 100 + margin;
   }
 
-  // 얹은 동네를 통째로 펴 보이는 건 구까지 갈린 뒤부터입니다.
+  // 얹은 동네를 통째로 펴 보이는 건 핀이 나오기 시작하는 배율(300%)부터입니다.
   //
-  // 그 전에는 경계와 이름표만 밝힙니다. 서울이 한 칸인 배율에서 얹자마자 마흔 곳이
-  // 쏟아지면, 배율을 따라 조금씩 늘리기로 한 약속이 얹는 순간 무너집니다. 멀리서는
-  // 어느 동네에 몇 곳인지면 충분하고 — 그건 이름표가 이미 말하고 있습니다.
+  // 그 전에는 경계와 이름표만 밝힙니다. 멀리서 얹자마자 그 동네가 통째로 쏟아지면,
+  // 배율을 따라 조금씩 늘리기로 한 약속이 얹는 순간 무너집니다. 어느 동네에 몇
+  // 곳인지는 이름표가 이미 말하고 있습니다.
   const hoveredCafes = hovered ? cafesIn(hovered) : [];
-  const hoveredIds = hovered && level === 3 ? new Set(hoveredCafes.map((cafe) => cafe.id)) : null;
+  const hoveredIds = hovered && zoomedIn ? new Set(hoveredCafes.map((cafe) => cafe.id)) : null;
 
   const shownCafes = cafes.filter((cafe) => {
     if (savedMarkers[cafe.id] || cafe.id === activeId || hoveredIds?.has(cafe.id)) {

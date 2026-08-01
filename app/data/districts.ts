@@ -12,6 +12,9 @@ import { project } from "./geo";
 
 export type DistrictLevel = District["level"];
 
+/** 데이터가 없는 단계로 떨어지지 않게, 가장 큰 칸을 기본으로 둡니다. */
+export const BASE_LEVEL: DistrictLevel = 2;
+
 type Loop = readonly (readonly [number, number])[];
 type Shape = { district: District; loops: Loop[] };
 
