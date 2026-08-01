@@ -56,3 +56,4 @@ dist-preview
 
 # 행정경계 원본. 5MB 넘어서 저장소에 안 넣습니다 — build/districts.py 설명의 절차로 내려받으세요.
 build/geo/
+__pycache__/
