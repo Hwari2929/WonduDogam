@@ -231,6 +231,24 @@ REGION_NOISE = 3.4
 NOISE_CALM = 4.0
 
 
+# 확대하면서 차례로 쪼개지는 세 단계. 각 단계는 구 하나(district_list 의 한 칸)를
+# 어느 묶음에 넣을지만 말하고, 경계는 그 묶음의 칸들을 합쳐서 뽑습니다.
+#
+#   1단계 시도   서울 · 경기 · 인천
+#   2단계 시·군  서울 · 인천 · 경기의 각 시 (성남시, 파주시, …)
+#   3단계 구     마포구 · 분당구 · 파주시 …
+#
+# 파주시처럼 구가 없는 시는 2·3단계가 같은 모양입니다 — 실제로 안 쪼개지니까요.
+DISTRICT_LEVELS = [
+    lambda entry: (entry["sido"], ""),
+    lambda entry: (
+        (entry["name"].split()[0], entry["sido"]) if entry["name"].split()[0].endswith(("시", "군"))
+        else (entry["sido"], "")
+    ),
+    lambda entry: (entry["name"], entry["sido"]),
+]
+
+
 def district_weight(sido, name):
     """서울의 구가 가장 잘고, 큰 시의 구가 그다음, 시 하나가 통째면 가장 큽니다."""
     if sido == "서울":
@@ -527,29 +545,39 @@ def build():
     sea_loops = loops_of(sea_mask)
     sea_path = "".join(to_path(loop) for loop in sea_loops)
 
+    # 같은 칸을 어떻게 묶느냐만 바꾸면 시도 → 시·군 → 구가 차례로 나옵니다.
+    # 경계를 세 벌 따로 그리지 않고 한 격자에서 뽑으므로, 확대하며 쪼개질 때
+    # 안쪽 선만 생길 뿐 바깥 윤곽은 한 획도 어긋나지 않습니다.
     districts = []
-    for k, entry in enumerate(district_list):
-        mask = [[owner[j][i] == k for i in range(GRID)] for j in range(GRID)]
-        # 구는 작아도 반드시 그려야 합니다. 티끌을 걸러내는 기본값을 그대로 쓰면
-        # 가장 좁은 구가 소리 없이 사라지고, 그 구의 카페는 집어들 수 없게 됩니다.
-        loops = loops_of(mask, min_points=10)
-        if not loops:
-            if entry["name"]:
-                raise SystemExit(f"{entry['name']} 이 너무 좁아 경계가 안 나옵니다.")
-            continue
-        # 이름표는 구역 한가운데에. 다만 구역이 굽어 있으면 평균 자리가 구역 밖으로
-        # 나가므로, 실제로 이 구역이 차지한 칸 중 평균에 가장 가까운 칸을 씁니다.
-        cells = [(i, j) for j in range(GRID) for i in range(GRID) if owner[j][i] == k]
-        mean_i = sum(i for i, _ in cells) / len(cells)
-        mean_j = sum(j for _, j in cells) / len(cells)
-        anchor = min(cells, key=lambda cell: (cell[0] - mean_i) ** 2 + (cell[1] - mean_j) ** 2)
-        districts.append({
-            "name": entry["name"],
-            "sido": entry["sido"],
-            "label": (center[anchor[0]], center[anchor[1]]),
-            "cafeIds": entry["cafe_ids"],
-            "path": "".join(to_path(loop) for loop in loops),
-        })
+    for level, group_of in enumerate(DISTRICT_LEVELS, start=1):
+        groups = {}
+        for k, entry in enumerate(district_list):
+            if not entry["name"]:
+                continue
+            groups.setdefault(group_of(entry), []).append(k)
+
+        for (name, sido), members in groups.items():
+            owned = set(members)
+            mask = [[owner[j][i] in owned for i in range(GRID)] for j in range(GRID)]
+            # 구는 작아도 반드시 그려야 합니다. 티끌을 걸러내는 기본값을 그대로 쓰면
+            # 가장 좁은 구가 소리 없이 사라지고, 그 구의 카페는 집어들 수 없게 됩니다.
+            loops = loops_of(mask, min_points=10)
+            if not loops:
+                raise SystemExit(f"{name} 이 너무 좁아 경계가 안 나옵니다.")
+            # 이름표는 구역 한가운데에. 다만 구역이 굽어 있으면 평균 자리가 구역 밖으로
+            # 나가므로, 실제로 이 구역이 차지한 칸 중 평균에 가장 가까운 칸을 씁니다.
+            cells = [(i, j) for j in range(GRID) for i in range(GRID) if owner[j][i] in owned]
+            mean_i = sum(i for i, _ in cells) / len(cells)
+            mean_j = sum(j for _, j in cells) / len(cells)
+            anchor = min(cells, key=lambda cell: (cell[0] - mean_i) ** 2 + (cell[1] - mean_j) ** 2)
+            districts.append({
+                "level": level,
+                "name": name,
+                "sido": sido,
+                "label": (center[anchor[0]], center[anchor[1]]),
+                "cafeIds": [cafe_id for k in members for cafe_id in district_list[k]["cafe_ids"]],
+                "path": "".join(to_path(loop) for loop in loops),
+            })
 
     # 4) 물길
     river_points = [(x, y) for x, y, _ in RIVER]
@@ -615,9 +643,9 @@ def main():
         lines = []
         for entry in entries:
             ids = ", ".join(f'"{cafe_id}"' for cafe_id in entry["cafeIds"])
-            district_id = f'{entry["sido"]} {entry["name"]}'.strip()
+            district_id = f'{entry["level"]} {entry["sido"]} {entry["name"]}'.strip()
             lines.append(
-                f'  {{ id: "{district_id}", '
+                f'  {{ id: "{district_id}", level: {entry["level"]}, '
                 f'name: "{entry["name"]}", sido: "{entry["sido"]}", '
                 f'label: [{entry["label"][0]:.2f}, {entry["label"][1]:.2f}], '
                 f"cafeIds: [{ids}], "
@@ -640,14 +668,21 @@ export const sea = "{sea}";
 /**
  * 시·구 한 칸.
  *
- * 카페 하나하나가 씨앗이고 같은 시·구의 칸을 합친 것이라, `cafeIds` 의 핀은
+ * 카페 하나하나가 씨앗이고 같은 동네의 칸을 합친 것이라, `cafeIds` 의 핀은
  * 반드시 `path` 안에 있습니다 (생성기가 매번 확인합니다). 카페가 한 곳도 없는
- * 자리를 메우는 채움 칸은 `name` 이 빈 문자열이고 집어들 수 없습니다.
+ * 자리를 메우는 채움 칸은 아예 실리지 않습니다.
+ *
+ * 세 단계가 한 배열에 같이 담깁니다. 배율에 따라 `level` 로 골라 쓰면 지도가
+ * 시도 → 시·군 → 구 순으로 쪼개집니다. 같은 격자에서 뽑았으므로 단계가 바뀌어도
+ * 바깥 윤곽은 한 획도 어긋나지 않고 안쪽 선만 생깁니다.
  */
 export type District = {{
-  /** 시도까지 붙인 이름. 서울 중구와 인천 중구가 있어서 `name` 만으로는 안 갈립니다. */
+  /** 단계와 시도까지 붙인 이름. 서울 중구와 인천 중구가 있어서 이름만으로는 안 갈립니다. */
   id: string;
+  /** 1 = 시도 · 2 = 시·군 · 3 = 구 */
+  level: 1 | 2 | 3;
   name: string;
+  /** 한 단계 위의 이름. 1단계와 서울·인천처럼 위가 자기 자신이면 빈 문자열입니다. */
   sido: string;
   /** 이름표를 놓을 자리. 구역 안쪽입니다. */
   label: [number, number];

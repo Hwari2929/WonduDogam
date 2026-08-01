@@ -8,6 +8,8 @@
 
 import { districts, type District } from "./terrain";
 
+export type DistrictLevel = District["level"];
+
 type Loop = readonly (readonly [number, number])[];
 
 /** "M1 2L3 4ZM…" → 고리들. 섬처럼 떨어진 조각과 구멍이 각각 한 고리입니다. */
@@ -27,7 +29,6 @@ function loopsOf(path: string): Loop[] {
 }
 
 const shapes: { district: District; loops: Loop[] }[] = districts
-  .filter((district) => district.name)
   .map((district) => ({ district, loops: loopsOf(district.path) }));
 
 /**
@@ -46,13 +47,16 @@ function inside(loops: Loop[], x: number, y: number) {
   return crossings % 2 === 1;
 }
 
-/** 0..100 좌표 위의 한 점이 속한 시·구. 채움 칸과 바다 위는 null 입니다. */
-export function districtAt(x: number, y: number): District | null {
+/** 그 단계에서 지도를 나누는 칸들. 그리는 순서도 이 순서를 씁니다. */
+export function districtsAtLevel(level: DistrictLevel): District[] {
+  return shapes.filter((shape) => shape.district.level === level).map((shape) => shape.district);
+}
+
+/** 0..100 좌표 위의 한 점이 그 단계에서 속한 칸. 바다 위는 null 입니다. */
+export function districtAt(x: number, y: number, level: DistrictLevel): District | null {
   for (const shape of shapes) {
+    if (shape.district.level !== level) continue;
     if (inside(shape.loops, x, y)) return shape.district;
   }
   return null;
 }
-
-/** 이름이 붙어 집어들 수 있는 칸만. 그리는 순서도 이 순서를 씁니다. */
-export const namedDistricts = shapes.map((shape) => shape.district);

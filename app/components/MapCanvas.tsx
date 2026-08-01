@@ -3,6 +3,7 @@
 import { Coffee, Minus, Plus, RotateCcw } from "lucide-react";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -11,9 +12,9 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
-import { districtAt } from "../data/districts";
+import { districtAt, districtsAtLevel, type DistrictLevel } from "../data/districts";
 import { project } from "../data/geo";
-import { districts, minorRoads, river, sea, tributaries, trunkRoads, type District } from "../data/terrain";
+import { minorRoads, river, sea, tributaries, trunkRoads, type District } from "../data/terrain";
 import type { CodexIconId } from "../marks";
 import { CodexIcon } from "./CodexIcon";
 
@@ -39,10 +40,23 @@ const TAP_SLOP = 10;
 /** 단추로 배율을 바꿀 때 미끄러지는 시간(ms). 예전 CSS 전이와 같은 체감입니다. */
 const GLIDE_MS = 140;
 /**
- * 이 배율부터 지도가 "구석을 들여다보는" 상태가 됩니다. 여기서부터 담기지 않은
- * 카페까지 모두 찍고, 이름표도 폅니다. 그 아래로는 내 것만 남습니다.
+ * 지도가 쪼개지는 배율. 확대하면 시도 → 시·군 → 구 순으로 나뉩니다.
+ * 멀리서 스물몇 개의 구가 한꺼번에 보이면 경계가 무늬가 되지, 지도가 아닙니다.
  */
-const DETAIL_ZOOM = 1.6;
+const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
+  { from: 3.5, level: 3 },
+  { from: 2.5, level: 2 },
+  { from: 1, level: 1 },
+];
+/**
+ * 담기지 않은 카페가 나오기 시작하는 배율과, 전부 나오는 배율.
+ *
+ * 여든 곳이 한 칸에서 우르르 나타나면 지도가 아니라 얼룩이 됩니다. 이 사이에서는
+ * 카페마다 정해진 제 차례에 하나씩 나옵니다 — 차례를 id 로 정하므로 끌거나
+ * 확대를 되돌려도 나왔다 들어갔다 깜박이지 않습니다.
+ */
+const REVEAL_FROM = 2;
+const REVEAL_ALL = 4;
 type View = { zoom: number; x: number; y: number };
 
 const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
@@ -52,6 +66,28 @@ export type SavedCafeMarker = { color: string; icon: CodexIconId; count: number;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+/**
+ * id 를 흩뿌리는 해시.
+ *
+ * 마무리로 한 번 더 섞는 게 핵심입니다. 곱하고 더하기만 하면 demo-01 과 demo-02 가
+ * 이웃한 값이 되어 한꺼번에 나오고, 목록이 지역 순이라 그게 곧 "한 동네가 통째로
+ * 튀어나온다"가 됩니다.
+ */
+function scatter(id: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = Math.imul(hash ^ id.charCodeAt(index), 16777619);
+  }
+  hash = Math.imul(hash ^ (hash >>> 15), 2246822507);
+  hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
+  return (hash ^ (hash >>> 16)) >>> 0;
+}
+
+/** 이 배율에서 지도를 나누는 단계. */
+function levelOf(zoom: number): DistrictLevel {
+  return LEVEL_AT.find((entry) => zoom >= entry.from)?.level ?? 1;
 }
 
 function clampView(view: View, width: number, height: number): View {
@@ -83,8 +119,23 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   /** 진행 중인 미끄러짐. 끌기나 휠이 끼어들면 즉시 놓아 줍니다. */
   const glideRef = useRef<number | null>(null);
+  /** 마지막으로 마우스가 있던 자리. 단계가 바뀌면 여기서 다시 짚습니다. */
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
   /** 마우스가 얹힌 시·구. 경계를 밝히고, 그 안의 카페를 줌아웃 상태에서도 꺼냅니다. */
   const [hovered, setHovered] = useState<District | null>(null);
+
+  const level = levelOf(view.zoom);
+  const shownDistricts = districtsAtLevel(level);
+
+  /**
+   * 카페마다 정해진 제 차례(0..1). 해시로 줄을 세운 뒤 등수를 매기므로, 배율이
+   * 절반쯤 왔으면 정확히 절반이 나와 있습니다 — 해시값을 그대로 쓰면 몰린 구간에서
+   * 우르르 쏟아지고 빈 구간에서는 아무 일도 안 일어납니다.
+   */
+  const revealOrder = useMemo(() => {
+    const ordered = [...cafes].sort((a, b) => scatter(a.id) - scatter(b.id));
+    return new Map(ordered.map((cafe, index) => [cafe.id, index / ordered.length]));
+  }, [cafes]);
 
   useEffect(() => {
     const element = mapRef.current;
@@ -99,6 +150,18 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
   useEffect(() => () => stopGlide(), []);
+
+  // 확대하다 단계가 바뀌면 짚어 둔 칸은 이제 지도에 없는 모양입니다. 마우스가
+  // 있던 자리에서 새 단계로 다시 짚습니다 — 안 그러면 서울을 짚어 둔 채 확대해
+  // 구가 그려진 지도 위에 서울 경계가 홀로 남습니다.
+  useEffect(() => {
+    setHovered((current) => {
+      if (!current || current.level === level) return current;
+      const spot = pointerRef.current;
+      return spot ? districtUnder(spot.x, spot.y) : null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level]);
 
   function commitView(next: View) {
     viewRef.current = next;
@@ -189,6 +252,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     return districtAt(
       ((clientX - rect.left - current.x) / current.zoom / rect.width) * 100,
       ((clientY - rect.top - current.y) / current.zoom / rect.height) * 100,
+      levelOf(current.zoom),
     );
   }
 
@@ -206,6 +270,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // 손가락에는 "올려 두기"가 없습니다. 눌린 채로만 좌표가 오니 지나간 자리마다
     // 동네가 켜졌다 꺼집니다. 마우스는 지나가기만 해도 켜고, 손가락은 뗄 때 켭니다.
     if (event.pointerType !== "mouse") return;
+    pointerRef.current = { x: event.clientX, y: event.clientY };
     const next = districtUnder(event.clientX, event.clientY);
     setHovered((current) => (current?.id === next?.id ? current : next));
   }
@@ -242,12 +307,14 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (event.key === "0") { event.preventDefault(); resetView(); }
   }
 
+
   /**
-   * 줌아웃 상태에서는 내 도감에 담긴 곳만 남깁니다. 여든 곳이 한 화면에 다 찍히면
-   * 지도가 아니라 얼룩이 되고, 그중 무엇이 내 것인지도 묻힙니다. 열어 둔 카페는
-   * 담기지 않았어도 남습니다 — 검색으로 막 고른 곳이 사라지면 안 되니까요.
+   * 담기지 않은 카페가 얼마나 나와 있는가 (0..1). 200%에서 하나도 없고 400%에서
+   * 전부입니다. 열어 둔 카페와 내 도감의 카페는 이것과 무관하게 늘 남습니다 —
+   * 검색으로 막 고른 곳이 사라지면 안 되니까요.
    */
-  const zoomedIn = view.zoom >= DETAIL_ZOOM;
+  const revealed = clamp((view.zoom - REVEAL_FROM) / (REVEAL_ALL - REVEAL_FROM), 0, 1);
+  const zoomedIn = revealed > 0;
 
   /**
    * 지도 좌표(0..100) → 화면 위의 백분율.
@@ -275,13 +342,20 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     return screen.x >= -margin && screen.x <= 100 + margin && screen.y >= -margin && screen.y <= 100 + margin;
   }
 
-  // 마우스를 얹은 동네는 배율과 상관없이 통째로 펴 보입니다 — 어느 동네에 무엇이
-  // 있는지 보려고 굳이 확대까지 하게 만들 이유가 없습니다.
-  const hoveredIds = hovered ? new Set(hovered.cafeIds) : null;
+  // 얹은 동네를 통째로 펴 보이는 건 구까지 갈린 뒤부터입니다.
+  //
+  // 그 전에는 경계와 이름표만 밝힙니다. 서울이 한 칸인 배율에서 얹자마자 마흔 곳이
+  // 쏟아지면, 배율을 따라 조금씩 늘리기로 한 약속이 얹는 순간 무너집니다. 멀리서는
+  // 어느 동네에 몇 곳인지면 충분하고 — 그건 이름표가 이미 말하고 있습니다.
+  const hoveredIds = hovered && level === 3 ? new Set(hovered.cafeIds) : null;
 
   const shownCafes = cafes.filter((cafe) => {
-    // 줌아웃 상태에서는 지금 고른 도감에 담긴 곳과 열어 둔 카페만 남습니다.
-    if (!zoomedIn && !savedMarkers[cafe.id] && cafe.id !== activeId && !hoveredIds?.has(cafe.id)) return false;
+    if (savedMarkers[cafe.id] || cafe.id === activeId || hoveredIds?.has(cafe.id)) {
+      const { x, y } = project(cafe.pos[0], cafe.pos[1]);
+      return inView(x, y);
+    }
+    // 나머지는 제 차례가 와야 나옵니다.
+    if ((revealOrder.get(cafe.id) ?? 0) >= revealed) return false;
     const { x, y } = project(cafe.pos[0], cafe.pos[1]);
     return inView(x, y);
   });
@@ -325,7 +399,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
         <svg className="map__terrain" viewBox={viewBox} preserveAspectRatio="none" aria-hidden="true">
           {minorRoads.map((d, index) => <path key={`minor-${index}`} className="terrain__road terrain__road--minor" d={d} />)}
           {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
-          {districts.map((district, index) => <path key={`district-${index}`} className={`terrain__district terrain__district--${index % 3}`} d={district.path} />)}
+          {shownDistricts.map((district, index) => <path key={district.id} className={`terrain__district terrain__district--${index % 3}`} d={district.path} />)}
           {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
           <path className="terrain__river" d={river} /><path className="terrain__sea" d={sea} fillRule="evenodd" />
         </svg>
@@ -345,7 +419,8 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
             {/* 중구는 서울에도 인천에도 있습니다. 시도를 같이 적어야 어디인지 압니다. */}
             <span className="region-label" style={{ left: `${labelSpot.x}%`, top: `${labelSpot.y}%` }}>
               <b>{hovered.name}</b>
-              <i>{hovered.sido} · <span className="tabular">카페 {hovered.cafeIds.length}곳</span></i>
+              {/* 시도 칸은 위가 자기 자신이라 앞에 붙일 이름이 없습니다. */}
+              <i>{hovered.sido ? `${hovered.sido} · ` : ""}<span className="tabular">카페 {hovered.cafeIds.length}곳</span></i>
             </span>
           </>
         ) : null}
