@@ -631,7 +631,7 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   assert.match(canvas, /stopGlide\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
   assert.match(canvas, /stopGlide\(\);\s*\n\s*event\.currentTarget\.setPointerCapture/);
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
-  assert.match(canvas, /useEffect\(\(\) => \(\) => stopGlide\(\), \[\]\);/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*if \(frameRef\.current !== null\) cancelAnimationFrame\(frameRef\.current\);/);
   // 모션을 줄인 사람에게는 미끄러지지 않고 곧바로 놓습니다.
   assert.match(canvas, /prefers-reduced-motion: reduce/);
 });
@@ -695,7 +695,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /\{ from: 5, level: 3 \}/);
   assert.match(canvas, /\{ from: 1, level: 2 \}/);
   assert.doesNotMatch(canvas, /level: 1/);
-  assert.match(canvas, /const shownDistricts = districtsAtLevel\(level\);/);
+  assert.match(canvas, /const pieces = useMemo\(\(\) => piecesInView\(level, tile\), \[tileKey\]\);/);
   assert.match(canvas, /levelRef\.current,/);
 
   // 지도에서 도드라지는 건 지금 고른 도감뿐입니다 — 탭을 옮기면 지도도 옮겨 갑니다.
@@ -1079,4 +1079,64 @@ test("검색 종이는 같은 말을 두 번 하지 않는다", async () => {
 
   // 좁은 화면에서는 머리줄을 통째로 감춥니다 — 종이에 남는 건 칠 자리뿐입니다.
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-panel__head \{\s*\n\s*display: none;/);
+});
+
+test("좁은 화면의 시트는 잘리고, 조금만 튕겨도 내려간다", async () => {
+  const [page, receipt, drag, css] = await Promise.all(
+    ["../app/page.tsx", "../app/components/Receipt.tsx", "../app/useSheetDrag.ts", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 흐르는 자리는 손잡이 **아래**입니다. 하나로 두면 종이가 손잡이 뒤로 흘러
+  // 들어가 상호 위에 겹칩니다 — 잘려야 할 자리입니다.
+  assert.match(page, /<div className="dock__scroll">/);
+  assert.match(css, /\.dock \{[^}]*overflow: hidden;/s);
+  assert.match(css, /\.dock__scroll \{[^}]*overflow-y: auto;[\s\S]*?overscroll-behavior: contain;/s);
+  assert.doesNotMatch(css, /\.sheet-handle \{\s*\n\s*position: sticky/);
+
+  // 시트에서는 상세가 접힘의 대상이 아닙니다 — 단추 자체를 두지 않습니다.
+  assert.match(page, /sheet=\{isSheet\}/);
+  assert.match(receipt, /const showDetail = sheet \|\| detailOpen;/);
+  assert.match(receipt, /\{sheet \? null : \(\s*\n\s*<div className="receipt__actions">/);
+
+  // 내려가는 건 거리가 아니라 기세입니다. 끌던 속도로 한 자리씩 옮깁니다.
+  assert.match(drag, /const FLICK = 0\.25;/);
+  assert.match(drag, /if \(velocity > FLICK\)/);
+  assert.match(drag, /if \(velocity < -FLICK\)/);
+  // 끌고 나서 떼는 것도 click 을 부르므로, 끈 손짓이면 탭 처리는 물러납니다.
+  assert.match(drag, /if \(gesture\.current\.moved > TAP_SLOP\) return;/);
+  // 자리를 state 로 들고 있으면 손가락이 움직이는 프레임마다 화면 전체가 다시 그려집니다.
+  assert.match(drag, /sheet\.style\.setProperty\("--sheet-y", `\$\{y\}px`\)/);
+  assert.doesNotMatch(drag, /setDragY/);
+});
+
+test("지도는 보이는 칸만 그리고, 한 프레임에 한 번만 다시 그린다", async () => {
+  const [canvas, surface, lookup, page] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/components/MapSurface.tsx", "../app/data/districts.ts", "../app/page.tsx"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 읍면동 1,100칸 중 화면에 실제로 걸치는 건 수십 칸입니다. 나머지를 DOM 에
+  // 만들어 두면 만드는 값도 값이거니와 확대할 때마다 안 보이는 길까지 훑습니다.
+  assert.match(lookup, /export function piecesInView\(level: DistrictLevel, box: Bounds\): DistrictPiece\[\]/);
+  assert.match(lookup, /if \(bx1 < x0 \|\| bx0 > x1 \|\| by1 < y0 \|\| by0 > y1\) continue;/);
+  // 고리는 짚어 볼 때만 풉니다 — 천 칸을 통째로 푸는 건 폰에서 150ms 짜리 일입니다.
+  assert.match(lookup, /function loopsFor\(shape: Shape\): Loop\[\]/);
+  assert.match(lookup, /shape\.loops \?\?= loopsOf\(shape\.district\.path\);/);
+  assert.match(lookup, /if \(x < x0 \|\| x > x1 \|\| y < y0 \|\| y > y1\) continue;/);
+  // 색은 그리기 전에 정해 둡니다. 그릴 때 자리로 세면 밀 때마다 색이 바뀝니다.
+  assert.match(lookup, /tint: index % 3/);
+
+  // 끌거나 확대해도 길 자체는 그대로입니다 — 바뀌는 건 창(viewBox) 하나뿐입니다.
+  assert.match(canvas, /const Terrain = memo\(function Terrain\(\{ pieces \}/);
+  assert.match(canvas, /const MarkerFace = memo\(function MarkerFace/);
+  assert.match(canvas, /<Terrain pieces=\{pieces\} \/>/);
+  // 손가락은 프레임보다 자주 옵니다. 값은 곧바로, 다시 그리기는 한 프레임에 한 번.
+  assert.match(canvas, /function commitViewSoon\(next: View\)/);
+  assert.match(canvas, /if \(next\) commitViewSoon\(next\);/);
+  assert.match(canvas, /flushView\(\);/);
+  // 검색어 한 글자마다 지도가 딸려 오지 않게 한 번 끊습니다.
+  assert.match(surface, /export const MapSurface = memo\(function MapSurface/);
+  // memo 는 넘겨주는 손잡이가 렌더마다 새로 만들어지지 않아야 뜻이 있습니다.
+  assert.match(page, /const openCafe = useCallback\(\(id: string\) => \{/);
 });

@@ -16,7 +16,12 @@ export type DistrictLevel = District["level"];
 export const BASE_LEVEL: DistrictLevel = 2;
 
 type Loop = readonly (readonly [number, number])[];
-type Shape = { district: District; loops: Loop[] };
+/** 네 귀퉁이 [x0, y0, x1, y1]. */
+type Bounds = readonly [number, number, number, number];
+type Shape = { district: District; tint: number; bounds: Bounds; loops: Loop[] | null };
+
+/** 그림 한 조각. 이름도 라벨도 필요 없는, 그리기만 하는 쪽이 받는 몫입니다. */
+export type DistrictPiece = { id: string; path: string; tint: number };
 
 /** "M1 2L3 4ZM…" → 고리들. 섬처럼 떨어진 조각과 구멍이 각각 한 고리입니다. */
 function loopsOf(path: string): Loop[] {
@@ -50,8 +55,58 @@ function inside(loops: Loop[], x: number, y: number) {
   return crossings % 2 === 1;
 }
 
+/**
+ * path 문자열을 숫자만 훑어 네 귀퉁이를 냅니다.
+ *
+ * 고리로 풀어내는 것보다 훨씬 쌉니다 — 꼭짓점마다 배열을 만들지 않고 최소·최대
+ * 넷만 들고 갑니다. 화면 밖 칸을 걸러내고 짚을 후보를 좁히는 데는 이 넷이면
+ * 충분하고, 읍면동 1,100칸을 전부 고리로 푸는 일(폰에서 150ms 남짓)은 정작
+ * 짚어 본 칸에서만 하면 됩니다.
+ */
+function boundsOf(path: string): Bounds {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  let index = 0;
+  let readingX = true;
+  while (index < path.length) {
+    const code = path.charCodeAt(index);
+    // 45 = '-', 48..57 = '0'..'9'
+    if (code === 45 || (code >= 48 && code <= 57)) {
+      let end = index + 1;
+      while (end < path.length) {
+        const next = path.charCodeAt(end);
+        if ((next >= 48 && next <= 57) || next === 46) end += 1;
+        else break;
+      }
+      const value = Number(path.slice(index, end));
+      if (readingX) {
+        if (value < x0) x0 = value;
+        if (value > x1) x1 = value;
+      } else {
+        if (value < y0) y0 = value;
+        if (value > y1) y1 = value;
+      }
+      readingX = !readingX;
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+  return [x0, y0, x1, y1];
+}
+
 function shapesOf(source: District[]): Shape[] {
-  return source.map((district) => ({ district, loops: loopsOf(district.path) }));
+  // 옅고 짙은 세 벌을 번갈아 칠하는 순서는 여기서 한 번 정합니다. 그릴 때
+  // 자리로 세면 화면 밖 칸을 걸러낸 만큼 번호가 밀려, 밀 때마다 색이 바뀝니다.
+  return source.map((district, index) => ({ district, tint: index % 3, bounds: boundsOf(district.path), loops: null }));
+}
+
+/** 고리는 정말 필요할 때 — 짚어 볼 때 — 한 번만 풉니다. */
+function loopsFor(shape: Shape): Loop[] {
+  shape.loops ??= loopsOf(shape.district.path);
+  return shape.loops;
 }
 
 const byLevel = new Map<DistrictLevel, Shape[]>();
@@ -88,9 +143,30 @@ export function hasLevel(level: DistrictLevel) {
 /** 0..100 좌표 위의 한 점이 그 단계에서 속한 칸. 바다 위는 null 입니다. */
 export function districtAt(x: number, y: number, level: DistrictLevel): District | null {
   for (const shape of byLevel.get(level) ?? []) {
-    if (inside(shape.loops, x, y)) return shape.district;
+    // 네 귀퉁이 밖이면 안쪽을 볼 것도 없습니다. 천 칸 중 두어 칸만 남습니다.
+    const [x0, y0, x1, y1] = shape.bounds;
+    if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+    if (inside(loopsFor(shape), x, y)) return shape.district;
   }
   return null;
+}
+
+/**
+ * 이 창에 걸치는 칸만.
+ *
+ * 읍면동까지 갈리면 천 칸이 넘는데, 500% 넘게 확대한 화면에 실제로 보이는 건
+ * 그중 수십 칸입니다. 나머지를 DOM 에 만들어 두면 만드는 값도 값이거니와,
+ * 그 뒤로 확대할 때마다 브라우저가 안 보이는 길까지 훑습니다.
+ */
+export function piecesInView(level: DistrictLevel, box: Bounds): DistrictPiece[] {
+  const [x0, y0, x1, y1] = box;
+  const pieces: DistrictPiece[] = [];
+  for (const shape of byLevel.get(level) ?? []) {
+    const [bx0, by0, bx1, by1] = shape.bounds;
+    if (bx1 < x0 || bx0 > x1 || by1 < y0 || by0 > y1) continue;
+    pieces.push({ id: shape.district.id, path: shape.district.path, tint: shape.tint });
+  }
+  return pieces;
 }
 
 /**
@@ -105,7 +181,8 @@ const cafeCache = new Map<string, Cafe[]>();
 export function cafesIn(district: District): Cafe[] {
   const cached = cafeCache.get(district.id);
   if (cached) return cached;
-  const loops = loopsOf(district.path);
+  const shape = (byLevel.get(district.level) ?? []).find((entry) => entry.district.id === district.id);
+  const loops = shape ? loopsFor(shape) : loopsOf(district.path);
   const found = cafes.filter((cafe) => {
     const spot = project(cafe.pos[0], cafe.pos[1]);
     return inside(loops, spot.x, spot.y);

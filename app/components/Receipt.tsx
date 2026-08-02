@@ -24,6 +24,7 @@ export function Receipt({
   selectedCollectionIds,
   onToggleCollection,
   onClose,
+  sheet = false,
 }: {
   cafe: Cafe;
   /** 이 카페에 사용자가 적어 둔 한 줄. 있으면 관리자 소개보다 이게 앞섭니다. */
@@ -34,9 +35,18 @@ export function Receipt({
   selectedCollectionIds: string[];
   onToggleCollection: (collectionId: string, included: boolean, event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
+  /**
+   * 하단 시트로 내려온 좁은 화면인가.
+   *
+   * 시트에서는 상세가 접힘의 대상이 아닙니다 — 종이가 이미 화면을 차지하고 있고,
+   * 밑으로 흐르는 것도 그것뿐이라 "펼치기"가 아낄 자리가 없습니다. 한 번 더
+   * 누르게 하는 것 말고는 하는 일이 없는 단추라 아예 두지 않습니다.
+   */
+  sheet?: boolean;
 }) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const showDetail = sheet || detailOpen;
   const saveRef = useRef<HTMLDivElement>(null);
   const confirmed = cafe.partner;
   const saved = selectedCollectionIds.length > 0;
@@ -137,16 +147,18 @@ export function Receipt({
         {summary}
       </p>
 
-      <div className="receipt__actions">
-        <button className="receipt-action text-button" type="button" onClick={() => setDetailOpen((value) => !value)} aria-expanded={detailOpen}>
-          {detailOpen ? "접기" : "상세 보기"}
-        </button>
-      </div>
+      {sheet ? null : (
+        <div className="receipt__actions">
+          <button className="receipt-action text-button" type="button" onClick={() => setDetailOpen((value) => !value)} aria-expanded={detailOpen}>
+            {detailOpen ? "접기" : "상세 보기"}
+          </button>
+        </div>
+      )}
 
       {/* §06 — 요약은 문장(SUIT) 중심, 상세는 표(모노) 중심.
           점선은 BEAN LIST 앞의 한 줄만 남깁니다. 표 하나에 구분선 셋이면
           읽는 리듬이 아니라 격자가 됩니다. */}
-      {detailOpen ? (
+      {showDetail ? (
         <section className="detail" aria-label={`${cafe.name} 상세 정보`}>
           <dl className="detail__table">
             <div><dt>지역</dt><dd>{cafe.area}</dd></div>

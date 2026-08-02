@@ -302,13 +302,15 @@ export default function Home() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [sidebarOpen, codexPreviewId, closePanel]);
 
-  function openCafe(id: string) {
+  // 지도에 넘겨주는 손잡이라 렌더마다 새로 만들면 안 됩니다 — 새 함수는 곧
+  // 새 props 이고, 그러면 MapSurface 를 memo 로 묶어 둔 뜻이 없어집니다.
+  const openCafe = useCallback((id: string) => {
     setCodexPreviewId(null);
     setPhase("docked");
     setQuery("");
     setCursor(0);
     navigate(`/c/${encodeURIComponent(id)}`);
-  }
+  }, []);
 
   /**
    * 화살표와 엔터는 화면에 적어 두지 않습니다 — 마우스와 손가락으로 오는 사람에게는
@@ -533,7 +535,6 @@ export default function Home() {
               .filter(Boolean)
               .join(" ")}
             id="dock"
-            style={sheet.style}
           >
             <button
               className="sheet-handle"
@@ -542,6 +543,9 @@ export default function Home() {
               aria-expanded={sheet.snap === "full"}
               {...sheet.handleProps}
             />
+            {/* 스크롤은 손잡이 **아래**에서만 일어납니다. 하나로 두면 종이가
+                손잡이 뒤로 흘러 들어가, 상호 위에 손잡이가 겹쳐 보입니다. */}
+            <div className="dock__scroll">
             {panel === "codex" ? (
               <div className="dock__pair">
                 {codexPreviewCafe ? (
@@ -555,6 +559,7 @@ export default function Home() {
                       selectedCollectionIds={marks.find((mark) => mark.id === codexPreviewCafe.id)?.collectionIds ?? []}
                       onToggleCollection={(collectionId, included, event) => onToggleCollection(codexPreviewCafe, collectionId, included, event)}
                       onClose={() => setCodexPreviewId(null)}
+                      sheet={isSheet}
                     />
                   </div>
                 ) : null}
@@ -583,8 +588,10 @@ export default function Home() {
                 selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
                 onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
                 onClose={closePanel}
+                sheet={isSheet}
               />
             )}
+            </div>
           </div>
         </>
       ) : (

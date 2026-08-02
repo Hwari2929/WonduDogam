@@ -71,9 +71,6 @@
 
   --grain-opacity: 0.05;
   --grain-blend: multiply;
-  --grain-invert: 0;
-  --map-wash-color: color-mix(in srgb, var(--desk) 20%, transparent);
-  --map-wash-filter: saturate(0.55) sepia(0.08) contrast(0.95);
 }
 
 [data-theme="warm"] {
@@ -98,9 +95,6 @@
 
   --grain-opacity: 0.075;
   --grain-blend: screen;
-  --grain-invert: 1;
-  --map-wash-color: color-mix(in srgb, var(--desk) 26%, transparent);
-  --map-wash-filter: saturate(0.5) brightness(0.74) contrast(0.92);
 }
 
 [data-theme="cool"] {
@@ -125,9 +119,6 @@
 
   --grain-opacity: 0.06;
   --grain-blend: screen;
-  --grain-invert: 1;
-  --map-wash-color: color-mix(in srgb, var(--desk) 26%, transparent);
-  --map-wash-filter: saturate(0.32) brightness(0.72) contrast(0.94);
 }
 
 :root {
@@ -418,30 +409,6 @@ a:focus-visible,
 .map--live {
   background: var(--desk);
 }
-.map__tiles {
-  position: absolute;
-  inset: 0;
-}
-
-/* 타일 자체의 스타일은 건드리지 않고, 지도 전체를 투명한 테마 막으로 덮습니다.
-   옅은 색막과 backdrop-filter가 채도·대비만 낮추므로 지도 세부 정보는 계속 보입니다. */
-.map__wash {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: var(--map-wash-color);
-  -webkit-backdrop-filter: var(--map-wash-filter);
-  backdrop-filter: var(--map-wash-filter);
-}
-/* SDK 오버레이는 자기 좌표에 놓이므로 마커가 스스로 중심을 잡지 않습니다. */
-.map-marker--pinned {
-  position: relative;
-  left: auto;
-  top: auto;
-  transform: none;
-}
-
 .terrain__sea,
 .terrain__river,
 .terrain__stream,
@@ -516,7 +483,14 @@ a:focus-visible,
   background-size: 128px 128px;
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
-  filter: invert(var(--grain-invert));
+}
+/* invert(0) 도 필터라, 지도가 움직이는 프레임마다 화면 전체를 한 번 더 훑습니다.
+   뒤집을 일이 있는 어두운 종이에서만 겁니다. */
+[data-theme="warm"] .map__grain,
+[data-theme="cool"] .map__grain,
+[data-theme="warm"] .codex::before,
+[data-theme="cool"] .codex::before {
+  filter: invert(1);
 }
 
 .map__places span {
@@ -925,10 +899,26 @@ a:focus-visible,
   /* 아래끝은 지도 연장(축척·확대축소) 몫으로 비웁니다. 종이는 안에서 스크롤되지만,
      닿지 않는 단추는 없는 단추라 그쪽을 먼저 지킵니다. */
   max-height: calc(100svh - var(--dock-top) - 104px);
-  overflow: auto;
-  scrollbar-width: none;
-  filter: drop-shadow(0 10px 20px var(--shadow));
+  display: flex;
+  flex-direction: column;
+  /* 흐르는 건 안쪽(.dock__scroll)입니다. 여기서 흘리면 손잡이가 같이 흘러갑니다. */
+  overflow: hidden;
+  /* drop-shadow 는 필터라, 시트가 움직이는 프레임마다 흐림을 다시 굽습니다.
+     같은 그림자를 box-shadow 로 그리면 합성만으로 끝납니다. */
+  box-shadow: 0 10px 20px var(--shadow);
   transition: transform 640ms var(--ease-paper);
+}
+
+.dock__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* 종이 끝에서 더 밀어도 뒤의 페이지가 따라 움직이지 않습니다. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.dock__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .dock.has-preview {
@@ -947,10 +937,6 @@ a:focus-visible,
 .dock__codex {
   min-width: 0;
 }
-.dock::-webkit-scrollbar {
-  display: none;
-}
-
 /* 첫 진입: 도크 자리에서 화면 한가운데로 옮겨 놓았다가, 지도를 만지면
    제자리로 돌아갑니다. 위치를 계산으로 잡아 두면 애니메이션이 transform 하나로 끝납니다.
    하단 시트로 내려가는 폭에서는 이 계산이 아예 성립하지 않으므로(--dock-top: auto)
@@ -1924,8 +1910,8 @@ a:focus-visible,
     bottom: 0;
     width: 100%;
     max-height: 68svh;
-    padding-top: 16px;
-    filter: drop-shadow(0 -14px 26px var(--shadow));
+    padding-top: 10px;
+    box-shadow: 0 -14px 26px var(--shadow);
   }
   /* 모바일에서는 처음부터 시트 자리에서 프린트되고, 이후엔 끌기만 자리를 바꿉니다. */
   .dock.is-center,
@@ -1949,15 +1935,15 @@ a:focus-visible,
     display: none;
   }
 
+  /* 흐르는 자리 바깥에 섭니다. 안에 두면 종이가 손잡이 뒤로 흘러 들어가
+     상호 위에 겹칩니다 — 여기서 잘려야 할 자리입니다. */
   .sheet-handle {
-    position: sticky;
-    top: 0;
-    z-index: 2;
+    flex: none;
     display: block;
     width: 100%;
-    height: 22px;
+    height: 26px;
     padding: 0;
-    margin: 0 auto 6px;
+    margin: 0 auto 4px;
     border: 0;
     background: transparent;
     cursor: grab;

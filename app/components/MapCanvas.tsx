@@ -2,6 +2,7 @@
 
 import { Coffee, Minus, Plus, RotateCcw } from "lucide-react";
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -12,7 +13,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
-import { BASE_LEVEL, cafesIn, districtAt, districtsAtLevel, hasLevel, loadDongDistricts, type DistrictLevel } from "../data/districts";
+import { BASE_LEVEL, cafesIn, districtAt, hasLevel, loadDongDistricts, piecesInView, type DistrictLevel, type DistrictPiece } from "../data/districts";
 import { project, SPAN_KM, UNIT_ASPECT } from "../data/geo";
 import { ICON } from "../icons";
 import { outside, sea, type District } from "../data/districts-data";
@@ -78,6 +79,13 @@ const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
  */
 const REVEAL_FROM = 3;
 const REVEAL_ALL = 15;
+/**
+ * 창 밖으로 이만큼까지의 칸은 미리 그려 둡니다 (창 크기 대비). 딱 맞게 자르면
+ * 끌기 시작하는 순간 가장자리에서 땅이 자라나는 게 보입니다.
+ */
+const TILE_MARGIN = 0.4;
+/** 창이 이만큼(창 크기 대비) 움직이기 전에는 그리는 목록을 다시 내지 않습니다. */
+const TILE_STEP = 0.25;
 type View = { zoom: number; x: number; y: number };
 
 const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
@@ -153,6 +161,42 @@ function windowOf(view: View, size: { width: number; height: number }) {
   };
 }
 
+/**
+ * 지형 그림. 끌거나 확대해도 **길 자체는 그대로**입니다 — 바뀌는 건 바깥 <svg> 의
+ * 창(viewBox) 하나뿐입니다.
+ *
+ * 그래서 여기를 떼어 memo 로 묶습니다. 안 묶으면 손가락이 움직이는 프레임마다
+ * 읍면동 1,108칸을 통째로 다시 만들어 맞춰 보게 되는데, 결과는 늘 같습니다.
+ * 폰에서 확대할 때 800ms 가까이 멈춰 서 있던 게 전부 이 헛일이었습니다.
+ */
+const Terrain = memo(function Terrain({ pieces }: { pieces: DistrictPiece[] }) {
+  return (
+    <>
+      {minorRoads.map((d, index) => <path key={`minor-${index}`} className="terrain__road terrain__road--minor" d={d} />)}
+      {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
+      {pieces.map((piece) => <path key={piece.id} className={`terrain__district terrain__district--${piece.tint}`} d={piece.path} />)}
+      {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
+      {/* 바다는 창에서 뭍을 도려낸 모양이라 evenodd 로 칠합니다. 수도권 밖(강원·충청
+          언저리)은 데이터가 없어 물색이 번지므로 뭍 색으로 덮습니다. */}
+      <path className="terrain__sea" d={sea} fillRule="evenodd" />
+      <path className="terrain__outside" d={outside} />
+      <path className="terrain__river" d={river} />
+    </>
+  );
+});
+
+/**
+ * 핀 속 그림. 자리는 프레임마다 바뀌지만 얼굴은 안 바뀝니다 — 떼어 두지 않으면
+ * 끌 때마다 카페 수만큼의 아이콘 SVG 를 다시 짓습니다.
+ */
+const MarkerFace = memo(function MarkerFace({ icon }: { icon: CodexIconId | null }) {
+  return (
+    <span className="map-marker__dot">
+      {icon ? <CodexIcon name={icon} size={ICON.sm} /> : <Coffee size={ICON.sm} aria-hidden="true" />}
+    </span>
+  );
+});
+
 export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract }: {
   cafes: Cafe[];
   activeId: string | null;
@@ -174,6 +218,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   /** 진행 중인 미끄러짐. 끌기나 휠이 끼어들면 즉시 놓아 줍니다. */
   const glideRef = useRef<number | null>(null);
+  /** 다시 그리기를 한 프레임에 한 번으로 모으는 자리. */
+  const frameRef = useRef<number | null>(null);
+  const flushRef = useRef<View | null>(null);
   /** 마지막으로 마우스가 있던 자리. 단계가 바뀌면 여기서 다시 짚습니다. */
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   /** 마우스가 얹힌 행정구역. 경계를 밝히고, 그 안의 카페를 꺼냅니다. */
@@ -183,7 +230,6 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
   const wanted = levelOf(view.zoom);
   const level = (wanted === 3 && !dongReady ? BASE_LEVEL : wanted) as DistrictLevel;
-  const shownDistricts = districtsAtLevel(level);
   // 짚는 건 이벤트에서 일어나므로, 지금 그려져 있는 단계를 ref 로 따로 들고 갑니다.
   const levelRef = useRef<DistrictLevel>(level);
 
@@ -209,7 +255,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }, []);
 
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
-  useEffect(() => () => stopGlide(), []);
+  useEffect(() => () => {
+    stopGlide();
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  }, []);
 
   useEffect(() => {
     levelRef.current = level;
@@ -242,7 +291,34 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
   function commitView(next: View) {
     viewRef.current = next;
+    flushRef.current = null;
     setView(next);
+  }
+
+  /**
+   * 값은 곧바로 반영하되 **다시 그리는 건 한 프레임에 한 번**으로 모읍니다.
+   *
+   * 손가락과 휠은 프레임보다 자주 옵니다 (폰에서 120Hz 짜리도 흔합니다). 오는
+   * 족족 다시 그리면 화면에 나오지도 못할 그림을 짓느라 정작 다음 프레임이 늦습니다.
+   * 짚기·확대 셈은 viewRef 를 보므로 한 프레임 늦어지는 값은 없습니다.
+   */
+  function commitViewSoon(next: View) {
+    viewRef.current = next;
+    flushRef.current = next;
+    if (frameRef.current !== null) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      const pending = flushRef.current;
+      if (pending) setView(pending);
+    });
+  }
+
+  /** 손을 뗀 순간에는 기다리지 않고 마지막 자리를 그대로 그립니다. */
+  function flushView() {
+    if (frameRef.current === null) return;
+    cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    if (flushRef.current) setView(flushRef.current);
   }
 
   function stopGlide() {
@@ -319,7 +395,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // 단추와 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
     const rate = viewRef.current.zoom >= FAST_FROM ? 0.0021 : 0.0015;
     const next = zoomedView(viewRef.current.zoom * Math.exp(-event.deltaY * rate), event.clientX, event.clientY);
-    if (next) commitView(next);
+    if (next) commitViewSoon(next);
   }
 
   function onPointerDown(event: ReactPointerEvent<HTMLElement>) {
@@ -350,7 +426,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     const drag = dragRef.current;
     const rect = mapRef.current?.getBoundingClientRect();
     if (drag && drag.pointerId === event.pointerId && rect) {
-      commitView(clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height));
+      commitViewSoon(clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height));
       // 지도를 옮기기 시작했으면 짚어 둔 동네는 놓습니다. 누르는 순간에 놓아
       // 버리면, 손가락으로 톡 쳤을 때 방금 켠 것인지 원래 켜져 있던 것인지
       // 구분할 수 없어 같은 곳을 다시 쳐도 안 꺼집니다.
@@ -369,6 +445,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     const drag = dragRef.current;
     if (drag?.pointerId !== event.pointerId) return;
     dragRef.current = null;
+    flushView();
     setDragging(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
 
@@ -420,6 +497,22 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   /** 지금 보고 있는 땅의 창문. 그림도 핀도 이 하나를 보고 자리를 잡습니다. */
   const window_ = size ? windowOf(view, size) : { x: 0, y: 0, w: 100, h: 100 };
   const viewBox = `${window_.x} ${window_.y} ${window_.w} ${window_.h}`;
+
+  /**
+   * 그릴 칸의 목록. 창을 눈금에 맞춰 끊어 두는 게 요점입니다 — 그대로 쓰면 창이
+   * 1px 만 움직여도 새 배열이 나와서, 목록을 떼어 memo 로 묶어 둔 뜻이 없어집니다.
+   */
+  const step = Math.max(window_.w * TILE_STEP, 0.25);
+  const snap = (value: number) => Math.floor(value / step) * step;
+  const tile: [number, number, number, number] = [
+    snap(window_.x - window_.w * TILE_MARGIN),
+    snap(window_.y - window_.h * TILE_MARGIN),
+    snap(window_.x + window_.w * (1 + TILE_MARGIN)) + step,
+    snap(window_.y + window_.h * (1 + TILE_MARGIN)) + step,
+  ];
+  const tileKey = `${level}:${tile.join(",")}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pieces = useMemo(() => piecesInView(level, tile), [tileKey]);
 
   /**
    * 지도 좌표(0..100) → 화면 위의 백분율.
@@ -509,15 +602,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           자리를 셈해서 놓입니다. 늘려 붙이는 단계가 아예 없어야 안 뭉갭니다. */}
       <div className="map__layer map__viewport">
         <svg className="map__terrain" viewBox={viewBox} preserveAspectRatio="none" aria-hidden="true">
-          {minorRoads.map((d, index) => <path key={`minor-${index}`} className="terrain__road terrain__road--minor" d={d} />)}
-          {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
-          {shownDistricts.map((district, index) => <path key={district.id} className={`terrain__district terrain__district--${index % 3}`} d={district.path} />)}
-          {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
-          {/* 바다는 창에서 뭍을 도려낸 모양이라 evenodd 로 칠합니다. 수도권 밖(강원·충청
-              언저리)은 데이터가 없어 물색이 번지므로 뭍 색으로 덮습니다. */}
-          <path className="terrain__sea" d={sea} fillRule="evenodd" />
-          <path className="terrain__outside" d={outside} />
-          <path className="terrain__river" d={river} />
+          <Terrain pieces={pieces} />
         </svg>
       </div>
       <div className="map__grain" aria-hidden="true" />
@@ -558,7 +643,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
             aria-label={`${cafe.name}, ${cafe.area}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
             aria-pressed={active}
           >
-            <span className="map-marker__dot">{saved ? <CodexIcon name={saved.icon} size={ICON.sm} /> : <Coffee size={ICON.sm} aria-hidden="true" />}</span>
+            <MarkerFace icon={saved?.icon ?? null} />
             {saved ? <span className="map-marker__name">{cafe.name}{saved.count > 1 ? <i>+{saved.count - 1}</i> : null}</span> : null}
           </button>;
         })}
