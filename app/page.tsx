@@ -311,8 +311,8 @@ export default function Home() {
   }
 
   /**
-   * §08 SEARCH 가 목록 아래에 "↑↓ 이동 · ⏎ 선택"이라고 적어 두었으므로 실제로
-   * 그렇게 움직여야 합니다. 적어 놓고 안 되는 단축키가 제일 나쁩니다.
+   * 화살표와 엔터는 화면에 적어 두지 않습니다 — 마우스와 손가락으로 오는 사람에게는
+   * 평생 읽히지 않을 글이라서. 대신 손이 짚어 보면 그대로 움직여야 합니다.
    */
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
@@ -430,11 +430,24 @@ export default function Home() {
       {/* 02_디자인_시스템 §08 SEARCH — 밑줄 하나가 아니라 각진 상자. 앞에 돋보기,
           뒤에 단축키, 아래에 무엇을 누르면 되는지. */}
       <section id="search-panel" className={`search-panel plate ${searchOpen ? "is-open" : ""}`} aria-label="카페 찾기">
-        <label className="label-ko" htmlFor="cafe-search">
-          어디로 갈까
+        {/* 머리줄 하나가 "이건 찾는 칸이다"와 "몇 곳이 걸렸다"를 함께 집니다.
+            좁은 화면에서는 통째로 감춥니다 — 손바닥만 한 종이에 장식 줄까지
+            얹으면 정작 칠 자리가 밀립니다. */}
+        <p className="search-panel__head">
+          <span aria-hidden="true">찾기</span>
+          <i aria-hidden="true" />
+          {/* 한 곳도 없을 때는 비웁니다 — "0건"과 비빈의 "여긴 아무것도 없네"는
+              같은 사람이 같은 말을 두 번 하는 것입니다 (02 §7.4). */}
+          {!query.trim() ? (
+            <span className="chip" aria-hidden="true">/</span>
+          ) : matches.length ? (
+            <b className="tabular">{matches.length}건</b>
+          ) : null}
+        </p>
+        <label className="sr-only" htmlFor="cafe-search">
+          카페 찾기
         </label>
         <div className="search-field">
-          <Search className="search-field__glyph" size={ICON.sm} aria-hidden="true" />
           <input
             id="cafe-search"
             className="search"
@@ -452,10 +465,9 @@ export default function Home() {
             aria-controls="search-results"
             aria-autocomplete="list"
             /* 포커스는 입력칸에 머무르므로, 화살표로 짚은 줄이 무엇인지는
-               이 속성으로만 전해집니다. 없으면 "↑↓ 이동"이 눈에만 보입니다. */
+               이 속성으로만 전해집니다. 화면에서 안내를 뺀 만큼 여기가 더 중요합니다. */
             aria-activedescendant={visibleMatches.length ? `search-option-${cursorIndex}` : undefined}
           />
-          <span className="chip" aria-hidden="true">{query ? "ESC" : "/"}</span>
         </div>
         {query.trim() ? (
           <div className="search-results">
@@ -474,28 +486,23 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <>
-                <div className="search-results__list" id="search-results" role="listbox">
-                  {visibleMatches.map((cafe, index) => (
-                    <button
-                      key={cafe.id}
-                      id={`search-option-${index}`}
-                      type="button"
-                      role="option"
-                      aria-selected={index === cursorIndex}
-                      className={index === cursorIndex ? "is-cursor" : ""}
-                      onMouseEnter={() => setCursor(index)}
-                      onClick={() => openCafe(cafe.id)}
-                    >
-                      <span className="search-results__name">{highlight(cafe.name, query)}</span>
-                      <span className="meta">{cafe.partner ? "협력" : "카페"} · {cafe.area}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="meta search-results__foot">
-                  결과 {matches.length}건 · ↑↓ 이동 · ↵ 선택
-                </p>
-              </>
+              <div className="search-results__list" id="search-results" role="listbox">
+                {visibleMatches.map((cafe, index) => (
+                  <button
+                    key={cafe.id}
+                    id={`search-option-${index}`}
+                    type="button"
+                    role="option"
+                    aria-selected={index === cursorIndex}
+                    className={index === cursorIndex ? "is-cursor" : ""}
+                    onMouseEnter={() => setCursor(index)}
+                    onClick={() => openCafe(cafe.id)}
+                  >
+                    <span className="search-results__name">{highlight(cafe.name, query)}</span>
+                    <span className="meta">{cafe.partner ? "협력" : "카페"} · {cafe.area}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         ) : null}

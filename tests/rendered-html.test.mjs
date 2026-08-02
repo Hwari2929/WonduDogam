@@ -448,13 +448,13 @@ test("값과 라벨은 모노 한 벌로만 찍힌다", async () => {
 });
 
 test("검색이 적어 둔 단축키대로 실제로 움직인다", async () => {
-  // 비빈 디자인 시스템 v0.1 §08 SEARCH — 목록 아래에 "↑↓ 이동 · ↵ 선택"이라고
-  // 적어 두었으므로 실제로 그렇게 움직여야 합니다.
+  // 화면에 적어 두지 않아도 손은 그대로 움직입니다. 눈에 보이는 안내는
+  // 머리줄의 "/" 하나뿐이고, 나머지는 aria 로만 전합니다.
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /↑↓ 이동 · ↵ 선택/);
+  assert.doesNotMatch(page, /↑↓ 이동/);
   assert.match(page, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/);
   assert.match(page, /if \(event\.key === "Enter"\)/);
   assert.match(page, /if \(event\.key === "\/" && !sidebarOpen\)/);
@@ -1048,4 +1048,35 @@ test("아이콘은 한 벌 · 한 굵기다", async () => {
   // 메뉴 단추도 CSS 로 그린 두 줄이 아니라 같은 벌의 아이콘입니다.
   assert.match(views[0], /<Menu aria-hidden="true" \/>/);
   assert.doesNotMatch(css, /\.menu-button span/);
+});
+
+test("검색 종이는 같은 말을 두 번 하지 않는다", async () => {
+  const [page, css] = await Promise.all(
+    ["../app/page.tsx", "../app/globals.css"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // "이건 찾는 칸이다"를 라벨·돋보기·플레이스홀더로 세 번 말하던 자리입니다.
+  // 이제 머리줄의 "찾기" 한 낱말만 집니다.
+  assert.match(page, /<p className="search-panel__head">/);
+  assert.match(page, /<span aria-hidden="true">찾기<\/span>/);
+  assert.doesNotMatch(page, /어디로 갈까/);
+  assert.doesNotMatch(page, /search-field__glyph/);
+  // 화면에서 뺀 이름은 소리로는 남아야 합니다.
+  assert.match(page, /<label className="sr-only" htmlFor="cafe-search">/);
+  assert.match(css, /\.sr-only \{[^}]*clip-path: inset\(50%\)/s);
+
+  // 오른쪽 끝 한 자리가 한 번에 한 가지만 말합니다 — 빈 칸이면 단축키,
+  // 걸린 곳이 있으면 그 수, 한 곳도 없으면 비빈이 말하므로 비웁니다.
+  assert.match(page, /!query\.trim\(\) \? \(\s*\n\s*<span className="chip" aria-hidden="true">\/<\/span>/);
+  assert.match(page, /\) : matches\.length \? \(\s*\n\s*<b className="tabular">\{matches\.length\}건<\/b>\s*\n\s*\) : null/);
+  assert.doesNotMatch(page, /search-results__foot/);
+
+  // 각진 상자가 아니라 적어 넣는 줄 하나. 종이 안에 테두리를 한 겹 더 두지 않습니다.
+  assert.match(css, /\.search-field \{[^}]*border-bottom: 1\.5px solid var\(--ink-soft\);/s);
+  assert.doesNotMatch(css, /\.search-field \{[^}]*border: 1px solid/s);
+  assert.doesNotMatch(css, /\.search-results \{[^}]*border: 1px solid/s);
+  assert.match(css, /\.search-results__list > button \+ button \{\s*\n\s*border-top: 1px dashed/);
+
+  // 좁은 화면에서는 머리줄을 통째로 감춥니다 — 종이에 남는 건 칠 자리뿐입니다.
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-panel__head \{\s*\n\s*display: none;/);
 });

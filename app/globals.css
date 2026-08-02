@@ -238,6 +238,19 @@ a:focus-visible,
   outline-offset: 4px;
 }
 
+/* 화면에는 없고 읽히기만 하는 글. 머리줄의 "찾기"는 장식이라 aria 로는 감춰
+   두었으므로, 입력칸의 이름은 이 이름표가 집니다. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .skip-link {
   position: fixed;
   z-index: 100;
@@ -745,46 +758,50 @@ a:focus-visible,
   top: 104px; /* 도크와 같은 선에서 시작해야 좌우가 나란해 보입니다. */
   left: var(--rail);
   width: min(360px, calc(100vw - var(--rail) * 2));
-  padding: 16px 18px 18px;
+  padding: 14px 18px 8px;
   box-shadow: var(--lift-2);
 }
 
-.search-panel label {
-  display: block;
-  margin-bottom: 10px;
+/* 머리줄 — "찾기" 한 낱말이 이 종이가 무엇인지를 집니다. 앞에 돋보기를 또 그리고
+   위에 안내 문구를 또 얹으면 같은 말이 세 번입니다. 오른쪽 끝은 칠 것이 없을 때는
+   단축키, 치고 나면 걸린 곳 수 — 한 자리가 한 번에 한 가지만 말합니다. */
+.search-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
   color: var(--ink-faint);
 }
+.search-panel__head i {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--rule);
+}
+.search-panel__head b {
+  font-weight: 400;
+}
+.search-panel__head .chip {
+  padding: 3px 6px;
+  letter-spacing: 0.1em;
+}
 
-/* §08 SEARCH — 밑줄 하나가 아니라 각진 상자 하나. 앞에 돋보기, 뒤에 단축키. */
+/* §08 SEARCH — 각진 상자가 아니라 적어 넣는 줄 하나. 종이 테두리 안에 테두리를
+   한 겹 더 그리면 어디가 종이고 어디가 칸인지 흐려집니다. */
 .search-field {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 10px 12px;
-  border: 1px solid var(--rule);
-  background: var(--desk);
-  color: var(--ink-faint);
+  margin-top: 6px;
+  padding: 6px 0 8px;
+  border-bottom: 1.5px solid var(--ink-soft);
   transition: border-color 140ms ease;
 }
-/* 상자 전체가 포커스 표시입니다. 안쪽에 점선 링을 또 그리면 테두리가 두 겹이 됩니다. */
+/* 줄 하나가 곧 포커스 표시입니다. */
 .search-field:focus-within {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  border-bottom-color: var(--accent);
 }
 .search:focus-visible {
   outline: none;
-}
-.search-field__glyph {
-  flex: none;
-  color: var(--ink-faint);
-  transition: color 140ms ease;
-}
-.search-field:focus-within .search-field__glyph {
-  color: var(--accent);
-}
-.search-field .chip {
-  padding: 3px 5px;
-  letter-spacing: 0.1em;
 }
 .search {
   flex: 1 1 auto;
@@ -802,43 +819,40 @@ a:focus-visible,
 }
 
 .search-results {
-  margin-top: 10px;
-  border: 1px solid var(--rule);
-  background: var(--desk);
-}
-.search-results__list {
-  padding: 5px 0;
+  padding: 2px 0 4px;
 }
 .search-results > button,
 .search-results__list > button {
-  width: 100%;
+  /* 짚은 줄은 종이 끝까지 칠해집니다 — 가운데만 칠하면 줄이 아니라 딱지로 보입니다.
+     좌우로 뺀 만큼 안쪽에 다시 넣어, 글자는 위 입력줄과 같은 선에서 시작합니다. */
+  width: calc(100% + 36px);
+  margin: 0 -18px;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: baseline;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 9px 18px;
   border: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
   transition: background-color 120ms ease;
 }
+.search-results__list > button + button {
+  border-top: 1px dashed var(--rule);
+}
 /* 줄 전체가 눌린다는 걸 쉬는 상태에서도 알 수 있어야 합니다.
    키보드로 짚은 줄과 마우스로 가리킨 줄이 같은 표시를 씁니다. */
 .search-results__list > button:hover,
 .search-results__list > button.is-cursor {
-  background: var(--paper);
+  background: var(--desk);
 }
 .search-results__name mark {
   background: transparent;
   color: var(--bean);
 }
-.search-results__foot {
-  padding: 8px 12px;
-  border-top: 1px dashed var(--rule);
-}
 .search-results .empty-state {
-  padding: 16px 12px 14px;
+  padding: 14px 0 10px;
 }
 
 /* §08 TAG · CHIP — 협력업체 표시. 도장이 아니라 라벨이므로 기울이지 않습니다. */
@@ -1877,7 +1891,7 @@ a:focus-visible,
   }
   .search-panel {
     top: 80px;
-    padding-block: 14px 12px;
+    padding-block: 10px 6px;
   }
   /* 검색을 펴면 확대·축소 단추는 물러납니다. 좁은 화면에서 종이가 펴진 동안에는
      지도를 만지는 게 아니라 고르는 중입니다. */
@@ -1890,8 +1904,13 @@ a:focus-visible,
   .marks-button strong.marks-button__count {
     display: none;
   }
-  .search-panel label {
+  /* 손바닥만 한 종이에 장식 줄까지 얹으면 정작 칠 자리가 밀립니다.
+     걸린 곳 수도 목록이 바로 밑에 있어 굳이 세어 줄 필요가 없습니다. */
+  .search-panel__head {
     display: none;
+  }
+  .search-field {
+    margin-top: 0;
   }
   .search {
     font-size: var(--t-body);
