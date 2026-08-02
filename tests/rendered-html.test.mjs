@@ -993,4 +993,20 @@ test("좁은 화면에서는 검색이 단추 하나로 접힌다", async () => 
   assert.match(css, /\.search-button \{\s*\n\s*display: none;/);
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-button \{\s*\n\s*display: inline-flex;/);
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-panel \{\s*\n\s*display: none;\s*\n\s*\}\s*\n\s*\.search-panel\.is-open \{/);
+
+  // 상호는 화면 한가운데에 섭니다. 양옆 칸을 auto 로 두면 넓은 쪽(메뉴·검색)만큼
+  // 밀려서, 왼쪽에 단추가 하나 늘 때마다 상호가 오른쪽으로 갑니다.
+  assert.match(css, /\.topbar \{[^}]*grid-template-columns: 1fr auto 1fr;/s);
+  assert.doesNotMatch(css, /grid-template-columns: auto 1fr auto/);
+  assert.match(css, /\.topbar__actions \{\s*\n\s*justify-self: end;/);
+  // 검색 종이도 좌우 여백을 같게 둡니다.
+  assert.match(css, /\.search-panel \{\s*\n\s*top: 90px;\s*\n\s*left: var\(--rail\);\s*\n\s*right: var\(--rail\);\s*\n\s*width: auto;/);
+
+  // 종이가 펴진 동안에는 지도를 만지는 게 아니라 고르는 중입니다.
+  assert.match(page, /data-search-open=\{searchOpen\}/);
+  assert.match(css, /\.app-shell\[data-search-open="true"\] \.map__tools \{\s*\n\s*opacity: 0;\s*\n\s*pointer-events: none;/);
+
+  // 도감은 숫자만 남으면 무엇의 수인지 알 수 없습니다 — 좁은 화면에서는 아이콘 하나.
+  assert.match(page, /<BookMarked size=\{17\} aria-hidden="true" \/>/);
+  assert.match(css, /\.marks-button strong\.marks-button__count \{\s*\n\s*display: none;/);
 });

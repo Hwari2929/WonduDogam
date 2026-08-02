@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { BookMarked, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_PATH } from "./base-path";
 import { Bibin, CodexMark } from "./components/BeanArt";
@@ -362,7 +362,7 @@ export default function Home() {
     }
   }
   return (
-    <main className="app-shell" data-phase={effectivePhase}>
+    <main className="app-shell" data-phase={effectivePhase} data-search-open={searchOpen}>
       <a className="skip-link" href="#dock">
         영수증으로 건너뛰기
       </a>
@@ -418,8 +418,9 @@ export default function Home() {
             aria-label={`내 도감, ${marks.length}장 보관 중`}
             aria-pressed={panelOpen && panel === "codex"}
           >
+            <BookMarked size={17} aria-hidden="true" />
             <span className="marks-button__label">내 도감</span>
-            <strong className="tabular">{marks.length}</strong>
+            <strong className="marks-button__count tabular">{marks.length}</strong>
           </button>
         </div>
       </header>

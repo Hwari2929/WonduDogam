@@ -710,6 +710,9 @@ a:focus-visible,
 /* 상시 점선 밑줄은 버튼을 기입란처럼 보이게 했습니다. 지금은 눌릴 자리만 밝힙니다.
    v0.1: 모서리를 각지게 하고, 눌린 탭만 종이와 이어집니다 (§06 TAB RULES). */
 .theme-button,
+.map__tools {
+  transition: opacity 160ms var(--ease-paper);
+}
 .marks-button {
   height: 34px;
   display: inline-flex;
@@ -1840,11 +1843,13 @@ a:focus-visible,
   :root {
     --rail: 18px;
   }
-  .topbar {
-    grid-template-columns: auto 1fr auto;
-  }
+  /* 양옆 칸을 1fr 로 두어야 왼쪽(메뉴·검색)과 오른쪽(도감)의 폭이 달라도
+     상호가 화면 한가운데에 섭니다. auto 로 두면 넓은 쪽만큼 밀립니다. */
   .topbar__brand {
     justify-self: center;
+  }
+  .topbar__actions {
+    justify-self: end;
   }
   .topbar__brand small,
   .theme-button {
@@ -1852,7 +1857,9 @@ a:focus-visible,
   }
   .search-panel {
     top: 90px;
-    width: min(340px, calc(100vw - var(--rail) * 2));
+    left: var(--rail);
+    right: var(--rail);
+    width: auto;
   }
   .dock {
     --dock-top: 90px;
@@ -1890,6 +1897,17 @@ a:focus-visible,
   .search-panel {
     top: 80px;
     padding-block: 14px 12px;
+  }
+  /* 검색을 펴면 확대·축소 단추는 물러납니다. 좁은 화면에서 종이가 펴진 동안에는
+     지도를 만지는 게 아니라 고르는 중입니다. */
+  .app-shell[data-search-open="true"] .map__tools {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* 도감은 숫자만 남으면 그게 무엇의 수인지 알 수 없습니다. 좁은 화면에서는
+     아이콘 하나로 둡니다. `.marks-button strong` 이 더 구체적이라 같이 적습니다. */
+  .marks-button strong.marks-button__count {
+    display: none;
   }
   .search-panel label {
     display: none;
