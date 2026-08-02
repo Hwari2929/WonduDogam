@@ -693,6 +693,15 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   // 아직 담은 게 없는 사람에게 빈 지도를 열어 주지 않습니다.
   assert.match(page, /useState\(CURATOR_COLLECTION_ID\)/);
 
+  // 100%에서도 지도를 조금 밀 수 있습니다. 딱 맞게 가둬 두면 검색 종이와 도크
+  // 밑에 깔린 자리(강화도가 그랬습니다)는 영영 못 봅니다.
+  assert.match(canvas, /const PAN_SLACK = 0\.2;/);
+  assert.match(canvas, /x: clamp\(view\.x, width \* \(1 - view\.zoom\) - slackX, slackX\)/);
+  assert.match(canvas, /y: clamp\(view\.y, height \* \(1 - view\.zoom\) - slackY, slackY\)/);
+  // 민 만큼 뒤에 그림이 있어야 빈 자리가 안 보입니다.
+  const generator = await readFile(new URL("../build/districts.py", import.meta.url), "utf8");
+  assert.match(generator, /^PAD = 22\.0$/m);
+
   // 보이지도 않는 핀을 붙들고 있지 않습니다.
   assert.match(canvas, /const CULL_MARGIN = 0\.2;/);
   assert.match(canvas, /function inView\(x: number, y: number\)/);
@@ -742,8 +751,15 @@ test("큐레이터 픽은 날짜에서 계산되고 손댈 수 없다", async ()
   assert.match(codex, /큐레이터 픽은 지울 수 없어/);
 });
 
-/** app/data/geo.ts 의 BOUNDS. 지형·핀·경계가 전부 이 한 식을 씁니다. */
-const BOUNDS = { west: 126.42, east: 127.64, north: 37.8, south: 37.02 };
+/**
+ * app/data/geo.ts 의 BOUNDS. 지형·핀·경계가 전부 이 한 식을 씁니다.
+ * 베껴 두지 않고 읽어 옵니다 — 창을 옮길 때 조용히 어긋나는 자리라서요.
+ */
+const BOUNDS = await (async () => {
+  const source = await readFile(new URL("../app/data/geo.ts", import.meta.url), "utf8");
+  const read = (key) => Number(source.match(new RegExp(`${key}: ([-\\d.]+),`))[1]);
+  return { west: read("west"), east: read("east"), north: read("north"), south: read("south") };
+})();
 const projectTo100 = (lng, lat) => [
   ((lng - BOUNDS.west) / (BOUNDS.east - BOUNDS.west)) * 100,
   ((BOUNDS.north - lat) / (BOUNDS.north - BOUNDS.south)) * 100,
@@ -920,4 +936,27 @@ test("빈 도감을 편 사람에게 비빈이 보인다", async () => {
   // 도감 쪽의 빈 자리 판정과 같은 이야기를 해야 비빈이 실제로 그 자리에 섭니다.
   assert.match(codex, /activeMarks\.length === 0 \? \(/);
   assert.match(codex, /\{showMascot \? <Bibin variant="diary-writing" size=\{88\} \/> : null\}/);
+});
+
+test("목업 카페의 주소는 좌표가 실제로 놓인 행정구역과 맞는다", async () => {
+  const [cafes, core] = await Promise.all(
+    ["../app/data/cafes.ts", "../app/data/districts-data.ts"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  const districts = parseDistricts(core).map((district) => ({ ...district, loops: loopsOfPath(district.path) }));
+  const rows = [...cafes.matchAll(
+    /id: "(demo-\d+)", name: "([^"]+)"[\s\S]*?address: "([^"]+)", tel: "([^"]+)"[\s\S]*?pos: \[([-\d.]+), ([-\d.]+)\]/g,
+  )];
+  assert.equal(rows.length, 80);
+
+  const code = { 서울: "02", 경기: "031", 인천: "032" };
+  for (const [, id, name, address, tel, lng, lat] of rows) {
+    const [x, y] = projectTo100(Number(lng), Number(lat));
+    const found = districts.filter((district) => pointInLoops(district.loops, x, y));
+    // 시군구는 겹치지 않게 지도를 덮으므로 정확히 한 칸이어야 합니다.
+    assert.equal(found.length, 1, `${id} ${name} 이 ${found.length}칸에 걸쳐 있습니다`);
+    const where = `${found[0].parent} ${found[0].name}`;
+    assert.ok(address.startsWith(where), `${id} ${name}: 주소 "${address}" 인데 좌표는 ${where}`);
+    // 지역번호도 따라가야 합니다 — 김포에서 인천으로 옮긴 곳은 031 이 아니라 032 입니다.
+    assert.ok(tel.startsWith(code[found[0].parent]), `${id} ${name}: ${where} 인데 전화가 ${tel}`);
+  }
 });

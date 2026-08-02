@@ -51,6 +51,14 @@ const TAP_SLOP = 10;
 /** 단추로 배율을 바꿀 때 미끄러지는 시간(ms). 예전 CSS 전이와 같은 체감입니다. */
 const GLIDE_MS = 140;
 /**
+ * 100%에서도 이만큼은 밀 수 있습니다 (화면 크기 대비).
+ *
+ * 딱 맞게 가둬 두면 검색 종이와 도크 밑에 깔린 자리는 영영 못 봅니다 — 강화도는
+ * 검색 종이가 63%를 덮고 있어서 아예 짚을 수가 없었습니다. 지형을 창 밖으로 22%
+ * 더 그려 두었으므로(build/districts.py 의 PAD), 그 안에서 밀면 빈 자리가 안 보입니다.
+ */
+const PAN_SLACK = 0.2;
+/**
  * 지도가 쪼개지는 배율. 구로 시작해 500%부터 동으로 갈립니다.
  * 시도까지 세 단계로 두면 확대하는 동안 경계가 두 번 바뀌어 어지럽습니다.
  */
@@ -101,10 +109,12 @@ function levelOf(zoom: number): DistrictLevel {
 }
 
 function clampView(view: View, width: number, height: number): View {
+  const slackX = width * PAN_SLACK;
+  const slackY = height * PAN_SLACK;
   return {
     zoom: view.zoom,
-    x: clamp(view.x, width * (1 - view.zoom), 0),
-    y: clamp(view.y, height * (1 - view.zoom), 0),
+    x: clamp(view.x, width * (1 - view.zoom) - slackX, slackX),
+    y: clamp(view.y, height * (1 - view.zoom) - slackY, slackY),
   };
 }
 
