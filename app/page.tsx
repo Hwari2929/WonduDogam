@@ -12,16 +12,19 @@ import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
 import { COLLECTION_LIMIT, CURATOR_COLLECTION, CURATOR_COLLECTION_ID, colorValue, countInCollection, setCafeInCollection, useCodex, withCuratorPicks } from "./marks";
 import { applyTheme, nextTheme, useTheme, type Theme } from "./theme";
-import { useSheetDrag } from "./useSheetDrag";
 
 /**
- * 영수증은 세 가지 자리 중 하나에 있습니다 (03_기능_명세 §2).
- *   intro  — 아직 안 나옴. 로드 400ms 뒤 center 로 넘어갑니다.
- *   center — 첫 진입. 화면 한가운데서 프린트됩니다.
+ * 영수증이 있는 자리 (03_기능_명세 §2).
+ *   intro  — 아직 아무것도 안 나옴. 첫 화면은 지도와 상단 바뿐입니다.
  *   docked — 우측 패널(모바일은 하단 시트).
- *   closed — 접힘. "다시 보기" 탭만 남습니다.
+ *   closed — 접힘. 넓은 화면에만 "다시 보기" 탭이 남습니다.
+ *
+ * 예전에는 로드 400ms 뒤에 영수증이 화면 한가운데서 프린트되는 자리(center)가
+ * 하나 더 있었습니다. 첫인상은 좋았지만, 아직 아무것도 고르지 않은 사람 앞에
+ * 오늘의 카페 한 장이 지도를 덮고 서 있는 것이기도 했습니다. 지금은 지도부터
+ * 보여 주고, 종이는 고른 다음에 나옵니다.
  */
-type Phase = "intro" | "center" | "docked" | "closed";
+type Phase = "intro" | "docked" | "closed";
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -219,20 +222,21 @@ export default function Home() {
    * 다시 로컬 상태(intro → center → closed)를 따릅니다.
    */
   const effectivePhase: Phase = route ? "docked" : phase;
-  const panelOpen = effectivePhase === "center" || effectivePhase === "docked";
+  const panelOpen = effectivePhase === "docked";
 
-  /** 첫 진입 중이면 한 번 접어 도크로 보내고, 이미 도크에 있으면 닫습니다. */
   const closePanel = useCallback(() => {
     setCodexPreviewId(null);
-    setPhase((current) => (current === "center" ? "docked" : "closed"));
+    setPhase("closed");
     navigate("/");
   }, []);
 
-  const dock = useCallback(() => {
-    setPhase((current) => (current === "center" ? "docked" : current));
-  }, []);
-
-  const sheet = useSheetDrag({ enabled: isSheet, onClose: closePanel });
+  /**
+   * 지도를 처음 만진 순간. 첫 화면에서는 상단 바 말고는 아무것도 없다가, 손이
+   * 지도에 닿으면 그때 연장(축척·확대축소)이 나옵니다 — 아직 아무것도 안 한
+   * 사람에게 조작기부터 들이밀 이유가 없습니다.
+   */
+  const [touched, setTouched] = useState(false);
+  const dock = useCallback(() => setTouched(true), []);
 
   // 검색 종이를 펴면 바로 칠 수 있어야 합니다. 단추를 누르고 다시 칸을 누르게
   // 하면 두 번 만지는 셈이 됩니다.
@@ -253,16 +257,6 @@ export default function Home() {
       : panelOpen && panel === "codex" && activeCollectionEmpty
         ? "codex"
         : null;
-
-  useEffect(() => {
-    // 링크로 들어왔다면 프린트 연출은 건너뜁니다. 그건 첫 방문의 것이지,
-    // 누가 보내준 카페를 열어본 사람의 것이 아닙니다.
-    if (readRoute(window.location.pathname)) return;
-    // 프린트 연출은 400ms 뒤. 모션을 줄인 사용자에게는 지연 없이 그냥 놓아둡니다.
-    const instant = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setPhase("center"), instant ? 0 : 400);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   // 사라진 묶음을 가리키고 있으면 activeCollection(위)이 이미 첫 묶음으로
   // 되돌아갑니다. 저장된 id 까지 효과로 고쳐 쓸 필요는 없습니다.
@@ -365,7 +359,7 @@ export default function Home() {
     }
   }
   return (
-    <main className="app-shell" data-phase={effectivePhase} data-search-open={searchOpen}>
+    <main className="app-shell" data-phase={effectivePhase} data-search-open={searchOpen} data-touched={touched || panelOpen}>
       <a className="skip-link" href="#dock">
         영수증으로 건너뛰기
       </a>
@@ -521,30 +515,11 @@ export default function Home() {
       {panelOpen ? (
         <>
           <div
-            className={`stage-veil ${effectivePhase === "center" ? "is-on" : ""}`}
-            aria-hidden="true"
-          />
-          <div
-            className={[
-              "dock",
-              effectivePhase === "center" ? "is-center" : "is-docked",
-              isSheet ? `is-sheet is-${sheet.snap}` : "",
-              sheet.dragging ? "is-dragging" : "",
-              panel === "codex" && codexPreviewCafe ? "has-preview" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            className={["dock", panel === "codex" && codexPreviewCafe ? "has-preview" : ""].filter(Boolean).join(" ")}
             id="dock"
           >
-            <button
-              className="sheet-handle"
-              type="button"
-              aria-label={sheet.snap === "full" ? "시트 내리기" : "시트 올리기"}
-              aria-expanded={sheet.snap === "full"}
-              {...sheet.handleProps}
-            />
-            {/* 스크롤은 손잡이 **아래**에서만 일어납니다. 하나로 두면 종이가
-                손잡이 뒤로 흘러 들어가, 상호 위에 손잡이가 겹쳐 보입니다. */}
+            {/* 흐르는 자리를 따로 둡니다 — 종이가 도크 밖으로 넘치지 않고,
+                끝에서 더 밀어도 뒤의 페이지가 따라 움직이지 않습니다. */}
             <div className="dock__scroll">
             {panel === "codex" ? (
               <div className="dock__pair">
@@ -594,11 +569,14 @@ export default function Home() {
             </div>
           </div>
         </>
-      ) : (
+      ) : effectivePhase === "closed" ? (
+        /* 한 번 열었다가 접은 사람에게만 보입니다. 첫 화면에서는 "다시" 볼 것이
+           아직 없습니다. 좁은 화면에서는 아예 두지 않습니다 (globals.css §10) —
+           손이 닿는 자리를 늘 한 줄 차지하면서, 하는 일은 지도를 덮는 것뿐이었습니다. */
         <button className="dock-tab plate" type="button" onClick={() => setPhase("docked")}>
           오늘의 영수증 다시 보기
         </button>
-      )}
+      ) : null}
 
       {sidebarOpen ? (
         <Drawer

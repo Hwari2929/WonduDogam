@@ -4,6 +4,7 @@ import { Coffee, Minus, Plus, RotateCcw } from "lucide-react";
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -50,8 +51,15 @@ const CULL_MARGIN = 0.2;
  * 있어도 몇 px 은 흔들리므로 0 으로 두면 탭이 거의 안 잡힙니다.
  */
 const TAP_SLOP = 10;
-/** 단추로 배율을 바꿀 때 미끄러지는 시간(ms). 예전 CSS 전이와 같은 체감입니다. */
-const GLIDE_MS = 140;
+/**
+ * 단추로 배율을 바꿀 때 미끄러지는 시간(ms).
+ *
+ * 이 시간 내내 지도를 프레임마다 처음부터 다시 그립니다 — 배율이 바뀌면 창을
+ * 고쳐 쓰는 것 말고 방법이 없습니다(늘려 붙이면 뭉갭니다). 140ms 였을 때는
+ * 단추 한 번에 폰이 100ms 넘게 그 일만 했습니다. 한 칸이 뛰는 게 보이지 않을
+ * 만큼만 남깁니다.
+ */
+const GLIDE_MS = 80;
 /**
  * 100%에서도 이만큼은 밀 수 있습니다 (화면 크기 대비).
  *
@@ -86,6 +94,18 @@ const REVEAL_ALL = 15;
 const TILE_MARGIN = 0.4;
 /** 창이 이만큼(창 크기 대비) 움직이기 전에는 그리는 목록을 다시 내지 않습니다. */
 const TILE_STEP = 0.25;
+/**
+ * 화면 밖으로 이만큼 더 그려 둡니다 (화면 크기 대비, 사방으로).
+ *
+ * 끄는 동안 창(viewBox)을 고쳐 쓰면 브라우저는 프레임마다 지도를 처음부터 다시
+ * 그립니다 — 길·경계·핀을 전부. 폰에서 손가락을 따라오지 못하던 게 이것이었습니다.
+ * 넓게 한 번 그려 두고 겹을 통째로 밀면, 옮기는 동안에는 이미 그려 둔 그림을
+ * 자리만 바꿔 얹습니다(합성). **늘리지 않고 밀기만** 하므로 글자도 선도 안 뭉갭니다 —
+ * 뭉개지는 건 scale 이지 translate 가 아닙니다.
+ *
+ * 이 여유를 넘어가게 밀면 그때 한 번 다시 그리고 그 자리에서 이어 갑니다.
+ */
+const OVERSCAN = 0.25;
 type View = { zoom: number; x: number; y: number };
 
 const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
@@ -240,6 +260,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    * 걸러내지 않습니다 — 0으로 재고 시작하면 첫 프레임이 텅 빕니다.
    */
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  /** 세 겹을 함께 미는 상자. 끄는 동안 여기에만 transform 이 붙습니다. */
+  const panRef = useRef<HTMLDivElement>(null);
+  /** 다시 그린 다음 밀어 둔 것을 되돌려야 하는가. */
+  const restoreRef = useRef(false);
   /** 진행 중인 미끄러짐. 끌기나 휠이 끼어들면 즉시 놓아 줍니다. */
   const glideRef = useRef<number | null>(null);
   /** 다시 그리기를 한 프레임에 한 번으로 모으는 자리. */
@@ -287,6 +311,16 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   useEffect(() => {
     levelRef.current = level;
   }, [level]);
+
+  /**
+   * 다시 그린 그림이 화면에 나가기 **전에** 밀어 둔 것을 되돌립니다.
+   * useEffect 로 미루면 한 프레임 동안 새 창 + 옛 밀기가 겹쳐 지도가 튑니다.
+   */
+  useLayoutEffect(() => {
+    if (!restoreRef.current) return;
+    restoreRef.current = false;
+    if (panRef.current) panRef.current.style.transform = "";
+  }, [view]);
 
   // 읍면동은 그 배율에 처음 닿을 때 한 번만 불러옵니다. 첫 화면에 천 칸을 들고
   // 있을 이유가 없습니다 — 500% 아래에서는 시군구만 보이니까요.
@@ -345,6 +379,18 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (flushRef.current) setView(flushRef.current);
   }
 
+  /**
+   * 밀어 둔 것을 자리에 앉힙니다. 창을 새로 잡아 다시 그리고, 그 그림이 나가기
+   * 직전에 밀기를 되돌립니다(useLayoutEffect). 두 개가 같은 프레임에 일어나야
+   * 손을 뗄 때 지도가 안 튑니다.
+   */
+  function settlePan() {
+    const layer = panRef.current;
+    if (!layer || !layer.style.transform) return;
+    restoreRef.current = true;
+    commitView({ ...viewRef.current });
+  }
+
   function stopGlide() {
     if (glideRef.current === null) return;
     cancelAnimationFrame(glideRef.current);
@@ -359,6 +405,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    */
   function glideTo(target: View) {
     stopGlide();
+    settlePan();
     const from = viewRef.current;
     if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       commitView(target);
@@ -409,6 +456,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // 휠은 이미 조금씩 연달아 들어오므로 그대로 따라갑니다 — 여기에 미끄러짐을
     // 얹으면 손보다 지도가 늦게 따라와 미끄덩거립니다.
     stopGlide();
+    settlePan();
     // 단추와 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
     const rate = viewRef.current.zoom >= FAST_FROM ? 0.0021 : 0.0015;
     const next = zoomedView(viewRef.current.zoom * Math.exp(-event.deltaY * rate), event.clientX, event.clientY);
@@ -433,6 +481,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // 밀기를 그대로 두면 두 손이 벌어지는 동안 지도가 한쪽 손만 따라갑니다.
     if (touchesRef.current.size >= 2) {
       dragRef.current = null;
+      settlePan();
       pinchRef.current = pinchOf();
       setHovered(null);
     } else {
@@ -484,7 +533,19 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     const drag = dragRef.current;
     const rect = mapRef.current?.getBoundingClientRect();
     if (drag && drag.pointerId === event.pointerId && rect) {
-      commitViewSoon(clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height));
+      const next = clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height);
+      // 값은 곧바로 반영합니다 — 짚기도 확대도 늘 지금 자리를 봐야 합니다.
+      viewRef.current = next;
+      const dx = next.x - drag.view.x;
+      const dy = next.y - drag.view.y;
+      if (Math.abs(dx) > rect.width * OVERSCAN || Math.abs(dy) > rect.height * OVERSCAN) {
+        // 넓게 그려 둔 만큼을 넘었습니다. 여기서 한 번 다시 그리고 이어 갑니다.
+        dragRef.current = { ...drag, startX: event.clientX, startY: event.clientY, view: next };
+        restoreRef.current = true;
+        commitView(next);
+      } else if (panRef.current) {
+        panRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      }
       // 지도를 옮기기 시작했으면 짚어 둔 동네는 놓습니다. 누르는 순간에 놓아
       // 버리면, 손가락으로 톡 쳤을 때 방금 켠 것인지 원래 켜져 있던 것인지
       // 구분할 수 없어 같은 곳을 다시 쳐도 안 꺼집니다.
@@ -522,6 +583,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     pinchRef.current = null;
     dragRef.current = null;
     if (!wasTouching && !drag) return;
+    settlePan();
     flushView();
     setDragging(false);
     if (!drag) return;
@@ -572,9 +634,19 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   );
   const zoomedIn = revealed > 0;
 
-  /** 지금 보고 있는 땅의 창문. 그림도 핀도 이 하나를 보고 자리를 잡습니다. */
+  /** 지금 보고 있는 땅의 창문. 축척과 짚기는 이 하나를 봅니다. */
   const window_ = size ? windowOf(view, size) : { x: 0, y: 0, w: 100, h: 100 };
-  const viewBox = `${window_.x} ${window_.y} ${window_.w} ${window_.h}`;
+  /**
+   * 실제로 **그리는** 창. 보는 창을 사방으로 OVERSCAN 만큼 넓힌 것입니다.
+   * 겹 자체도 CSS 에서 같은 만큼 넓게 잡혀 있어(.map__layer), 둘의 비율이 맞습니다.
+   */
+  const draw = {
+    x: window_.x - window_.w * OVERSCAN,
+    y: window_.y - window_.h * OVERSCAN,
+    w: window_.w * (1 + OVERSCAN * 2),
+    h: window_.h * (1 + OVERSCAN * 2),
+  };
+  const viewBox = `${draw.x} ${draw.y} ${draw.w} ${draw.h}`;
 
   /**
    * 그릴 칸의 목록. 창을 눈금에 맞춰 끊어 두는 게 요점입니다 — 그대로 쓰면 창이
@@ -601,8 +673,8 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    */
   function toScreen(x: number, y: number) {
     return {
-      x: ((x - window_.x) / window_.w) * 100,
-      y: ((y - window_.y) / window_.h) * 100,
+      x: ((x - draw.x) / draw.w) * 100,
+      y: ((y - draw.y) / draw.h) * 100,
     };
   }
 
@@ -678,12 +750,12 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       {/* 지형·강조·핀을 세 겹으로 가릅니다. 어느 겹도 CSS 로 확대하지 않습니다 —
           그림은 viewBox 가 좁아지며 벡터에서 다시 그려지고, 핀과 이름표는 자기
           자리를 셈해서 놓입니다. 늘려 붙이는 단계가 아예 없어야 안 뭉갭니다. */}
+      <div className="map__pan" ref={panRef}>
       <div className="map__layer map__viewport">
         <svg className="map__terrain" viewBox={viewBox} preserveAspectRatio="none" aria-hidden="true">
           <Terrain pieces={pieces} />
         </svg>
       </div>
-      <div className="map__grain" aria-hidden="true" />
 
       {/* 얹힌 동네 하나만 그립니다. 지형 겹에 같이 넣으면 확대할 때 이 선까지
           늘어나 뭉개지고, 옅은 채움이 강 위에도 얹힙니다. */}
@@ -726,6 +798,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
           </button>;
         })}
       </div>
+
+      </div>
+      <div className="map__grain" aria-hidden="true" />
 
       <div className="map__tools">
         <div className="map__scale" aria-hidden="true"><i /><span>{scaleLabel}</span></div>

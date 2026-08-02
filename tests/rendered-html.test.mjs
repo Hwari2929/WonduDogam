@@ -19,7 +19,8 @@ test("server-renders the Bean Codex product shell", async () => {
   // 음절을 따로 읽고 복사도 깨지므로, 붙여 쓴 원문이 그대로 나와야 합니다.
   assert.match(html, /원두도감/);
   assert.doesNotMatch(html, /원 두 도 감/);
-  assert.match(html, /오늘의 영수증/);
+  // 첫 화면은 지도와 상단 바뿐입니다 — 영수증도 "다시 보기"도 아직 없습니다.
+  assert.doesNotMatch(html, /오늘의 영수증/);
   assert.match(html, /내 도감/);
   assert.match(html, /협력업체/);
   assert.match(html, /목업 데이터/);
@@ -591,7 +592,7 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   // 확대는 SVG 의 창문이 좁아지는 것으로 일어납니다. 두 그림이 같은 창문을 봐야
   // 강조된 경계가 지형 위에 정확히 겹칩니다.
   assert.match(canvas, /function windowOf\(view: View, size: \{ width: number; height: number \}\)/);
-  assert.match(canvas, /const viewBox = `\$\{window_\.x\} \$\{window_\.y\} \$\{window_\.w\} \$\{window_\.h\}`;/);
+  assert.match(canvas, /const viewBox = `\$\{draw\.x\} \$\{draw\.y\} \$\{draw\.w\} \$\{draw\.h\}`;/);
   assert.equal((canvas.match(/viewBox=\{viewBox\}/g) ?? []).length, 2);
 
   // 창의 비율이 화면 비율을 따라가야 지도가 안 찌그러집니다. 정사각형 창을 쓰면
@@ -604,7 +605,7 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
 
   // 핀과 이름표는 자기 자리를 셈해서 놓입니다.
   assert.match(canvas, /function toScreen\(x: number, y: number\)/);
-  assert.match(canvas, /x: \(\(x - window_\.x\) \/ window_\.w\) \* 100/);
+  assert.match(canvas, /x: \(\(x - draw\.x\) \/ draw\.w\) \* 100/);
   assert.match(canvas, /const \{ x, y \} = toScreen\(spot\.x, spot\.y\);/);
   // 축척 막대가 가리키는 거리도 화면마다 다시 셉니다.
   assert.match(canvas, /const SCALE_BAR_PX = 56;/);
@@ -615,20 +616,27 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   assert.doesNotMatch(css, /--map-zoom|--map-pan-x|--map-pan-y/);
   assert.doesNotMatch(css, /will-change: transform/);
   assert.doesNotMatch(canvas, /mapVars/);
-  assert.match(css, /\.map__layer \{\s*\n\s*position: absolute;\s*\n\s*inset: 0;\s*\n\}/);
+  // 겹은 화면보다 사방 25% 씩 넓습니다 — 끄는 동안 창을 고쳐 쓰지 않고 밀기만
+  // 하려면 밀어서 드러날 자리가 미리 그려져 있어야 합니다.
+  assert.match(css, /\.map__layer \{\s*\n\s*position: absolute;\s*\n\s*inset: -25%;\s*\n\}/);
+  assert.match(canvas, /const OVERSCAN = 0\.25;/);
   assert.match(css, /\.map-marker \{ transform: translate\(-50%, -50%\); \}/);
 
   // 변형을 걷어내면서 CSS 전이도 같이 없어졌습니다. 단추는 1.4배씩 뛰므로 그냥
   // 갈아 끼우면 툭 끊기고, 그렇다고 전이를 되살리면 그게 다시 뭉개는 원인입니다.
   // 값을 프레임마다 옮겨, 부드러우면서 매 프레임 벡터에서 다시 그리게 둡니다.
-  assert.match(canvas, /const GLIDE_MS = 140;/);
+  assert.match(canvas, /const GLIDE_MS = 80;/);
   assert.match(canvas, /function glideTo\(target: View\)/);
   assert.match(canvas, /glideRef\.current = t < 1 \? requestAnimationFrame\(step\) : null;/);
   assert.match(canvas, /if \(next\) glideTo\(next\);/);
+  // 겹 자체에는 여전히 전이도 확대도 걸지 않습니다. 미는 것은 .map__pan 하나이고,
+  // 그것도 JS 가 끄는 동안에만 인라인으로 붙입니다.
   const mapLayer = css.slice(css.indexOf(".map__layer {"), css.indexOf(".map__pins {"));
-  assert.doesNotMatch(mapLayer, /transition|transform/);
+  assert.doesNotMatch(mapLayer, /transition|transform|scale/);
+  assert.match(css, /\.map__pan \{\s*\n\s*position: absolute;\s*\n\s*inset: 0;\s*\n\}/);
+  assert.match(canvas, /panRef\.current\.style\.transform = `translate3d\(\$\{dx\}px, \$\{dy\}px, 0\)`/);
   // 끌기와 휠은 이미 손을 따라오므로 미끄러짐을 끼우지 않고 즉시 놓아 줍니다.
-  assert.match(canvas, /stopGlide\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*settlePan\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
   assert.match(canvas, /stopGlide\(\);\s*\n\s*event\.currentTarget\.setPointerCapture/);
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
   assert.match(canvas, /stopGlide\(\);\s*\n\s*if \(frameRef\.current !== null\) cancelAnimationFrame\(frameRef\.current\);/);
@@ -1081,33 +1089,37 @@ test("검색 종이는 같은 말을 두 번 하지 않는다", async () => {
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-panel__head \{\s*\n\s*display: none;/);
 });
 
-test("좁은 화면의 시트는 잘리고, 조금만 튕겨도 내려간다", async () => {
-  const [page, receipt, drag, css] = await Promise.all(
-    ["../app/page.tsx", "../app/components/Receipt.tsx", "../app/useSheetDrag.ts", "../app/globals.css"]
+test("좁은 화면의 시트는 잘리고, 닫는 길은 X 와 뒤로가기뿐이다", async () => {
+  const [page, receipt, css] = await Promise.all(
+    ["../app/page.tsx", "../app/components/Receipt.tsx", "../app/globals.css"]
       .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
 
-  // 흐르는 자리는 손잡이 **아래**입니다. 하나로 두면 종이가 손잡이 뒤로 흘러
-  // 들어가 상호 위에 겹칩니다 — 잘려야 할 자리입니다.
+  // 잡고 내리는 바는 걷어냈습니다. 조작감도 조작감이지만, 무엇을 잡으면 무엇이
+  // 되는지가 손잡이 하나로는 전해지지 않았습니다.
+  assert.doesNotMatch(page, /sheet-handle|useSheetDrag/);
+  assert.doesNotMatch(css, /sheet-handle|--sheet-y|is-peek|\.dock\.is-dragging/);
+  assert.doesNotMatch(css, /\.dock\.is-center/);
+
+  // 흐르는 자리는 따로 둡니다 — 종이가 도크 밖으로 넘치지 않게.
   assert.match(page, /<div className="dock__scroll">/);
   assert.match(css, /\.dock \{[^}]*overflow: hidden;/s);
   assert.match(css, /\.dock__scroll \{[^}]*overflow-y: auto;[\s\S]*?overscroll-behavior: contain;/s);
-  assert.doesNotMatch(css, /\.sheet-handle \{\s*\n\s*position: sticky/);
+
+  // 첫 화면은 지도와 상단 바뿐입니다 — 확대·축소도 아직 없습니다.
+  assert.match(page, /data-touched=\{touched \|\| panelOpen\}/);
+  assert.match(css, /\.app-shell\[data-touched="false"\] \.map__tools,\s*\n\.app-shell\[data-touched="false"\] \.map-status \{\s*\n\s*opacity: 0;/);
+  // 로드 몇 백 ms 뒤에 영수증이 저절로 프린트되던 자리는 없앴습니다.
+  assert.doesNotMatch(page, /setPhase\("center"\)/);
+  assert.doesNotMatch(page, /"intro" \| "center"/);
+
+  // 좁은 화면에는 "다시 보기" 탭을 두지 않습니다.
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.dock-tab \{\s*\n\s*display: none;/);
 
   // 시트에서는 상세가 접힘의 대상이 아닙니다 — 단추 자체를 두지 않습니다.
   assert.match(page, /sheet=\{isSheet\}/);
   assert.match(receipt, /const showDetail = sheet \|\| detailOpen;/);
   assert.match(receipt, /\{sheet \? null : \(\s*\n\s*<div className="receipt__actions">/);
-
-  // 내려가는 건 거리가 아니라 기세입니다. 끌던 속도로 한 자리씩 옮깁니다.
-  assert.match(drag, /const FLICK = 0\.25;/);
-  assert.match(drag, /if \(velocity > FLICK\)/);
-  assert.match(drag, /if \(velocity < -FLICK\)/);
-  // 끌고 나서 떼는 것도 click 을 부르므로, 끈 손짓이면 탭 처리는 물러납니다.
-  assert.match(drag, /if \(gesture\.current\.moved > TAP_SLOP\) return;/);
-  // 자리를 state 로 들고 있으면 손가락이 움직이는 프레임마다 화면 전체가 다시 그려집니다.
-  assert.match(drag, /sheet\.style\.setProperty\("--sheet-y", `\$\{y\}px`\)/);
-  assert.doesNotMatch(drag, /setDragY/);
 });
 
 test("지도는 보이는 칸만 그리고, 한 프레임에 한 번만 다시 그린다", async () => {
