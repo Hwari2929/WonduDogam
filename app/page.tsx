@@ -1,5 +1,6 @@
 "use client";
 
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_PATH } from "./base-path";
 import { Bibin, CodexMark } from "./components/BeanArt";
@@ -124,6 +125,8 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [query, setQuery] = useState("");
+  /** 좁은 화면에서 검색 종이를 폈는가. 넓은 화면에서는 늘 펴져 있습니다. */
+  const [searchOpen, setSearchOpen] = useState(false);
   const { collections: storedCollections, marks: storedMarks } = useCodex();
   // 첫 화면의 도감은 큐레이터 픽입니다. 아직 아무것도 담지 않은 사람에게
   // "나의 원두 도감"을 열어 주면 지도가 텅 빈 채로 시작합니다.
@@ -229,6 +232,12 @@ export default function Home() {
   }, []);
 
   const sheet = useSheetDrag({ enabled: isSheet, onClose: closePanel });
+
+  // 검색 종이를 펴면 바로 칠 수 있어야 합니다. 단추를 누르고 다시 칸을 누르게
+  // 하면 두 번 만지는 셈이 됩니다.
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
 
   // 02 §7.3 — 한 화면에 비빈은 하나뿐. 급한 순서대로 자리를 넘겨줍니다.
   //
@@ -367,10 +376,24 @@ export default function Home() {
       />
 
       <header className="topbar">
-        <button className="menu-button" type="button" onClick={() => setSidebarOpen(true)} aria-label="메뉴 열기">
-          <span />
-          <span />
-        </button>
+        <div className="topbar__tools">
+          <button className="menu-button" type="button" onClick={() => setSidebarOpen(true)} aria-label="메뉴 열기">
+            <span />
+            <span />
+          </button>
+          {/* 좁은 화면에서는 검색 종이가 지도를 덮고 앉아 있을 자리가 없습니다.
+              단추 하나로 두고, 누를 때만 상단바 밑으로 펴집니다. */}
+          <button
+            className="search-button"
+            type="button"
+            onClick={() => setSearchOpen((open) => !open)}
+            aria-label={searchOpen ? "검색 닫기" : "카페 찾기"}
+            aria-expanded={searchOpen}
+            aria-controls="search-panel"
+          >
+            <Search size={17} aria-hidden="true" />
+          </button>
+        </div>
         <div className="topbar__brand">
           <CodexMark size={24} />
           <b>원두도감</b>
@@ -403,7 +426,7 @@ export default function Home() {
 
       {/* 02_디자인_시스템 §08 SEARCH — 밑줄 하나가 아니라 각진 상자. 앞에 ⌕,
           뒤에 단축키, 아래에 무엇을 누르면 되는지. */}
-      <section className="search-panel plate" aria-label="카페 찾기">
+      <section id="search-panel" className={`search-panel plate ${searchOpen ? "is-open" : ""}`} aria-label="카페 찾기">
         <label className="label-ko" htmlFor="cafe-search">
           어디로 갈까
         </label>

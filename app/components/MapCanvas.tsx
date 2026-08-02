@@ -13,7 +13,7 @@ import {
 } from "react";
 import type { Cafe } from "../data/cafes";
 import { BASE_LEVEL, cafesIn, districtAt, districtsAtLevel, hasLevel, loadDongDistricts, type DistrictLevel } from "../data/districts";
-import { project } from "../data/geo";
+import { project, SPAN_KM, UNIT_ASPECT } from "../data/geo";
 import { outside, sea, type District } from "../data/districts-data";
 import { minorRoads, river, tributaries, trunkRoads } from "../data/terrain";
 import type { CodexIconId } from "../marks";
@@ -58,6 +58,8 @@ const GLIDE_MS = 140;
  * 더 그려 두었으므로(build/districts.py 의 PAD), 그 안에서 밀면 빈 자리가 안 보입니다.
  */
 const PAN_SLACK = 0.2;
+/** 축척 막대의 폭(px). globals.css 의 .map__scale i 와 같아야 합니다. */
+const SCALE_BAR_PX = 56;
 /**
  * 지도가 쪼개지는 배율. 구로 시작해 500%부터 동으로 갈립니다.
  * 시도까지 세 단계로 두면 확대하는 동안 경계가 두 번 바뀌어 어지럽습니다.
@@ -108,13 +110,45 @@ function levelOf(zoom: number): DistrictLevel {
   return LEVEL_AT.find((entry) => zoom >= entry.from)?.level ?? BASE_LEVEL;
 }
 
+/**
+ * 100% 에서 화면에 담기는 땅의 크기 (0..100 단위).
+ *
+ * 화면 비율을 그대로 쓰면 창이 정사각형이라 지도가 화면 따라 찌그러집니다. 가로와
+ * 세로의 km/px 이 같아지도록 창의 비율을 화면 비율에 맞춰 잡습니다. 100% 는 "땅이
+ * 화면을 가득 채우는" 배율이므로, 세로로 긴 폰에서는 가로가 잘리고 대신 밀어서
+ * 볼 수 있습니다 — 늘여서 다 보여 주는 것보다 잘라서 제 모양으로 보여 주는 편이
+ * 지도입니다.
+ */
+function baseSpan(width: number, height: number) {
+  const target = (width / height) * UNIT_ASPECT;
+  return target <= 1 ? { w: 100 * target, h: 100 } : { w: 100, h: 100 / target };
+}
+
 function clampView(view: View, width: number, height: number): View {
-  const slackX = width * PAN_SLACK;
-  const slackY = height * PAN_SLACK;
+  const base = baseSpan(width, height);
+  const span = { w: base.w / view.zoom, h: base.h / view.zoom };
+  // 창 밖으로 밀려난 땅의 절반까지 갈 수 있어야 양 끝을 다 봅니다. 거기에 더해
+  // 검색 종이·도크 밑을 꺼내 볼 여유를 얹습니다.
+  const reachX = Math.max(0, ((100 - span.w) / 2) * (width / span.w)) + width * PAN_SLACK;
+  const reachY = Math.max(0, ((100 - span.h) / 2) * (height / span.h)) + height * PAN_SLACK;
+  return { zoom: view.zoom, x: clamp(view.x, -reachX, reachX), y: clamp(view.y, -reachY, reachY) };
+}
+
+/**
+ * 지금 화면이 보고 있는 땅의 창문 (0..100 단위).
+ *
+ * 이동값 0 은 "땅이 한가운데"라는 뜻입니다. 그래야 배율을 바꿔도 기준이 흔들리지
+ * 않고, 초기값·되돌리기가 모두 {0, 0} 하나로 끝납니다.
+ */
+function windowOf(view: View, size: { width: number; height: number }) {
+  const base = baseSpan(size.width, size.height);
+  const w = base.w / view.zoom;
+  const h = base.h / view.zoom;
   return {
-    zoom: view.zoom,
-    x: clamp(view.x, width * (1 - view.zoom) - slackX, slackX),
-    y: clamp(view.y, height * (1 - view.zoom) - slackY, slackY),
+    x: (100 - w) / 2 - view.x * (w / size.width),
+    y: (100 - h) / 2 - view.y * (h / size.height),
+    w,
+    h,
   };
 }
 
@@ -253,7 +287,13 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     const focusX = clientX === undefined ? rect.width / 2 : clientX - rect.left;
     const focusY = clientY === undefined ? rect.height / 2 : clientY - rect.top;
     const ratio = zoom / current.zoom;
-    return clampView({ zoom, x: focusX - (focusX - current.x) * ratio, y: focusY - (focusY - current.y) * ratio }, rect.width, rect.height);
+    // 짚은 점 밑의 땅이 그대로 있도록 이동을 같이 옮깁니다. 이동값 0 이 한가운데라
+    // 화면 복판을 기준으로 셈합니다 — 왼쪽 위가 기준이면 (ratio - 1) 항이 없습니다.
+    return clampView({
+      zoom,
+      x: (ratio - 1) * (rect.width / 2 - focusX) + current.x * ratio,
+      y: (ratio - 1) * (rect.height / 2 - focusY) + current.y * ratio,
+    }, rect.width, rect.height);
   }
 
   function changeZoom(direction: -1 | 1) {
@@ -297,10 +337,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   function districtUnder(clientX: number, clientY: number) {
     const rect = mapRef.current?.getBoundingClientRect();
     if (!rect) return null;
-    const current = viewRef.current;
+    const spot = windowOf(viewRef.current, { width: rect.width, height: rect.height });
     return districtAt(
-      ((clientX - rect.left - current.x) / current.zoom / rect.width) * 100,
-      ((clientY - rect.top - current.y) / current.zoom / rect.height) * 100,
+      spot.x + ((clientX - rect.left) / rect.width) * spot.w,
+      spot.y + ((clientY - rect.top) / rect.height) * spot.h,
       levelRef.current,
     );
   }
@@ -376,6 +416,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   );
   const zoomedIn = revealed > 0;
 
+  /** 지금 보고 있는 땅의 창문. 그림도 핀도 이 하나를 보고 자리를 잡습니다. */
+  const window_ = size ? windowOf(view, size) : { x: 0, y: 0, w: 100, h: 100 };
+  const viewBox = `${window_.x} ${window_.y} ${window_.w} ${window_.h}`;
+
   /**
    * 지도 좌표(0..100) → 화면 위의 백분율.
    *
@@ -384,10 +428,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    * 일도 없습니다.
    */
   function toScreen(x: number, y: number) {
-    if (!size) return { x, y };
     return {
-      x: x * view.zoom + (view.x / size.width) * 100,
-      y: y * view.zoom + (view.y / size.height) * 100,
+      x: ((x - window_.x) / window_.w) * 100,
+      y: ((y - window_.y) / window_.h) * 100,
     };
   }
 
@@ -429,11 +472,18 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    * 올릴수록 경계선도 글자도 뭉갭니다. viewBox 를 좁히면 배율이 바뀔 때마다
    * 벡터에서 다시 그리므로 500%에서도 선이 그대로 섭니다.
    */
-  const viewBox = size
-    ? `${(-view.x / (size.width * view.zoom)) * 100} ${(-view.y / (size.height * view.zoom)) * 100} ${100 / view.zoom} ${100 / view.zoom}`
-    : "0 0 100 100";
-
   const labelSpot = hovered ? toScreen(hovered.label[0], hovered.label[1]) : { x: 0, y: 0 };
+
+  /**
+   * 축척 막대가 가리키는 실제 거리. 막대 폭은 CSS 가 정한 56px 로 고정이고, 그
+   * 56px 이 몇 km 인지는 화면 크기와 배율이 정합니다 — 폰과 데스크톱은 같은 배율에서
+   * 같은 축척이 되지만, 창이 화면 비율을 따라가므로 값 자체는 화면마다 다릅니다.
+   */
+  const kilometresPerPixel = size ? (SPAN_KM.x * window_.w) / (100 * size.width) : 0;
+  const barKilometres = kilometresPerPixel * SCALE_BAR_PX;
+  const scaleLabel = barKilometres >= 1
+    ? `${barKilometres.toFixed(barKilometres < 10 ? 1 : 0)} km`
+    : `${Math.round(barKilometres * 1000 / 10) * 10} m`;
 
   const mapClass = ["map", dragging ? "is-dragging" : "", zoomedIn ? "is-zoomed" : ""]
     .filter(Boolean)
@@ -514,7 +564,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       </div>
 
       <div className="map__tools">
-        <div className="map__scale" aria-hidden="true"><i /><span>{(10 / view.zoom).toFixed(view.zoom >= 2 ? 1 : 0)} km</span></div>
+        <div className="map__scale" aria-hidden="true"><i /><span>{scaleLabel}</span></div>
         <div className="map__zoom" role="group" aria-label="지도 확대 축소" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" onClick={() => changeZoom(-1)} disabled={view.zoom <= MIN_ZOOM + 0.01} aria-label="지도 축소"><Minus size={16} /></button>
         <output aria-live="polite" aria-label={`지도 확대율 ${Math.round(view.zoom * 100)}퍼센트`}>{Math.round(view.zoom * 100)}%</output>

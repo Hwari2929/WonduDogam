@@ -580,8 +580,8 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   // 겹을 transform: scale() 로 키우면 브라우저는 이미 그려 둔 그림을 늘립니다.
   // 아이패드·모바일 사파리는 겹을 훨씬 적극적으로 이미지로 구워 두어서, 배율을
   // 올릴수록 경계선도 글자도 뭉갭니다. 늘려 붙이는 단계를 아예 두지 않습니다.
-  const [canvas, css] = await Promise.all(
-    ["../app/components/MapCanvas.tsx", "../app/globals.css"]
+  const [canvas, css, geo] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/globals.css", "../app/data/geo.ts"]
       .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
   assert.match(canvas, /className="map__layer map__viewport"/);
@@ -590,15 +590,26 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
 
   // 확대는 SVG 의 창문이 좁아지는 것으로 일어납니다. 두 그림이 같은 창문을 봐야
   // 강조된 경계가 지형 위에 정확히 겹칩니다.
-  assert.match(canvas, /const viewBox = size\s*\n\s*\? `\$\{\(-view\.x \/ \(size\.width \* view\.zoom\)\) \* 100\}/);
-  assert.match(canvas, /\$\{100 \/ view\.zoom\} \$\{100 \/ view\.zoom\}`/);
-  assert.match(canvas, /: "0 0 100 100";/);
+  assert.match(canvas, /function windowOf\(view: View, size: \{ width: number; height: number \}\)/);
+  assert.match(canvas, /const viewBox = `\$\{window_\.x\} \$\{window_\.y\} \$\{window_\.w\} \$\{window_\.h\}`;/);
   assert.equal((canvas.match(/viewBox=\{viewBox\}/g) ?? []).length, 2);
+
+  // 창의 비율이 화면 비율을 따라가야 지도가 안 찌그러집니다. 정사각형 창을 쓰면
+  // 세로로 긴 폰에서 가로가 2.8배 눌립니다.
+  assert.match(geo, /export const UNIT_ASPECT = SPAN_KM\.y \/ SPAN_KM\.x;/);
+  assert.match(canvas, /function baseSpan\(width: number, height: number\)/);
+  assert.match(canvas, /const target = \(width \/ height\) \* UNIT_ASPECT;/);
+  assert.match(canvas, /return target <= 1 \? \{ w: 100 \* target, h: 100 \} : \{ w: 100, h: 100 \/ target \};/);
+  assert.doesNotMatch(canvas, /100 \/ view\.zoom/);
 
   // 핀과 이름표는 자기 자리를 셈해서 놓입니다.
   assert.match(canvas, /function toScreen\(x: number, y: number\)/);
-  assert.match(canvas, /x: x \* view\.zoom \+ \(view\.x \/ size\.width\) \* 100/);
+  assert.match(canvas, /x: \(\(x - window_\.x\) \/ window_\.w\) \* 100/);
   assert.match(canvas, /const \{ x, y \} = toScreen\(spot\.x, spot\.y\);/);
+  // 축척 막대가 가리키는 거리도 화면마다 다시 셉니다.
+  assert.match(canvas, /const SCALE_BAR_PX = 56;/);
+  assert.match(css, /\.map__scale i \{[^}]*width: 56px/s);
+  assert.match(canvas, /const kilometresPerPixel = size \? \(SPAN_KM\.x \* window_\.w\) \/ \(100 \* size\.width\) : 0;/);
 
   // 겹에는 변형도 되돌리기도 남지 않습니다 — 남아 있으면 그게 다시 뭉개는 원인입니다.
   assert.doesNotMatch(css, /--map-zoom|--map-pan-x|--map-pan-y/);
@@ -696,8 +707,8 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   // 100%에서도 지도를 조금 밀 수 있습니다. 딱 맞게 가둬 두면 검색 종이와 도크
   // 밑에 깔린 자리(강화도가 그랬습니다)는 영영 못 봅니다.
   assert.match(canvas, /const PAN_SLACK = 0\.2;/);
-  assert.match(canvas, /x: clamp\(view\.x, width \* \(1 - view\.zoom\) - slackX, slackX\)/);
-  assert.match(canvas, /y: clamp\(view\.y, height \* \(1 - view\.zoom\) - slackY, slackY\)/);
+  assert.match(canvas, /x: clamp\(view\.x, -reachX, reachX\), y: clamp\(view\.y, -reachY, reachY\)/);
+  assert.match(canvas, /\+ width \* PAN_SLACK;/);
   // 민 만큼 뒤에 그림이 있어야 빈 자리가 안 보입니다.
   const generator = await readFile(new URL("../build/districts.py", import.meta.url), "utf8");
   assert.match(generator, /^PAD = 22\.0$/m);
@@ -721,8 +732,11 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /const next = zoomedView\(direction > 0 \? current \* factor : current \/ factor\);/);
   // 휠도 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
   assert.match(canvas, /const rate = viewRef\.current\.zoom >= FAST_FROM \? 0\.0021 : 0\.0015;/);
-  // 축척은 막대를 늘리지 않고 거리를 줄입니다 — 안 그러면 1500%에서 막대가 화면을 넘습니다.
-  assert.match(canvas, /\{\(10 \/ view\.zoom\)\.toFixed\(view\.zoom >= 2 \? 1 : 0\)\} km/);
+  // 축척은 막대를 늘리지 않고 적힌 거리를 바꿉니다 — 안 그러면 1500%에서 막대가
+  // 화면을 넘습니다. 1km 아래로는 m 로 적습니다.
+  assert.match(canvas, /<i \/><span>\{scaleLabel\}<\/span>/);
+  assert.match(canvas, /barKilometres >= 1/);
+  assert.match(canvas, /Math\.round\(barKilometres \* 1000 \/ 10\) \* 10\} m/);
 });
 
 test("큐레이터 픽은 날짜에서 계산되고 손댈 수 없다", async () => {
@@ -854,8 +868,8 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
 
   // 화면 좌표를 겹의 변형 그대로 되돌립니다. 확대·이동 중에도 커서 밑을 짚습니다.
   assert.match(canvas, /function districtUnder\(clientX: number, clientY: number\)/);
-  assert.match(canvas, /\(\(clientX - rect\.left - current\.x\) \/ current\.zoom \/ rect\.width\) \* 100/);
-  assert.match(canvas, /\(\(clientY - rect\.top - current\.y\) \/ current\.zoom \/ rect\.height\) \* 100/);
+  assert.match(canvas, /spot\.x \+ \(\(clientX - rect\.left\) \/ rect\.width\) \* spot\.w/);
+  assert.match(canvas, /spot\.y \+ \(\(clientY - rect\.top\) \/ rect\.height\) \* spot\.h/);
 
   // 이름이 아니라 id 로 견줍니다 — 중구가 둘이라 이름으로 보면 같은 곳이 됩니다.
   assert.match(canvas, /setHovered\(\(current\) => \(current\?\.id === next\?\.id \? current : next\)\)/);
@@ -959,4 +973,24 @@ test("목업 카페의 주소는 좌표가 실제로 놓인 행정구역과 맞�
     // 지역번호도 따라가야 합니다 — 김포에서 인천으로 옮긴 곳은 031 이 아니라 032 입니다.
     assert.ok(tel.startsWith(code[found[0].parent]), `${id} ${name}: ${where} 인데 전화가 ${tel}`);
   }
+});
+
+test("좁은 화면에서는 검색이 단추 하나로 접힌다", async () => {
+  const [page, css] = await Promise.all(
+    ["../app/page.tsx", "../app/globals.css"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+  // 메뉴와 검색이 왼쪽에 나란히 서고, 상호는 가운데, 도감은 오른쪽입니다.
+  assert.match(page, /<div className="topbar__tools">/);
+  assert.match(page, /<button className="menu-button"[\s\S]{0,400}<button\s*\n\s*className="search-button"/);
+  assert.match(page, /<Search size=\{17\} aria-hidden="true" \/>/);
+  assert.match(page, /aria-expanded=\{searchOpen\}/);
+  assert.match(page, /aria-controls="search-panel"/);
+
+  // 펴면 바로 칠 수 있어야 합니다 — 단추 누르고 칸을 또 누르면 두 번 만지는 셈입니다.
+  assert.match(page, /if \(searchOpen\) searchRef\.current\?\.focus\(\);/);
+
+  // 넓은 화면에서는 검색 종이가 늘 펴져 있으므로 같은 일을 하는 단추를 두지 않습니다.
+  assert.match(css, /\.search-button \{\s*\n\s*display: none;/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-button \{\s*\n\s*display: inline-flex;/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-panel \{\s*\n\s*display: none;\s*\n\s*\}\s*\n\s*\.search-panel\.is-open \{/);
 });

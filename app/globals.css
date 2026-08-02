@@ -627,6 +627,30 @@ a:focus-visible,
   background: linear-gradient(180deg, color-mix(in srgb, var(--desk) 94%, transparent), transparent);
 }
 
+/* 메뉴와 검색은 왼쪽에 나란히. 상단바의 첫 칸이 둘을 함께 받습니다. */
+.topbar__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+/* 검색 단추는 좁은 화면에만 나옵니다 — 넓은 화면에서는 검색 종이가 늘 펴져
+   있으므로, 같은 일을 하는 단추를 하나 더 두면 무엇을 눌러야 할지 헷갈립니다. */
+.search-button {
+  display: none;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.search-button[aria-expanded="true"] {
+  color: var(--bean);
+}
+
 .menu-button {
   width: 44px;
   height: 44px;
@@ -1839,6 +1863,18 @@ a:focus-visible,
 @media (max-width: 767px) {
   .topbar {
     height: 70px;
+  }
+  .search-button {
+    display: inline-flex;
+  }
+  /* 접혀 있을 때는 지도가 통째로 드러납니다 — 좁은 화면에서 종이 한 장이
+     차지하는 자리는 넓은 화면의 그것과 다릅니다. */
+  .search-panel {
+    display: none;
+  }
+  .search-panel.is-open {
+    display: block;
+    animation: drop-in 160ms var(--ease-paper);
   }
   .topbar__brand b {
     font-size: var(--t-body);
