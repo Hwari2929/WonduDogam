@@ -89,7 +89,10 @@ const TILE_STEP = 0.25;
 type View = { zoom: number; x: number; y: number };
 
 const INITIAL_VIEW: View = { zoom: 1, x: 0, y: 0 };
-type Drag = { pointerId: number; startX: number; startY: number; view: View };
+/** tap 은 "여기서 손을 뗐을 때 동네를 짚어도 되는가"입니다 — 오므리다 만 손은 아닙니다. */
+type Drag = { pointerId: number; startX: number; startY: number; view: View; tap: boolean };
+/** 두 손가락 사이의 거리와 가운데. 매 프레임 이 둘의 변화만 지도에 옮깁니다. */
+type Pinch = { distance: number; x: number; y: number };
 
 export type SavedCafeMarker = { color: string; icon: CodexIconId; count: number; collectionName: string };
 
@@ -131,6 +134,24 @@ function levelOf(zoom: number): DistrictLevel {
 function baseSpan(width: number, height: number) {
   const target = (width / height) * UNIT_ASPECT;
   return target <= 1 ? { w: 100 * target, h: 100 } : { w: 100, h: 100 / target };
+}
+
+/**
+ * 배율만 곱한 자리. focus 로 짚은 점 밑의 땅이 화면에서 그대로 있도록 이동을 같이
+ * 옮깁니다. 이동값 0 이 한가운데라 화면 복판을 기준으로 셈합니다 — 왼쪽 위가
+ * 기준이면 (ratio - 1) 항이 없습니다.
+ *
+ * 휠·단추·두 손가락이 모두 이 식 하나를 씁니다. 오므리기만 따로 셈하면 같은
+ * 배율에서 같은 자리에 안 서게 됩니다.
+ */
+function scaledAt(view: View, factor: number, focusX: number, focusY: number, size: { width: number; height: number }): View {
+  const zoom = clamp(view.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+  const ratio = zoom / view.zoom;
+  return {
+    zoom,
+    x: (ratio - 1) * (size.width / 2 - focusX) + view.x * ratio,
+    y: (ratio - 1) * (size.height / 2 - focusY) + view.y * ratio,
+  };
 }
 
 function clampView(view: View, width: number, height: number): View {
@@ -206,6 +227,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 }) {
   const mapRef = useRef<HTMLElement>(null);
   const dragRef = useRef<Drag | null>(null);
+  /** 지금 지도에 얹혀 있는 손가락들. 하나면 밀기, 둘이면 오므리기입니다. */
+  const touchesRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<Pinch | null>(null);
   // ref 와 state 가 같은 값에서 출발해야 하지만, 초깃값을 ref 에서 읽으면
   // 렌더 중 ref 접근이 됩니다. 상수 하나를 양쪽이 나눠 씁니다.
   const viewRef = useRef<View>(INITIAL_VIEW);
@@ -363,14 +387,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (Math.abs(zoom - current.zoom) < 0.001) return null;
     const focusX = clientX === undefined ? rect.width / 2 : clientX - rect.left;
     const focusY = clientY === undefined ? rect.height / 2 : clientY - rect.top;
-    const ratio = zoom / current.zoom;
-    // 짚은 점 밑의 땅이 그대로 있도록 이동을 같이 옮깁니다. 이동값 0 이 한가운데라
-    // 화면 복판을 기준으로 셈합니다 — 왼쪽 위가 기준이면 (ratio - 1) 항이 없습니다.
-    return clampView({
-      zoom,
-      x: (ratio - 1) * (rect.width / 2 - focusX) + current.x * ratio,
-      y: (ratio - 1) * (rect.height / 2 - focusY) + current.y * ratio,
-    }, rect.width, rect.height);
+    return clampView(scaledAt(current, zoom / current.zoom, focusX, focusY, rect), rect.width, rect.height);
   }
 
   function changeZoom(direction: -1 | 1) {
@@ -398,13 +415,47 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (next) commitViewSoon(next);
   }
 
+  /** 두 손가락의 지금 거리와 가운데. 셋 이상이면 먼저 얹은 둘만 봅니다. */
+  function pinchOf(): Pinch | null {
+    const [a, b] = [...touchesRef.current.values()];
+    if (!a || !b) return null;
+    return { distance: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLElement>) {
     onInteract();
     if (event.button !== 0 || (event.target as Element).closest("button, a, input")) return;
     stopGlide();
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, view: viewRef.current };
+    touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    // 두 번째 손가락이 얹히면 밀기를 그만두고 오므리기로 넘어갑니다. 한 손가락
+    // 밀기를 그대로 두면 두 손이 벌어지는 동안 지도가 한쪽 손만 따라갑니다.
+    if (touchesRef.current.size >= 2) {
+      dragRef.current = null;
+      pinchRef.current = pinchOf();
+      setHovered(null);
+    } else {
+      dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, view: viewRef.current, tap: true };
+    }
     setDragging(true);
+  }
+
+  /**
+   * 두 손가락으로 오므리고 벌리기.
+   *
+   * 처음 자리에서 한 번에 셈하지 않고 **직전 프레임과의 차이**만 얹습니다. 그래야
+   * 손가락이 하나 더 얹히거나 하나 떨어져도 기준을 다시 잡을 필요 없이 이어집니다.
+   * 배율은 거리의 비로, 이동은 가운데의 이동으로 — 두 손 사이의 땅이 손을 따라옵니다.
+   */
+  function pinchMove() {
+    const rect = mapRef.current?.getBoundingClientRect();
+    const last = pinchRef.current;
+    const now = pinchOf();
+    if (!rect || !last || !now || last.distance < 1 || now.distance < 1) return;
+    pinchRef.current = now;
+    const scaled = scaledAt(viewRef.current, now.distance / last.distance, now.x - rect.left, now.y - rect.top, rect);
+    commitViewSoon(clampView({ zoom: scaled.zoom, x: scaled.x + (now.x - last.x), y: scaled.y + (now.y - last.y) }, rect.width, rect.height));
   }
 
   /**
@@ -423,6 +474,13 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLElement>) {
+    const touches = touchesRef.current;
+    if (touches.has(event.pointerId)) touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinchRef.current) {
+      pinchMove();
+      return;
+    }
+
     const drag = dragRef.current;
     const rect = mapRef.current?.getBoundingClientRect();
     if (drag && drag.pointerId === event.pointerId && rect) {
@@ -442,18 +500,38 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   }
 
   function endDrag(event: ReactPointerEvent<HTMLElement>) {
+    const touches = touchesRef.current;
+    const wasTouching = touches.delete(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+
+    // 손이 아직 남아 있으면 손짓이 끝난 게 아닙니다. 남은 하나가 있으면 그 자리에서
+    // 밀기를 새로 시작합니다 — 기준을 안 옮기면 손을 하나 떼는 순간 지도가 튑니다.
+    if (touches.size >= 2) {
+      pinchRef.current = pinchOf();
+      return;
+    }
+    if (touches.size === 1) {
+      pinchRef.current = null;
+      const [id, spot] = [...touches.entries()][0];
+      // 오므리다 손 하나를 뗀 것이므로, 남은 손을 떼도 동네를 짚지는 않습니다.
+      dragRef.current = { pointerId: id, startX: spot.x, startY: spot.y, view: viewRef.current, tap: false };
+      return;
+    }
+
     const drag = dragRef.current;
-    if (drag?.pointerId !== event.pointerId) return;
+    pinchRef.current = null;
     dragRef.current = null;
+    if (!wasTouching && !drag) return;
     flushView();
     setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!drag) return;
 
     // 손가락으로는 톡 쳐서 고릅니다. 끌었으면 지도를 옮긴 것이고, 제자리에서
     // 뗐으면 그 동네를 짚은 것입니다. 다른 동네를 치면 그쪽으로 옮겨 가고, 아무
     // 동네도 없는 자리를 치면 꺼집니다 — 같은 곳을 다시 쳤을 때만 다르게 굴면
     // 두 번째 탭이 켜는 건지 끄는 건지 손끝으로는 알 수 없습니다.
     if (event.pointerType === "mouse") return;
+    if (!drag.tap) return;
     const moved = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
     if (moved > TAP_SLOP) return;
     setHovered(districtUnder(event.clientX, event.clientY));

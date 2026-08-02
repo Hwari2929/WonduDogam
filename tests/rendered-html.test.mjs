@@ -1140,3 +1140,29 @@ test("지도는 보이는 칸만 그리고, 한 프레임에 한 번만 다시 �
   // memo 는 넘겨주는 손잡이가 렌더마다 새로 만들어지지 않아야 뜻이 있습니다.
   assert.match(page, /const openCafe = useCallback\(\(id: string\) => \{/);
 });
+
+test("두 손가락으로 오므리고 벌려 배율을 바꾼다", async () => {
+  const [canvas, css] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/globals.css"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 휠·단추·두 손가락이 같은 식 하나를 씁니다. 오므리기만 따로 셈하면 같은
+  // 배율에서 같은 자리에 안 섭니다.
+  assert.match(canvas, /function scaledAt\(view: View, factor: number, focusX: number, focusY: number/);
+  assert.match(canvas, /return clampView\(scaledAt\(current, zoom \/ current\.zoom, focusX, focusY, rect\)/);
+  assert.match(canvas, /const scaled = scaledAt\(viewRef\.current, now\.distance \/ last\.distance, now\.x - rect\.left, now\.y - rect\.top, rect\);/);
+
+  // 얹힌 손가락을 전부 들고 갑니다 — 하나면 밀기, 둘이면 오므리기.
+  assert.match(canvas, /const touchesRef = useRef\(new Map<number, \{ x: number; y: number \}>\(\)\);/);
+  assert.match(canvas, /if \(touchesRef\.current\.size >= 2\) \{\s*\n\s*dragRef\.current = null;/);
+  // 배율은 거리의 비로, 이동은 가운데의 이동으로.
+  assert.match(canvas, /x: scaled\.x \+ \(now\.x - last\.x\), y: scaled\.y \+ \(now\.y - last\.y\)/);
+
+  // 손을 하나 떼면 남은 자리에서 밀기를 새로 시작합니다 — 기준을 안 옮기면 튑니다.
+  assert.match(canvas, /if \(touches\.size === 1\) \{[\s\S]*?startX: spot\.x, startY: spot\.y, view: viewRef\.current, tap: false/);
+  // 오므리다 뗀 손은 동네를 짚는 탭이 아닙니다.
+  assert.match(canvas, /if \(!drag\.tap\) return;/);
+
+  // 브라우저가 제 나름대로 확대해 버리면 지도는 손짓을 아예 못 받습니다.
+  assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
+});
