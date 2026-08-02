@@ -633,46 +633,26 @@ a:focus-visible,
   align-items: center;
   gap: 2px;
 }
-/* 검색 단추는 좁은 화면에만 나옵니다 — 넓은 화면에서는 검색 종이가 늘 펴져
-   있으므로, 같은 일을 하는 단추를 하나 더 두면 무엇을 눌러야 할지 헷갈립니다. */
+/* 상단바의 두 단추는 같은 판입니다 — 44px 칸 안에 아이콘 하나. */
+.menu-button,
 .search-button {
-  display: none;
   width: 44px;
   height: 44px;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
+/* 검색 단추는 좁은 화면에만 나옵니다 — 넓은 화면에서는 검색 종이가 늘 펴져
+   있으므로, 같은 일을 하는 단추를 하나 더 두면 무엇을 눌러야 할지 헷갈립니다. */
+.search-button {
+  display: none;
+}
 .search-button[aria-expanded="true"] {
   color: var(--bean);
-}
-
-.menu-button {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  align-content: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.menu-button span {
-  width: 22px;
-  border-top: 1.5px solid currentColor;
-  transition: width 160ms var(--ease-paper);
-}
-.menu-button span:last-child {
-  width: 14px;
-}
-.menu-button:hover span:last-child {
-  width: 22px;
 }
 
 .topbar__brand {
@@ -713,6 +693,7 @@ a:focus-visible,
 .map__tools {
   transition: opacity 160ms var(--ease-paper);
 }
+.theme-button,
 .marks-button {
   height: 34px;
   display: inline-flex;
@@ -734,7 +715,7 @@ a:focus-visible,
   border-color: var(--rule);
   background: color-mix(in srgb, var(--paper) 76%, transparent);
 }
-.theme-button span {
+.theme-button svg {
   color: var(--accent);
 }
 .marks-button[aria-pressed="true"] {
@@ -774,7 +755,7 @@ a:focus-visible,
   color: var(--ink-faint);
 }
 
-/* §08 SEARCH — 밑줄 하나가 아니라 각진 상자 하나. 앞에 ⌕, 뒤에 단축키. */
+/* §08 SEARCH — 밑줄 하나가 아니라 각진 상자 하나. 앞에 돋보기, 뒤에 단축키. */
 .search-field {
   display: flex;
   align-items: center;
@@ -794,9 +775,9 @@ a:focus-visible,
   outline: none;
 }
 .search-field__glyph {
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  line-height: 1;
+  flex: none;
+  color: var(--ink-faint);
+  transition: color 140ms ease;
 }
 .search-field:focus-within .search-field__glyph {
   color: var(--accent);
@@ -1139,13 +1120,12 @@ a:focus-visible,
 .icon-button {
   width: 34px;
   height: 34px;
+  display: grid;
+  place-items: center;
   border: 0;
   background: transparent;
   color: var(--ink-faint);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: var(--t-title);
-  line-height: 1;
   transition: color 140ms ease;
 }
 .icon-button:hover {
@@ -1736,9 +1716,10 @@ a:focus-visible,
   font-size: var(--t-micro);
   text-decoration: none;
 }
-.drawer__links i {
+.drawer__links a > svg,
+.drawer__nav-go {
+  flex: none;
   color: var(--ink-faint);
-  font-style: normal;
 }
 
 .drawer__foot {

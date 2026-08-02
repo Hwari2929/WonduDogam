@@ -1,8 +1,9 @@
 "use client";
 
-import { BookMarked, Search } from "lucide-react";
+import { BookMarked, Contrast, LucideProvider, Menu, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_PATH } from "./base-path";
+import { ICON } from "./icons";
 import { Bibin, CodexMark } from "./components/BeanArt";
 import { Codex } from "./components/Codex";
 import { Drawer } from "./components/Drawer";
@@ -57,10 +58,10 @@ function highlight(name: string, query: string) {
 const SEARCH_LIMIT = 5;
 
 /** 상단 바에는 지금 놓인 종이 한 장만 적습니다 — 고를 수 있는 셋은 서랍에 있습니다. */
-const PAPERS: Record<Theme, { hint: string; glyph: string }> = {
-  light: { hint: "새 종이", glyph: "◐" },
-  warm: { hint: "묵은 종이", glyph: "◑" },
-  cool: { hint: "식은 종이", glyph: "◒" },
+const PAPERS: Record<Theme, { hint: string }> = {
+  light: { hint: "새 종이" },
+  warm: { hint: "묵은 종이" },
+  cool: { hint: "식은 종이" },
 };
 
 /**
@@ -378,8 +379,7 @@ export default function Home() {
       <header className="topbar">
         <div className="topbar__tools">
           <button className="menu-button" type="button" onClick={() => setSidebarOpen(true)} aria-label="메뉴 열기">
-            <span />
-            <span />
+            <Menu aria-hidden="true" />
           </button>
           {/* 좁은 화면에서는 검색 종이가 지도를 덮고 앉아 있을 자리가 없습니다.
               단추 하나로 두고, 누를 때만 상단바 밑으로 펴집니다. */}
@@ -391,7 +391,7 @@ export default function Home() {
             aria-expanded={searchOpen}
             aria-controls="search-panel"
           >
-            <Search size={17} aria-hidden="true" />
+            <Search aria-hidden="true" />
           </button>
         </div>
         <div className="topbar__brand">
@@ -407,7 +407,9 @@ export default function Home() {
             onClick={() => applyTheme(nextTheme(theme))}
             aria-label={`종이 바꾸기, 지금은 ${paper.hint}`}
           >
-            <span aria-hidden="true">{paper.glyph}</span>
+            {/* 어느 종이인지는 바로 옆 글자가 말합니다. 아이콘까지 세 가지로
+                나눠 두면 같은 것을 두 번 적는 셈입니다. */}
+            <Contrast size={ICON.sm} aria-hidden="true" />
             {paper.hint}
           </button>
           <button
@@ -418,21 +420,21 @@ export default function Home() {
             aria-label={`내 도감, ${marks.length}장 보관 중`}
             aria-pressed={panelOpen && panel === "codex"}
           >
-            <BookMarked size={17} aria-hidden="true" />
+            <BookMarked aria-hidden="true" />
             <span className="marks-button__label">내 도감</span>
             <strong className="marks-button__count tabular">{marks.length}</strong>
           </button>
         </div>
       </header>
 
-      {/* 02_디자인_시스템 §08 SEARCH — 밑줄 하나가 아니라 각진 상자. 앞에 ⌕,
+      {/* 02_디자인_시스템 §08 SEARCH — 밑줄 하나가 아니라 각진 상자. 앞에 돋보기,
           뒤에 단축키, 아래에 무엇을 누르면 되는지. */}
       <section id="search-panel" className={`search-panel plate ${searchOpen ? "is-open" : ""}`} aria-label="카페 찾기">
         <label className="label-ko" htmlFor="cafe-search">
           어디로 갈까
         </label>
         <div className="search-field">
-          <span className="search-field__glyph" aria-hidden="true">⌕</span>
+          <Search className="search-field__glyph" size={ICON.sm} aria-hidden="true" />
           <input
             id="cafe-search"
             className="search"

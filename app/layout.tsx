@@ -1,6 +1,8 @@
+import { LucideProvider } from "lucide-react";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
+import { ICON, ICON_STROKE } from "./icons";
 import { themeBootScript } from "./theme";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -56,7 +58,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2/fonts/variable/woff2/SUIT-Variable.css"
         />
       </head>
-      <body>{children}</body>
+      {/* 굵기와 기본 크기를 여기 한 번만 적습니다. 아이콘마다 따로 적어 두면
+          늘리거나 줄일 때 한둘이 빠져 결국 굵기가 섞입니다 (app/icons.ts). */}
+      <body>
+        <LucideProvider size={ICON.md} strokeWidth={ICON_STROKE} absoluteStrokeWidth>
+          {children}
+        </LucideProvider>
+      </body>
     </html>
   );
 }

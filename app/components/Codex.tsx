@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ChevronDown, ChevronUp, ClipboardPaste, Copy, ImageDown, MapPin, Plus, Trash2, X } from "lucide-react";
 import { downloadBlob, decodeMarks, encodeMarks, renderCodexImage } from "../codex-export";
 import { cafes } from "../data/cafes";
+import { ICON } from "../icons";
 import {
   CODEX_COLORS,
   COLLECTION_LIMIT,
@@ -184,7 +185,7 @@ export function Codex({
         {/* 영수증과 같은 자리를 나눠 쓰는 종이라, 닫는 연장도 같은 칸을 씁니다. */}
         <div className="receipt__tools">
           <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="내 도감 닫기">
-            <X size={17} aria-hidden="true" />
+            <X aria-hidden="true" />
             <span className="tip" aria-hidden="true">닫기</span>
           </button>
         </div>
@@ -206,14 +207,14 @@ export function Codex({
                   style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties}
                   onClick={() => { onSelectCollection(collection.id); setMode("list"); }}
                 >
-                  <CodexIcon name={collection.icon} size={17} />
+                  <CodexIcon name={collection.icon} />
                   <span>{collection.name}</span>
                   <i>{count}</i>
                 </button>
               );
             })}
             <button className="codex-tab codex-tab--add" type="button" onClick={() => setMode("create")} aria-label="새 도감 만들기">
-              <Plus size={17} aria-hidden="true" /><span>새 도감</span>
+              <Plus aria-hidden="true" /><span>새 도감</span>
             </button>
           </div>
         </div>
@@ -247,13 +248,13 @@ export function Codex({
 
             <div className="codex__board-actions">
               <button className="tool-button tool-button--sm has-tip" type="button" onClick={onExportImage} disabled={busy || activeMarks.length === 0} aria-label="이미지로 뽑기">
-                <ImageDown size={15} aria-hidden="true" /><span className="tip" aria-hidden="true">이미지로 뽑기</span>
+                <ImageDown size={ICON.sm} aria-hidden="true" /><span className="tip" aria-hidden="true">이미지로 뽑기</span>
               </button>
               <button className="tool-button tool-button--sm has-tip" type="button" onClick={onExportCode} disabled={busy || activeMarks.length === 0} aria-label="도감 코드 복사">
-                <Copy size={15} aria-hidden="true" /><span className="tip" aria-hidden="true">코드 복사</span>
+                <Copy size={ICON.sm} aria-hidden="true" /><span className="tip" aria-hidden="true">코드 복사</span>
               </button>
               <button className="tool-button tool-button--sm has-tip" type="button" onClick={() => setMode("import")} disabled={readOnly} aria-label="받은 코드 붙여 넣기">
-                <ClipboardPaste size={15} aria-hidden="true" /><span className="tip" aria-hidden="true">{readOnly ? "큐레이터 픽에는 넣을 수 없어" : "코드 붙여넣기"}</span>
+                <ClipboardPaste size={ICON.sm} aria-hidden="true" /><span className="tip" aria-hidden="true">{readOnly ? "큐레이터 픽에는 넣을 수 없어" : "코드 붙여넣기"}</span>
               </button>
               <button
                 className="tool-button tool-button--sm tool-button--danger has-tip"
@@ -268,7 +269,7 @@ export function Codex({
                 }}
                 aria-label="이 도감 지우기"
               >
-                <Trash2 size={15} aria-hidden="true" />
+                <Trash2 size={ICON.sm} aria-hidden="true" />
                 <span className="tip" aria-hidden="true">{readOnly ? "큐레이터 픽은 지울 수 없어" : collections.length < 2 ? "마지막 도감은 지울 수 없어" : "이 도감 지우기"}</span>
               </button>
             </div>
@@ -313,7 +314,7 @@ export function Codex({
                       aria-current={mark.id === activeCafeId ? "true" : undefined}
                       aria-label={`${label} 지도에서 보기`}
                     >
-                      <MapPin size={15} aria-hidden="true" />
+                      <MapPin size={ICON.sm} aria-hidden="true" />
                       <span className="tip" aria-hidden="true">지도에서 보기</span>
                     </button>
                     <button
@@ -323,7 +324,7 @@ export function Codex({
                       aria-expanded={open}
                       aria-label={`${label} ${open ? "접기" : "펼치기"}`}
                     >
-                      {open ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
+                      {open ? <ChevronUp size={ICON.sm} aria-hidden="true" /> : <ChevronDown size={ICON.sm} aria-hidden="true" />}
                       <span className="tip" aria-hidden="true">{open ? "접기" : "펼치기"}</span>
                     </button>
                   </div>
@@ -342,7 +343,7 @@ export function Codex({
                             onClick={() => { removeMark(mark.id, activeCollection.id); onNotice("이 도감에서 꺼냈어."); }}
                             aria-label={`${label} 이 도감에서 빼기`}
                           >
-                            <Trash2 size={15} aria-hidden="true" />
+                            <Trash2 size={ICON.sm} aria-hidden="true" />
                             <span className="tip" aria-hidden="true">목록에서 빼기</span>
                           </button>
                         )}

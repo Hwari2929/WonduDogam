@@ -87,8 +87,8 @@ test("카페 유형은 상단 브랜드와 안내선 굵기로 구분되고, 종
   // 저장과 닫기는 종이 오른쪽 위 정사각 칸 두 개. 아이콘만 남으므로 이름은
   // aria-label 과 말풍선이 함께 져야 합니다.
   assert.match(receipt, /<div className="receipt__tools">/);
-  assert.match(receipt, /<BookmarkCheck size=\{17\}[\s\S]*<BookmarkPlus size=\{17\}/);
-  assert.match(receipt, /<X size=\{17\} aria-hidden="true" \/>/);
+  assert.match(receipt, /<BookmarkCheck aria-hidden="true" \/>[\s\S]*<BookmarkPlus aria-hidden="true" \/>/);
+  assert.match(receipt, /<X aria-hidden="true" \/>/);
   assert.equal((receipt.match(/tool-button has-tip/g) ?? []).length, 2);
   assert.match(receipt, /aria-label=\{saved \?/);
   assert.match(css, /\.tool-button\s*\{[^}]*width: 34px;\s*height: 34px/s);
@@ -281,7 +281,7 @@ test("내 도감이 비어 있어도 불러오기로 들어갈 수 있다", asyn
   const source = await readFile(new URL("../app/components/Codex.tsx", import.meta.url), "utf8");
   // 불러오기는 글자 단추에서 관리판의 붙여넣기 연장으로 옮겼습니다.
   assert.match(source, /onClick=\{\(\) => setMode\("import"\)\} disabled=\{readOnly\} aria-label="받은 코드 붙여 넣기"/);
-  assert.match(source, /<ClipboardPaste size=\{15\}/);
+  assert.match(source, /<ClipboardPaste size=\{ICON\.sm\}/);
   const marks = await readFile(new URL("../app/marks.ts", import.meta.url), "utf8");
   assert.match(marks, /export function mergeMarks/);
   assert.match(marks, /existing\.collectionIds/);
@@ -329,7 +329,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
   assert.match(canvas, /MAX_ZOOM = 15/);
   assert.match(canvas, /className="map__zoom"/);
-  assert.match(canvas, /<Coffee size=\{12\}/);
+  assert.match(canvas, /<Coffee size=\{ICON\.sm\} aria-hidden="true" \/>/);
   assert.match(css, /\.map__places span \{ transform: translate\(-50%, -50%\); \}/);
   assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
   assert.doesNotMatch(layout, /kakao-map-key|KAKAO_MAP_KEY/);
@@ -518,7 +518,7 @@ test("도감 머리는 제자리에 남고, 관리판과 낱장은 접힌 채로
   // 낱장은 이름 한 줄 + 연장 둘. 긴 이름은 줄을 늘리지 않고 자릅니다.
   assert.match(codex, /<span className="codex__name" title=\{label\}>\{label\}<\/span>/);
   assert.match(css, /\.codex__name\s*\{[^}]*text-overflow: ellipsis;\s*white-space: nowrap/s);
-  assert.match(codex, /<MapPin size=\{15\}/);
+  assert.match(codex, /<MapPin size=\{ICON\.sm\}/);
   assert.match(codex, /aria-label=\{`\$\{label\} \$\{open \? "접기" : "펼치기"\}`\}/);
   // 빼기는 펼친 뒤에만, 붉은 색으로. 접힌 줄에서 실수로 눌리면 안 됩니다.
   assert.match(codex, /\{open \? \([\s\S]*codex__slip-tool--danger/);
@@ -982,7 +982,7 @@ test("좁은 화면에서는 검색이 단추 하나로 접힌다", async () => 
   // 메뉴와 검색이 왼쪽에 나란히 서고, 상호는 가운데, 도감은 오른쪽입니다.
   assert.match(page, /<div className="topbar__tools">/);
   assert.match(page, /<button className="menu-button"[\s\S]{0,400}<button\s*\n\s*className="search-button"/);
-  assert.match(page, /<Search size=\{17\} aria-hidden="true" \/>/);
+  assert.match(page, /<Search aria-hidden="true" \/>/);
   assert.match(page, /aria-expanded=\{searchOpen\}/);
   assert.match(page, /aria-controls="search-panel"/);
 
@@ -1007,6 +1007,45 @@ test("좁은 화면에서는 검색이 단추 하나로 접힌다", async () => 
   assert.match(css, /\.app-shell\[data-search-open="true"\] \.map__tools \{\s*\n\s*opacity: 0;\s*\n\s*pointer-events: none;/);
 
   // 도감은 숫자만 남으면 무엇의 수인지 알 수 없습니다 — 좁은 화면에서는 아이콘 하나.
-  assert.match(page, /<BookMarked size=\{17\} aria-hidden="true" \/>/);
+  assert.match(page, /<BookMarked aria-hidden="true" \/>/);
   assert.match(css, /\.marks-button strong\.marks-button__count \{\s*\n\s*display: none;/);
+});
+
+test("아이콘은 한 벌 · 한 굵기다", async () => {
+  const [icons, layout, css, ...views] = await Promise.all(
+    [
+      "../app/icons.ts",
+      "../app/layout.tsx",
+      "../app/globals.css",
+      "../app/page.tsx",
+      "../app/components/Drawer.tsx",
+      "../app/components/Codex.tsx",
+      "../app/components/Receipt.tsx",
+      "../app/components/MapCanvas.tsx",
+      "../app/components/CodexIcon.tsx",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 굵기와 기본 크기는 한 군데에만 적습니다. 아이콘마다 적어 두면 늘리거나
+  // 줄일 때 한둘이 빠져 결국 굵기가 섞입니다.
+  assert.match(icons, /export const ICON_STROKE = 1\.5;/);
+  assert.match(icons, /export const ICON = \{ sm: 15, md: 18 \} as const;/);
+  // absoluteStrokeWidth 가 없으면 24칸 기준이라 작은 아이콘일수록 선이 가늘어집니다.
+  assert.match(layout, /<LucideProvider size=\{ICON\.md\} strokeWidth=\{ICON_STROKE\} absoluteStrokeWidth>/);
+
+  for (const view of views) {
+    // 굵기를 따로 적은 아이콘이 하나라도 있으면 그 하나만 다른 손으로 그린 게 됩니다.
+    assert.doesNotMatch(view, /strokeWidth=/);
+    // 크기는 두 단뿐입니다 — 12·14·15·16·17 이 섞여 있던 자리입니다. 비빈과
+    // 도감 마크는 아이콘이 아니라 손으로 그린 브랜드 표식이라 셈에서 뺍니다.
+    assert.doesNotMatch(view, /<(?!CodexMark|BeanMark|BeanStamp|Bibin)[A-Z][A-Za-z]* size=\{[0-9]+\}/);
+    // 폰트 글리프로 그린 아이콘은 lucide 와 굵기가 맞지 않습니다. 주석의 화살표는
+    // 글이지 아이콘이 아니므로 먼저 걷어냅니다.
+    const markup = view.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    assert.doesNotMatch(markup, /[\u2715\u00d7\u2192\u2197\u2315\u25d0\u25d1\u25d2]/);
+  }
+
+  // 메뉴 단추도 CSS 로 그린 두 줄이 아니라 같은 벌의 아이콘입니다.
+  assert.match(views[0], /<Menu aria-hidden="true" \/>/);
+  assert.doesNotMatch(css, /\.menu-button span/);
 });

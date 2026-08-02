@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowRight, ArrowUpRight, X } from "lucide-react";
 import { partnerRegions, partnerTotal } from "../data/cafes";
+import { ICON } from "../icons";
 import { THEMES, type Theme } from "../theme";
 import { CodexMark } from "./BeanArt";
 
@@ -46,7 +48,7 @@ export function Drawer({
             <b>원두도감</b>
           </span>
           <button className="icon-button" type="button" onClick={onClose} aria-label="메뉴 닫기">
-            ×
+            <X aria-hidden="true" />
           </button>
         </div>
         <p className="drawer__tagline">수도권 개인 카페 지도</p>
@@ -75,11 +77,11 @@ export function Drawer({
           ) : null}
           <button type="button">
             <span>이런 느낌 찾기</span>
-            <strong aria-hidden="true">→</strong>
+            <ArrowRight className="drawer__nav-go" size={ICON.sm} aria-hidden="true" />
           </button>
           <button type="button">
             <span>원두도감이란</span>
-            <strong aria-hidden="true">→</strong>
+            <ArrowRight className="drawer__nav-go" size={ICON.sm} aria-hidden="true" />
           </button>
         </nav>
 
@@ -111,14 +113,14 @@ export function Drawer({
               비빈 로스팅 팩토리
               <small>스페셜티 원두 로스터리</small>
             </span>
-            <i aria-hidden="true">↗</i>
+            <ArrowUpRight size={ICON.sm} aria-hidden="true" />
           </a>
           <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer">
             <span>
               로허들 커피교실
               <small>호주 워홀 바리스타 교육</small>
             </span>
-            <i aria-hidden="true">↗</i>
+            <ArrowUpRight size={ICON.sm} aria-hidden="true" />
           </a>
         </div>
 

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
-import { BookmarkCheck, BookmarkPlus, X } from "lucide-react";
+import { ArrowUpRight, BookmarkCheck, BookmarkPlus, X } from "lucide-react";
+import { ICON } from "../icons";
 import { CURATOR_COLLECTION_ID, colorValue, type Collection } from "../marks";
 import { BeanMark } from "./BeanArt";
 import { CodexIcon } from "./CodexIcon";
@@ -78,7 +79,7 @@ export function Receipt({
             aria-haspopup="true"
             aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
           >
-            {saved ? <BookmarkCheck size={17} aria-hidden="true" /> : <BookmarkPlus size={17} aria-hidden="true" />}
+            {saved ? <BookmarkCheck aria-hidden="true" /> : <BookmarkPlus aria-hidden="true" />}
             <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
           </button>
 
@@ -91,7 +92,7 @@ export function Receipt({
                 {collections.filter((collection) => collection.id !== CURATOR_COLLECTION_ID).map((collection) => {
                   const included = selectedCollectionIds.includes(collection.id);
                   const full = !included && fullCollectionIds.includes(collection.id);
-                  return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={15} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;
+                  return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={ICON.sm} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;
                 })}
               </div>
             </section>
@@ -99,7 +100,7 @@ export function Receipt({
         </div>
 
         <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="영수증 닫기">
-          <X size={17} aria-hidden="true" />
+          <X aria-hidden="true" />
           <span className="tip" aria-hidden="true">닫기</span>
         </button>
       </div>
@@ -165,7 +166,7 @@ export function Receipt({
             <p className="guess-note">상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.</p>
           )}
 
-          <a className="receipt-action text-button" href={`https://map.kakao.com/?q=${encodeURIComponent(cafe.name)}`} target="_blank" rel="noopener noreferrer">카카오맵에서 보기 <span aria-hidden="true">↗</span></a>
+          <a className="receipt-action text-button" href={`https://map.kakao.com/?q=${encodeURIComponent(cafe.name)}`} target="_blank" rel="noopener noreferrer">카카오맵에서 보기 <ArrowUpRight size={ICON.sm} aria-hidden="true" /></a>
         </section>
       ) : null}
     </article>

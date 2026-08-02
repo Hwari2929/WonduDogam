@@ -14,6 +14,7 @@ import {
 import type { Cafe } from "../data/cafes";
 import { BASE_LEVEL, cafesIn, districtAt, districtsAtLevel, hasLevel, loadDongDistricts, type DistrictLevel } from "../data/districts";
 import { project, SPAN_KM, UNIT_ASPECT } from "../data/geo";
+import { ICON } from "../icons";
 import { outside, sea, type District } from "../data/districts-data";
 import { minorRoads, river, tributaries, trunkRoads } from "../data/terrain";
 import type { CodexIconId } from "../marks";
@@ -557,7 +558,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
             aria-label={`${cafe.name}, ${cafe.area}${saved ? `, ${saved.collectionName}에 저장됨` : ""}`}
             aria-pressed={active}
           >
-            <span className="map-marker__dot">{saved ? <CodexIcon name={saved.icon} size={14} /> : <Coffee size={12} strokeWidth={2.3} aria-hidden="true" />}</span>
+            <span className="map-marker__dot">{saved ? <CodexIcon name={saved.icon} size={ICON.sm} /> : <Coffee size={ICON.sm} aria-hidden="true" />}</span>
             {saved ? <span className="map-marker__name">{cafe.name}{saved.count > 1 ? <i>+{saved.count - 1}</i> : null}</span> : null}
           </button>;
         })}
@@ -566,10 +567,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       <div className="map__tools">
         <div className="map__scale" aria-hidden="true"><i /><span>{scaleLabel}</span></div>
         <div className="map__zoom" role="group" aria-label="지도 확대 축소" onPointerDown={(event) => event.stopPropagation()}>
-        <button type="button" onClick={() => changeZoom(-1)} disabled={view.zoom <= MIN_ZOOM + 0.01} aria-label="지도 축소"><Minus size={16} /></button>
+        <button type="button" onClick={() => changeZoom(-1)} disabled={view.zoom <= MIN_ZOOM + 0.01} aria-label="지도 축소"><Minus /></button>
         <output aria-live="polite" aria-label={`지도 확대율 ${Math.round(view.zoom * 100)}퍼센트`}>{Math.round(view.zoom * 100)}%</output>
-        <button type="button" onClick={() => changeZoom(1)} disabled={view.zoom >= MAX_ZOOM - 0.01} aria-label="지도 확대"><Plus size={16} /></button>
-          <button type="button" className="map__zoom-reset" onClick={resetView} disabled={view.zoom <= MIN_ZOOM + 0.01 && view.x === 0 && view.y === 0} aria-label="지도 위치와 확대율 초기화"><RotateCcw size={14} /></button>
+        <button type="button" onClick={() => changeZoom(1)} disabled={view.zoom >= MAX_ZOOM - 0.01} aria-label="지도 확대"><Plus /></button>
+          <button type="button" className="map__zoom-reset" onClick={resetView} disabled={view.zoom <= MIN_ZOOM + 0.01 && view.x === 0 && view.y === 0} aria-label="지도 위치와 확대율 초기화"><RotateCcw /></button>
         </div>
       </div>
     </section>
