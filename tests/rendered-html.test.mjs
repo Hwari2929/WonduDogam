@@ -663,8 +663,9 @@ test("지도 연장은 우하단 한 덩어리로 모이고, 종이가 덮지 �
   assert.doesNotMatch(css, /\.map__scale\s*\{[^}]*position: absolute/s);
   // 닿지 않는 단추는 없는 단추입니다 — 도크가 아래끝을 비워 줍니다.
   assert.match(css, /max-height: calc\(100svh - var\(--dock-top\) - 104px\)/);
-  // 손이 닿는 자리는 모바일에서만 위쪽입니다 (아래는 하단 시트가 씁니다).
-  assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.map__tools \{ top: 76px; right: 14px; bottom: auto; \}/);
+  // 좁은 화면에서도 오른쪽 아래입니다 — 엄지가 가장 쉽게 닿고, 영수증을 편
+  // 동안에는 종이가 화면을 통째로 덮으므로 아래를 비워 둘 이유가 없습니다.
+  assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.map__tools \{ right: 14px; bottom: 22px; \}/);
 });
 
 test("목업 카페는 여든 곳이고 협력업체는 다섯 중 하나다", async () => {
@@ -1285,4 +1286,29 @@ test("손짓 중에는 겹을 GPU 에 올려 두고, 안 바뀌는 것은 따로
 
   // 흐린 그림자는 핀 수만큼 곱해집니다.
   assert.match(css, /\.map-marker__dot \{[^}]*box-shadow: 0 1px 2px/s);
+});
+
+test("종이를 끝까지 올린 뒤 더 끌면 시트가 내려간다", async () => {
+  const [pull, page] = await Promise.all(
+    ["../app/useSheetPull.ts", "../app/page.tsx"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 잡을 곳을 따로 그려 두지 않습니다 — 읽던 손짓이 그대로 이어집니다.
+  assert.match(page, /const setDock = useSheetPull\(\{ enabled: isSheet, onClose: closePanel \}\);/);
+  assert.match(page, /ref=\{setDock\}/);
+  assert.doesNotMatch(page, /sheet-handle/);
+
+  // 종이가 맨 위에 닿아 있을 때 아래로 끄는 것만 시트를 끕니다. 그 전까지는
+  // 기준점을 손가락에 붙여 두어, 다 올린 그 자리에서 이어 끌리게 합니다.
+  assert.match(pull, /if \(y - startY <= 0 \|\| scroller\.scrollTop > 0\) \{\s*\n\s*startY = y;\s*\n\s*return;/);
+  // 여기서 막지 않으면 브라우저가 제 나름의 튕김을 얹어 두 개가 겹칩니다.
+  assert.match(pull, /dock\.addEventListener\("touchmove", move, \{ passive: false \}\);/);
+  assert.match(pull, /event\.preventDefault\(\);/);
+  // 거리로도 기세로도 닫힙니다.
+  assert.match(pull, /const leaving = offset > CLOSE_AT \|\| velocity > FLICK;/);
+  // 자리는 state 가 아니라 요소에 직접 씁니다.
+  assert.match(pull, /dock\.style\.transform = `translate3d\(0, \$\{offset\}px, 0\)`/);
+  // 도크가 닫혔다 다시 열릴 때 새 종이에도 손짓이 붙어야 합니다.
+  assert.match(pull, /const \[dock, setDock\] = useState<HTMLDivElement \| null>\(null\);/);
+  assert.match(pull, /\}, \[enabled, onClose, dock\]\);/);
 });

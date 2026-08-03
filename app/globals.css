@@ -2441,8 +2441,9 @@ a:focus-visible,
   .map-marker.is-active .map-marker__dot::after { animation: none; }
 }
 @media (max-width: 767px) {
-  /* 아래는 하단 시트가 차지하므로, 손 닿는 자리는 위쪽 오른편입니다. */
-  .map__tools { top: 76px; right: 14px; bottom: auto; }
+  /* 오른쪽 아래. 엄지가 가장 쉽게 닿는 자리이고, 영수증을 편 동안에는 종이가
+     화면을 통째로 덮으므로 아래를 비워 둘 이유도 없습니다. */
+  .map__tools { right: 14px; bottom: 22px; }
   .map__zoom { grid-template-columns: 38px 46px 38px; }
   .map__zoom button { height: 38px; }
   .map__zoom-reset { display: none !important; }

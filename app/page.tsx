@@ -1,6 +1,6 @@
 "use client";
 
-import { BookMarked, Contrast, LucideProvider, Menu, Search } from "lucide-react";
+import { BookMarked, Contrast, Menu, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_PATH } from "./base-path";
 import { ICON } from "./icons";
@@ -12,6 +12,7 @@ import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
 import { COLLECTION_LIMIT, CURATOR_COLLECTION, CURATOR_COLLECTION_ID, colorValue, countInCollection, setCafeInCollection, useCodex, withCuratorPicks } from "./marks";
 import { applyTheme, nextTheme, useTheme, type Theme } from "./theme";
+import { useSheetPull } from "./useSheetPull";
 
 /**
  * 영수증이 있는 자리 (03_기능_명세 §2).
@@ -239,6 +240,12 @@ export default function Home() {
    */
   const [touched, setTouched] = useState(false);
   const dock = useCallback(() => setTouched(true), []);
+
+  /**
+   * 종이를 맨 위까지 올린 뒤 더 끌면 시트가 손을 따라 내려가 닫힙니다.
+   * 잡을 곳을 따로 그려 두지 않아도, 읽던 손짓이 그대로 이어집니다.
+   */
+  const setDock = useSheetPull({ enabled: isSheet, onClose: closePanel });
 
   // 검색 종이를 펴면 바로 칠 수 있어야 합니다. 단추를 누르고 다시 칸을 누르게
   // 하면 두 번 만지는 셈이 됩니다.
@@ -546,6 +553,7 @@ export default function Home() {
           <div
             className={["dock", panel === "codex" && codexPreviewCafe ? "has-preview" : ""].filter(Boolean).join(" ")}
             id="dock"
+            ref={setDock}
           >
             {/* 흐르는 자리를 따로 둡니다 — 종이가 도크 밖으로 넘치지 않고,
                 끝에서 더 밀어도 뒤의 페이지가 따라 움직이지 않습니다. */}
