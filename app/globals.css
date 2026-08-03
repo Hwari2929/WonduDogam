@@ -936,7 +936,8 @@ a:focus-visible,
   box-shadow: 0 10px 20px var(--shadow);
 }
 
-.dock__peek {
+.dock__peek,
+.dock__hint {
   display: none;
 }
 
@@ -2493,7 +2494,9 @@ a:focus-visible,
     pointer-events: auto;
   }
   .dock__peek span {
+    flex: 1 1 auto;
     overflow: hidden;
+    text-align: left;
     font-family: var(--font-display);
     font-size: var(--t-label);
     font-weight: 600;
@@ -2504,6 +2507,52 @@ a:focus-visible,
   .dock__peek svg {
     flex: none;
     color: var(--ink-faint);
+  }
+
+  /*
+   * 내린 직후에만 잠깐 뜨는 안내.
+   *
+   * 상시 띄워 두면 두 번째부터는 읽지 않는 글이 자리만 차지합니다. 띠가 생기는
+   * 순간(.is-peek) 한 번 돌고 끝나는 애니메이션이라, 켜고 끄는 상태를 따로
+   * 들고 있지 않아도 어긋나지 않습니다.
+   *
+   * 자리는 띠 바로 위 왼편입니다. 가운데에 두면 오른쪽 아래 확대 단추와 겹칩니다.
+   */
+  .dock__hint {
+    display: block;
+    position: absolute;
+    z-index: 26; /* 도크(25)보다 위 — 띠 바로 위에 얹힙니다 */
+    bottom: 54px; /* 띠 44px + 10px */
+    left: var(--rail);
+    padding: 5px 10px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    font-style: normal;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .app-shell[data-phase="peek"] .dock__hint {
+    animation: hint-say 1900ms var(--ease-paper) both;
+  }
+  @keyframes hint-say {
+    0% {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    16%,
+    64% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(0);
+    }
   }
   .map__zoom { grid-template-columns: 38px 46px 38px; }
   .map__zoom button { height: 38px; }

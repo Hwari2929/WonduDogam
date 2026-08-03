@@ -1,6 +1,6 @@
 "use client";
 
-import { BookMarked, ChevronUp, Contrast, Menu, Search } from "lucide-react";
+import { BookMarked, ChevronUp, Contrast, History, Menu, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_PATH } from "./base-path";
 import { ICON } from "./icons";
@@ -591,6 +591,9 @@ export default function Home() {
                 aria-hidden={peeking ? undefined : true}
                 aria-label={`${displayedCafe.name} 다시 펴기`}
               >
+                {/* 시계 아이콘이 "방금까지 보던 것"이라고, 화살표가 "올릴 수
+                    있다"고 말합니다. 서로 다른 것을 말하므로 둘 다 둡니다. */}
+                <History size={ICON.sm} aria-hidden="true" />
                 <span>{displayedCafe.name}</span>
                 <ChevronUp size={ICON.sm} aria-hidden="true" />
               </button>
@@ -646,6 +649,14 @@ export default function Home() {
             )}
             </div>
           </div>
+          {/* 안내는 내린 직후에만 잠깐 뜹니다. 상시 띄워 두면 두 번째부터는 읽지
+              않는 글이 자리만 차지합니다. 뜨고 지는 것은 CSS 가 맡습니다 —
+              치워 둔 자리가 되는 순간 한 번 돌고 끝나므로, 켜고 끄는 상태를 따로
+              들고 있지 않아도 어긋나지 않습니다. 도크 밖에 두는 건 도크가 안쪽을
+              잘라 내기 때문입니다(overflow: hidden). */}
+          {panel === "receipt" ? (
+            <p className="dock__hint" aria-hidden="true">위로 밀어 다시 보기</p>
+          ) : null}
         </>
       ) : effectivePhase === "closed" ? (
         /* 한 번 열었다가 접은 사람에게만 보입니다. 첫 화면에서는 "다시" 볼 것이

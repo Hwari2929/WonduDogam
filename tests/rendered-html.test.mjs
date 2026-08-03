@@ -1329,6 +1329,17 @@ test("밀어 치워 둔 영수증은 이름 한 줄로 남고, 위로 밀면 다
   // 남는 건 이름 한 줄. X 는 그대로 아주 닫습니다.
   assert.match(page, /<button\s*\n\s*className="dock__peek"[\s\S]*?<span>\{displayedCafe\.name\}<\/span>/);
   assert.match(page, /onClick=\{restoreSheet\}/);
+  // 시계는 "방금까지 보던 것", 화살표는 "올릴 수 있다" — 서로 다른 것을 말합니다.
+  assert.match(page, /<History size=\{ICON\.sm\} aria-hidden="true" \/>\s*\n\s*<span>\{displayedCafe\.name\}<\/span>\s*\n\s*<ChevronUp/);
+
+  // 안내는 내린 직후에만 잠깐 뜹니다. 상시 띄워 두면 두 번째부터는 읽지 않는
+  // 글이 자리만 차지합니다. 켜고 끄는 상태를 따로 들지 않고 CSS 가 맡습니다.
+  assert.match(page, /<p className="dock__hint" aria-hidden="true">위로 밀어 다시 보기<\/p>/);
+  assert.match(css, /\.app-shell\[data-phase="peek"\] \.dock__hint \{\s*\n\s*animation: hint-say 1900ms/);
+  assert.match(css, /@keyframes hint-say \{[\s\S]*?100% \{\s*\n\s*opacity: 0;/);
+  // 도크가 안쪽을 잘라 내므로(overflow: hidden) 안내는 도크 밖에 둡니다.
+  assert.doesNotMatch(page, /<i className="dock__hint"/);
+  assert.match(css, /\.dock__hint \{[^}]*z-index: 26;/s);
   assert.match(pull, /export const PEEK_HEIGHT = 44;/);
   assert.match(css, /\.dock\.is-peek \{\s*\n\s*transform: translate3d\(0, calc\(100% - 44px\), 0\);/);
   // 띠만 남은 동안 안쪽이 흐르면 위로 미는 손짓이 스크롤로 먹힙니다.
@@ -1336,7 +1347,7 @@ test("밀어 치워 둔 영수증은 이름 한 줄로 남고, 위로 밀면 다
   // 아래끝에서 띠와 확대 단추가 겹치면 어느 쪽을 눌러도 엉뚱한 것이 눌립니다.
   assert.match(css, /\.app-shell\[data-phase="peek"\] \.map__tools \{ bottom: 74px; \}/);
   // 넓은 화면에는 이 띠가 없습니다 — 도크가 지도를 안 덮습니다.
-  assert.match(css, /\.dock__peek \{\s*\n\s*display: none;\s*\n\}/);
+  assert.match(css, /\.dock__peek,\s*\n\.dock__hint \{\s*\n\s*display: none;\s*\n\}/);
   // 치워 둔 채로 뒤로가기를 누르면, 아무 카페도 안 가리키는 이름이 남지 않게 걷습니다.
   assert.match(page, /: phase === "peek" \? "closed" : phase;/);
 });
