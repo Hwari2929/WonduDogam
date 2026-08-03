@@ -382,6 +382,20 @@ a:focus-visible,
   position: absolute;
   inset: 0;
   overflow: hidden;
+  background: var(--desk);
+}
+
+/*
+ * 책상과 눈금.
+ *
+ * 움직이지도 바뀌지도 않는 그림이라 따로 떼어 냅니다. 지도와 한 겹에 두면
+ * 확대할 때마다 이 격자까지 같이 구워지는데, 측정해 보니 확대 한 번의 래스터 중
+ * 37%가 여기서 나왔습니다. 제 겹으로 올려 두면 한 번만 굽고 그 뒤로는 합성뿐입니다.
+ */
+.map__desk {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background:
     /* 좌표 격자 — §05 지도 화면. 56px 눈금, 선은 --rule 을 35% 로 눕힌 것. */
     repeating-linear-gradient(
@@ -395,6 +409,7 @@ a:focus-visible,
       transparent 1px 56px
     ),
     radial-gradient(120% 90% at 50% 40%, var(--desk) 40%, var(--desk-deep) 100%);
+  will-change: transform;
 }
 
 .map__terrain {
@@ -483,6 +498,17 @@ a:focus-visible,
   background-size: 128px 128px;
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
+}
+/*
+ * 지도 위의 결만 섞기를 뺍니다.
+ *
+ * 섞기는 밑에 깔린 것을 매번 다시 읽어야 해서, 지도가 다시 그려질 때마다 화면
+ * 전체를 한 번 더 훑습니다(확대 한 번의 래스터 중 28%). 종이 위의 결은 종이가
+ * 작고 자주 안 바뀌니 그대로 둡니다 — 결은 종이에서 더 중요하기도 합니다.
+ */
+.map__grain {
+  mix-blend-mode: normal;
+  opacity: calc(var(--grain-opacity) * 0.8);
 }
 /* invert(0) 도 필터라, 지도가 움직이는 프레임마다 화면 전체를 한 번 더 훑습니다.
    뒤집을 일이 있는 어두운 종이에서만 겁니다. */
@@ -2331,7 +2357,9 @@ a:focus-visible,
   border: 1.5px solid color-mix(in srgb, var(--ink-soft) 76%, var(--paper));
   background: color-mix(in srgb, var(--paper) 88%, transparent);
   color: var(--ink-soft);
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow) 65%, transparent);
+  /* 흐린 그림자는 핀 수만큼 곱해집니다. 테두리 한 줄이 이미 지도에서 떼어
+     주고 있으므로, 그림자는 바닥에 닿는 만큼만 남깁니다. */
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow) 45%, transparent);
 }
 .map-marker--plain:hover .map-marker__dot { background: var(--paper); color: var(--ink); }
 

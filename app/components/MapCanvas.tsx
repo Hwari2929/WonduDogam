@@ -280,6 +280,8 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   const renderedRef = useRef<View>(INITIAL_VIEW);
   /** 다시 그린 다음 얹어 둔 변형을 되돌려야 하는가. */
   const restoreRef = useRef(false);
+  /** 손짓이 진행 중인가. 그동안에는 겹을 통째로 GPU 에 올려 둡니다. */
+  const movingRef = useRef(false);
   /** 진행 중인 미끄러짐. 끌기나 휠이 끼어들면 즉시 놓아 줍니다. */
   const glideRef = useRef<number | null>(null);
   /** 휠은 끝을 알려 주지 않습니다. 조용해지면 그때 한 번 그립니다. */
@@ -337,7 +339,12 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
     if (!restoreRef.current) return;
     restoreRef.current = false;
     renderedRef.current = view;
-    if (panRef.current) panRef.current.style.transform = "";
+    const layer = panRef.current;
+    if (!layer) return;
+    layer.style.transform = "";
+    // 손짓이 끝났으면 겹을 놓아 줍니다. 계속 붙들고 있으면 화면 두 배 넓이의
+    // 그림을 메모리에 이고 다니게 됩니다.
+    if (!movingRef.current) layer.style.willChange = "";
   }, [view]);
 
   // 읍면동은 그 배율에 처음 닿을 때 한 번만 불러옵니다. 첫 화면에 천 칸을 들고
@@ -391,6 +398,25 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
    * 조금 무릅니다만, 손을 떼는 순간 제 배율로 한 번 그려 다시 또렷해집니다 —
    * 매 프레임 처음부터 그리느라 손을 못 따라오는 것보다 이쪽이 낫습니다.
    */
+  /**
+   * 겹을 GPU 에 올려 둡니다.
+   *
+   * 이걸 안 걸어 두면 크로뮴은 배율이 바뀔 때마다 **그 배율로 다시 래스터**합니다 —
+   * 또렷하게 지키려는 배려지만, 오므리는 24 프레임 동안 화면 두 배 넓이의 지도를
+   * 24번 굽는 일이 됩니다(측정: 래스터 1,233ms). will-change 를 걸어 두면 한 번
+   * 구운 그림을 GPU 가 늘려 보여 주고, 손을 뗀 뒤 제 배율로 한 번만 다시 굽습니다.
+   */
+  function beginMoving() {
+    movingRef.current = true;
+    if (panRef.current) panRef.current.style.willChange = "transform";
+  }
+
+  function endMoving() {
+    movingRef.current = false;
+    const layer = panRef.current;
+    if (layer && !layer.style.transform) layer.style.willChange = "";
+  }
+
   function applyTransform() {
     const layer = panRef.current;
     if (!layer || !size) return;
@@ -408,12 +434,16 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
 
   /** 손짓이 끝났습니다. 지금 자리로 한 번 그립니다. */
   function settle() {
+    movingRef.current = false;
     if (settleRef.current !== null) {
       window.clearTimeout(settleRef.current);
       settleRef.current = null;
     }
     const layer = panRef.current;
-    if (!layer || !layer.style.transform) return;
+    if (!layer || !layer.style.transform) {
+      endMoving();
+      return;
+    }
     restoreRef.current = true;
     setView({ ...viewRef.current });
   }
@@ -465,6 +495,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
    */
   function glideTo(target: View) {
     stopGlide();
+    beginMoving();
     const from = viewRef.current;
     if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       viewRef.current = target;
@@ -522,6 +553,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
     // 휠은 이미 조금씩 연달아 들어오므로 그대로 따라갑니다 — 여기에 미끄러짐을
     // 얹으면 손보다 지도가 늦게 따라와 미끄덩거립니다.
     stopGlide();
+    beginMoving();
     // 단추와 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
     const rate = viewRef.current.zoom >= FAST_FROM ? 0.0021 : 0.0015;
     const next = zoomedView(viewRef.current.zoom * Math.exp(-event.deltaY * rate), event.clientX, event.clientY);
@@ -543,6 +575,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
     onInteract();
     if (event.button !== 0) return;
     stopGlide();
+    beginMoving();
     // 핀이나 단추 위에 내려앉은 손가락도 **손가락으로는** 셉니다. 안 세면 두 손
     // 중 하나가 핀에 닿았다는 이유로 오므리기가 아예 시작되지 않습니다 —
     // 핀은 화면 곳곳에 있으므로 그건 자주 일어납니다.
@@ -821,6 +854,9 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
       {/* 지형·강조·핀을 세 겹으로 가릅니다. 어느 겹도 CSS 로 확대하지 않습니다 —
           그림은 viewBox 가 좁아지며 벡터에서 다시 그려지고, 핀과 이름표는 자기
           자리를 셈해서 놓입니다. 늘려 붙이는 단계가 아예 없어야 안 뭉갭니다. */}
+      {/* 책상과 눈금은 지도와 함께 움직이지 않습니다. 제 겹에 두어 한 번만 굽습니다. */}
+      <div className="map__desk" aria-hidden="true" />
+
       <div className="map__pan" ref={panRef}>
       <div className="map__layer map__viewport">
         <svg className="map__terrain" viewBox={viewBox} preserveAspectRatio="none" aria-hidden="true">

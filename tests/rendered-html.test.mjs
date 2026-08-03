@@ -614,8 +614,12 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
 
   // 겹에는 변형도 되돌리기도 남지 않습니다 — 남아 있으면 그게 다시 뭉개는 원인입니다.
   assert.doesNotMatch(css, /--map-zoom|--map-pan-x|--map-pan-y/);
-  assert.doesNotMatch(css, /will-change: transform/);
   assert.doesNotMatch(canvas, /mapVars/);
+  // 겹을 GPU 에 올려 두는 건 손짓이 이어지는 **동안만**입니다. CSS 에 박아 두면
+  // 늘려 놓은 그림을 계속 붙들고 있게 되어, 그게 다시 뭉개는 원인이 됩니다.
+  assert.doesNotMatch(css, /\.map__pan \{[^}]*will-change/s);
+  assert.match(canvas, /panRef\.current\.style\.willChange = "transform"/);
+  assert.match(canvas, /if \(!movingRef\.current\) layer\.style\.willChange = "";/);
   // 겹은 화면보다 사방 25% 씩 넓습니다 — 끄는 동안 창을 고쳐 쓰지 않고 밀기만
   // 하려면 밀어서 드러날 자리가 미리 그려져 있어야 합니다.
   assert.match(css, /\.map__layer \{\s*\n\s*position: absolute;\s*\n\s*inset: -25%;\s*\n\}/);
@@ -637,7 +641,7 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   assert.match(css, /\.map__pan \{\s*\n\s*position: absolute;\s*\n\s*inset: 0;\s*\n\s*transform-origin: 0 0;\s*\n\}/);
   assert.match(canvas, /`translate3d\(\$\{tx\}px, \$\{ty\}px, 0\) scale\(\$\{scale\}\)`/);
   // 끌기와 휠은 이미 손을 따라오므로 미끄러짐을 끼우지 않고 즉시 놓아 줍니다.
-  assert.match(canvas, /stopGlide\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*beginMoving\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
   // 손을 대는 순간 미끄러짐은 놓아 주고, 그 손가락은 지도가 받아 둡니다.
   assert.match(canvas, /function onPointerDown\(event: ReactPointerEvent<HTMLElement>\) \{[\s\S]*?stopGlide\(\);/);
   assert.match(canvas, /event\.currentTarget\.setPointerCapture\(event\.pointerId\);/);
@@ -1258,4 +1262,27 @@ test("도감 낱장은 줄 전체가 열고, 핀은 지도로 데려간다", asy
 
   // 스탬프 판이 좁은 화면의 절반을 먹고 있었습니다. 칸 수와 연장만 남깁니다.
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.codex__board-lines \{\s*\n\s*display: none;/);
+});
+
+test("손짓 중에는 겹을 GPU 에 올려 두고, 안 바뀌는 것은 따로 굽는다", async () => {
+  const [canvas, css] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/globals.css"].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // will-change 없이 배율을 바꾸면 크로뮴은 그 배율로 매 프레임 다시 굽습니다.
+  // 오므리는 동안의 래스터가 1,233ms 였던 게 그 때문이었습니다.
+  assert.match(canvas, /function beginMoving\(\)/);
+  assert.match(canvas, /function endMoving\(\)/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*beginMoving\(\);/);
+
+  // 책상과 눈금은 움직이지도 바뀌지도 않습니다 — 제 겹에 두어 한 번만 굽습니다.
+  assert.match(canvas, /className="map__desk"/);
+  assert.match(css, /\.map__desk \{[^}]*repeating-linear-gradient[\s\S]*?will-change: transform;/s);
+  assert.doesNotMatch(css, /\.map \{\s*\n\s*position: absolute;[^}]*repeating-linear-gradient/s);
+
+  // 섞기는 밑에 깔린 것을 매번 다시 읽습니다. 종이에는 남기고 지도에서만 뺍니다.
+  assert.match(css, /\.map__grain \{\s*\n\s*mix-blend-mode: normal;/);
+
+  // 흐린 그림자는 핀 수만큼 곱해집니다.
+  assert.match(css, /\.map-marker__dot \{[^}]*box-shadow: 0 1px 2px/s);
 });
