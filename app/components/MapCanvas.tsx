@@ -387,7 +387,6 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
       const spot = pointerRef.current;
       return spot ? districtUnder(spot.x, spot.y) : null;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level]);
 
   /**

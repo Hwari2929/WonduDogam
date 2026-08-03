@@ -1,6 +1,6 @@
 "use client";
 
-import { BookMarked, Contrast, Menu, Search } from "lucide-react";
+import { BookMarked, ChevronUp, Contrast, Menu, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_PATH } from "./base-path";
 import { ICON } from "./icons";
@@ -18,6 +18,7 @@ import { useSheetPull } from "./useSheetPull";
  * 영수증이 있는 자리 (03_기능_명세 §2).
  *   intro  — 아직 아무것도 안 나옴. 첫 화면은 지도와 상단 바뿐입니다.
  *   docked — 우측 패널(모바일은 하단 시트).
+ *   peek   — 좁은 화면에서 손으로 밀어 치워 둔 자리. 이름 한 줄짜리 띠만 남습니다.
  *   closed — 접힘. 넓은 화면에만 "다시 보기" 탭이 남습니다.
  *
  * 예전에는 로드 400ms 뒤에 영수증이 화면 한가운데서 프린트되는 자리(center)가
@@ -25,7 +26,7 @@ import { useSheetPull } from "./useSheetPull";
  * 오늘의 카페 한 장이 지도를 덮고 서 있는 것이기도 했습니다. 지금은 지도부터
  * 보여 주고, 종이는 고른 다음에 나옵니다.
  */
-type Phase = "intro" | "docked" | "closed";
+type Phase = "intro" | "docked" | "peek" | "closed";
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -224,8 +225,17 @@ export default function Home() {
    * 경우이므로 프린트 연출 없이 도크에 놓입니다. 주소가 "/" 로 돌아오면 그때부터
    * 다시 로컬 상태(intro → center → closed)를 따릅니다.
    */
-  const effectivePhase: Phase = route ? "docked" : phase;
-  const panelOpen = effectivePhase === "docked";
+  /**
+   * 밀어 치워 둔 자리는 주소가 아니라 손이 정한 것이라, 주소가 카페를 가리키고
+   * 있어도 그 상태가 이깁니다. 다른 카페를 고르면 openCafe 가 다시 펴 줍니다.
+   */
+  const effectivePhase: Phase = route
+    ? phase === "peek" ? "peek" : "docked"
+    // 치워 둔 채로 뒤로가기를 누르면 주소가 카페를 놓습니다. 그때는 띠도 같이
+    // 걷습니다 — 안 그러면 아무 카페도 안 가리키는 이름이 아래에 남습니다.
+    : phase === "peek" ? "closed" : phase;
+  const peeking = effectivePhase === "peek";
+  const panelOpen = effectivePhase === "docked" || peeking;
 
   const closePanel = useCallback(() => {
     setCodexPreviewId(null);
@@ -242,10 +252,24 @@ export default function Home() {
   const dock = useCallback(() => setTouched(true), []);
 
   /**
-   * 종이를 맨 위까지 올린 뒤 더 끌면 시트가 손을 따라 내려가 닫힙니다.
-   * 잡을 곳을 따로 그려 두지 않아도, 읽던 손짓이 그대로 이어집니다.
+   * 종이를 맨 위까지 올린 뒤 더 끌면 시트가 손을 따라 내려갑니다.
+   *
+   * 영수증은 아주 닫지 않고 이름 한 줄짜리 띠로 치워 둡니다 — 지도에서 자리를
+   * 확인하고 곧바로 되돌아오는 일이 잦은데, 그때마다 핀을 다시 찾아 눌러야
+   * 하면 치워 둔 게 아니라 잃어버린 것이 됩니다. 도감은 되돌릴 이름이 없으므로
+   * 그대로 닫습니다.
    */
-  const setDock = useSheetPull({ enabled: isSheet, onClose: closePanel });
+  const dismissSheet = useCallback(() => {
+    setPhase((current) => (current === "docked" ? "peek" : current));
+  }, []);
+  const restoreSheet = useCallback(() => setPhase("docked"), []);
+
+  const setDock = useSheetPull({
+    enabled: isSheet,
+    peeking,
+    onDismiss: panel === "receipt" ? dismissSheet : closePanel,
+    onRestore: restoreSheet,
+  });
 
   // 검색 종이를 펴면 바로 칠 수 있어야 합니다. 단추를 누르고 다시 칸을 누르게
   // 하면 두 번 만지는 셈이 됩니다.
@@ -551,10 +575,26 @@ export default function Home() {
       {panelOpen ? (
         <>
           <div
-            className={["dock", panel === "codex" && codexPreviewCafe ? "has-preview" : ""].filter(Boolean).join(" ")}
+            className={["dock", peeking ? "is-peek" : "", panel === "codex" && codexPreviewCafe ? "has-preview" : ""].filter(Boolean).join(" ")}
             id="dock"
             ref={setDock}
           >
+            {/* 치워 둔 자리에 남는 띠. 종이 맨 위 44px 에 겹쳐 있다가, 밀어
+                치웠을 때만 나타납니다 — 무엇이 접혀 있는지는 이름 한 줄이면
+                충분하고, 그 이상은 지도를 가립니다. */}
+            {panel === "receipt" ? (
+              <button
+                className="dock__peek"
+                type="button"
+                onClick={restoreSheet}
+                tabIndex={peeking ? 0 : -1}
+                aria-hidden={peeking ? undefined : true}
+                aria-label={`${displayedCafe.name} 다시 펴기`}
+              >
+                <span>{displayedCafe.name}</span>
+                <ChevronUp size={ICON.sm} aria-hidden="true" />
+              </button>
+            ) : null}
             {/* 흐르는 자리를 따로 둡니다 — 종이가 도크 밖으로 넘치지 않고,
                 끝에서 더 밀어도 뒤의 페이지가 따라 움직이지 않습니다. */}
             <div className="dock__scroll">

@@ -1114,7 +1114,7 @@ test("좁은 화면의 시트는 잘리고, 닫는 길은 X 와 뒤로가기뿐�
   // 잡고 내리는 바는 걷어냈습니다. 조작감도 조작감이지만, 무엇을 잡으면 무엇이
   // 되는지가 손잡이 하나로는 전해지지 않았습니다.
   assert.doesNotMatch(page, /sheet-handle|useSheetDrag/);
-  assert.doesNotMatch(css, /sheet-handle|--sheet-y|is-peek|\.dock\.is-dragging/);
+  assert.doesNotMatch(css, /sheet-handle|--sheet-y|\.dock\.is-dragging/);
   assert.doesNotMatch(css, /\.dock\.is-center/);
 
   // 흐르는 자리는 따로 둡니다 — 종이가 도크 밖으로 넘치지 않게.
@@ -1294,21 +1294,49 @@ test("종이를 끝까지 올린 뒤 더 끌면 시트가 내려간다", async (
   );
 
   // 잡을 곳을 따로 그려 두지 않습니다 — 읽던 손짓이 그대로 이어집니다.
-  assert.match(page, /const setDock = useSheetPull\(\{ enabled: isSheet, onClose: closePanel \}\);/);
+  assert.match(page, /const setDock = useSheetPull\(\{\s*\n\s*enabled: isSheet,\s*\n\s*peeking,/);
   assert.match(page, /ref=\{setDock\}/);
   assert.doesNotMatch(page, /sheet-handle/);
 
   // 종이가 맨 위에 닿아 있을 때 아래로 끄는 것만 시트를 끕니다. 그 전까지는
   // 기준점을 손가락에 붙여 두어, 다 올린 그 자리에서 이어 끌리게 합니다.
-  assert.match(pull, /if \(y - startY <= 0 \|\| scroller\.scrollTop > 0\) \{\s*\n\s*startY = y;\s*\n\s*return;/);
+  assert.match(pull, /const wants = peeking \? dy < 0 : dy > 0 && scroller\.scrollTop <= 0;/);
   // 여기서 막지 않으면 브라우저가 제 나름의 튕김을 얹어 두 개가 겹칩니다.
   assert.match(pull, /dock\.addEventListener\("touchmove", move, \{ passive: false \}\);/);
   assert.match(pull, /event\.preventDefault\(\);/);
-  // 거리로도 기세로도 닫힙니다.
-  assert.match(pull, /const leaving = offset > CLOSE_AT \|\| velocity > FLICK;/);
+  // 거리로도 기세로도 넘어갑니다.
+  assert.match(pull, /const passed = travelled > PASS_AT \|\| flicked;/);
   // 자리는 state 가 아니라 요소에 직접 씁니다.
   assert.match(pull, /dock\.style\.transform = `translate3d\(0, \$\{offset\}px, 0\)`/);
   // 도크가 닫혔다 다시 열릴 때 새 종이에도 손짓이 붙어야 합니다.
   assert.match(pull, /const \[dock, setDock\] = useState<HTMLDivElement \| null>\(null\);/);
-  assert.match(pull, /\}, \[enabled, onClose, dock\]\);/);
+  assert.match(pull, /\}, \[enabled, peeking, onDismiss, onRestore, dock\]\);/);
+});
+
+test("밀어 치워 둔 영수증은 이름 한 줄로 남고, 위로 밀면 다시 펴진다", async () => {
+  const [page, pull, css] = await Promise.all(
+    ["../app/page.tsx", "../app/useSheetPull.ts", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 아주 닫지 않는 건, 지도에서 자리를 확인하고 곧바로 되돌아오는 일이 잦기
+  // 때문입니다. 도감은 되돌릴 이름이 없으므로 그대로 닫습니다.
+  assert.match(page, /type Phase = "intro" \| "docked" \| "peek" \| "closed";/);
+  assert.match(page, /onDismiss: panel === "receipt" \? dismissSheet : closePanel,/);
+  // 밀어 치워 둔 자리는 손이 정한 것이라, 주소가 카페를 가리켜도 그게 이깁니다.
+  assert.match(page, /const effectivePhase: Phase = route\s*\n\s*\? phase === "peek" \? "peek" : "docked"/);
+
+  // 남는 건 이름 한 줄. X 는 그대로 아주 닫습니다.
+  assert.match(page, /<button\s*\n\s*className="dock__peek"[\s\S]*?<span>\{displayedCafe\.name\}<\/span>/);
+  assert.match(page, /onClick=\{restoreSheet\}/);
+  assert.match(pull, /export const PEEK_HEIGHT = 44;/);
+  assert.match(css, /\.dock\.is-peek \{\s*\n\s*transform: translate3d\(0, calc\(100% - 44px\), 0\);/);
+  // 띠만 남은 동안 안쪽이 흐르면 위로 미는 손짓이 스크롤로 먹힙니다.
+  assert.match(css, /\.dock\.is-peek \.dock__scroll \{\s*\n[\s\S]*?overflow: hidden;/);
+  // 아래끝에서 띠와 확대 단추가 겹치면 어느 쪽을 눌러도 엉뚱한 것이 눌립니다.
+  assert.match(css, /\.app-shell\[data-phase="peek"\] \.map__tools \{ bottom: 74px; \}/);
+  // 넓은 화면에는 이 띠가 없습니다 — 도크가 지도를 안 덮습니다.
+  assert.match(css, /\.dock__peek \{\s*\n\s*display: none;\s*\n\}/);
+  // 치워 둔 채로 뒤로가기를 누르면, 아무 카페도 안 가리키는 이름이 남지 않게 걷습니다.
+  assert.match(page, /: phase === "peek" \? "closed" : phase;/);
 });
