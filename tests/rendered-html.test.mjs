@@ -1351,3 +1351,46 @@ test("밀어 치워 둔 영수증은 이름 한 줄로 남고, 위로 밀면 다
   // 치워 둔 채로 뒤로가기를 누르면, 아무 카페도 안 가리키는 이름이 남지 않게 걷습니다.
   assert.match(page, /: phase === "peek" \? "closed" : phase;/);
 });
+
+test("문서가 코드와 같은 값을 적고 있다", async () => {
+  const [design, spec, css, icons, canvas, pull, marks] = await Promise.all(
+    [
+      "../docs/02_디자인_시스템.md",
+      "../docs/03_기능_명세.md",
+      "../app/globals.css",
+      "../app/icons.ts",
+      "../app/components/MapCanvas.tsx",
+      "../app/useSheetPull.ts",
+      "../app/marks.ts",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 문서가 값을 적어 두면 언젠가 코드와 어긋납니다. 어긋나는 순간 여기서 걸립니다.
+  const token = (name) => css.match(new RegExp(`${name}:\\s*([^;]+);`))[1].trim();
+  for (const [name, role] of [["--desk", "책상"], ["--paper", "종이"], ["--rule", "괘선"]]) {
+    assert.ok(design.includes(`\`${name}\``), `${role}(${name}) 이 문서에 없습니다`);
+    assert.ok(design.includes(token(name)), `${name} 값 ${token(name)} 이 문서와 다릅니다`);
+  }
+  assert.ok(design.includes("1.5px"), "아이콘 굵기가 문서에 없습니다");
+  assert.match(icons, /ICON_STROKE = 1\.5;/);
+  assert.ok(design.includes("15px") && design.includes("18px"), "아이콘 두 단이 문서에 없습니다");
+  assert.match(icons, /\{ sm: 15, md: 18 \}/);
+  assert.ok(design.includes("0.14em"), "상단 바 자간이 문서와 다릅니다");
+  assert.match(css, /\.topbar__brand b \{[^}]*letter-spacing: 0\.14em;/s);
+
+  // 명세 쪽 숫자들.
+  assert.match(canvas, /const MAX_ZOOM = 15;/);
+  assert.ok(spec.includes("1500%"), "최대 배율이 명세와 다릅니다");
+  assert.match(canvas, /\{ from: 5, level: 3 \}/);
+  assert.ok(spec.includes("500% 아래는 **시군구**, 위는 **읍면동**"), "단계가 갈리는 배율이 명세와 다릅니다");
+  assert.match(canvas, /const REVEAL_FROM = 3;[\s\S]*?const REVEAL_ALL = 15;/);
+  assert.ok(spec.includes("300% ~ 1500%"), "핀이 나오는 구간이 명세와 다릅니다");
+  assert.match(canvas, /const OVERSCAN = 0\.25;/);
+  assert.ok(spec.includes("사방 25%"), "겹 여유가 명세와 다릅니다");
+  assert.match(canvas, /const FOCUS_ZOOM = 6;/);
+  assert.ok(spec.includes("600%"), "찾아가는 배율이 명세와 다릅니다");
+  assert.match(pull, /const PASS_AT = 96;[\s\S]*?const FLICK = 0\.4;/);
+  assert.ok(spec.includes("96px 또는 0.4px/ms"), "시트가 넘어가는 값이 명세와 다릅니다");
+  assert.match(marks, /export const COLLECTION_LIMIT = 10;/);
+  assert.ok(spec.includes("열 칸"), "도감 칸 수가 명세와 다릅니다");
+});
