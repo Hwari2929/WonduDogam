@@ -1005,6 +1005,14 @@ test("좁은 화면에서는 검색이 단추 하나로 접힌다", async () => 
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-button \{\s*\n\s*display: inline-flex;/);
   assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.search-panel \{\s*\n\s*display: none;\s*\n\s*\}\s*\n\s*\.search-panel\.is-open \{/);
 
+  // 흐려지며 사라지는 막은 지도 위에서 얼룩처럼 읽혔습니다. 한 색으로 덮고,
+  // 한 겹 위에 있다는 것만 옅은 그림자로 말합니다.
+  assert.match(css, /\.topbar \{[^}]*background: var\(--desk\);\s*\n\s*box-shadow: 0 1px 6px var\(--shadow\);/s);
+  assert.doesNotMatch(css, /\.topbar \{[^}]*linear-gradient/s);
+  // 자간은 글자가 커질수록 줄여야 같은 인상이 됩니다.
+  assert.match(css, /\.topbar__brand b \{[^}]*font-size: var\(--t-display\);[\s\S]*?letter-spacing: 0\.14em;/s);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.topbar__brand b \{\s*\n\s*font-size: var\(--t-title\);\s*\n\s*letter-spacing: 0\.1em;/);
+
   // 상호는 화면 한가운데에 섭니다. 양옆 칸을 auto 로 두면 넓은 쪽(메뉴·검색)만큼
   // 밀려서, 왼쪽에 단추가 하나 늘 때마다 상호가 오른쪽으로 갑니다.
   assert.match(css, /\.topbar \{[^}]*grid-template-columns: 1fr auto 1fr;/s);

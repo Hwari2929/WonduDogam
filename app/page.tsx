@@ -391,7 +391,7 @@ export default function Home() {
           </button>
         </div>
         <div className="topbar__brand">
-          <CodexMark size={24} />
+          <CodexMark size={28} />
           <b>원두도감</b>
           <small>BEAN CODEX</small>
         </div>

@@ -596,7 +596,10 @@ a:focus-visible,
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 var(--rail);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--desk) 94%, transparent), transparent);
+  /* 흐려지며 사라지는 막은 지도 위에서 얼룩처럼 읽혔습니다. 한 색으로 덮고,
+     지도보다 한 겹 위에 있다는 것만 옅은 그림자로 말합니다. */
+  background: var(--desk);
+  box-shadow: 0 1px 6px var(--shadow);
 }
 
 /* 메뉴와 검색은 왼쪽에 나란히. 상단바의 첫 칸이 둘을 함께 받습니다. */
@@ -636,10 +639,12 @@ a:focus-visible,
 }
 .topbar__brand b {
   font-family: var(--font-display);
-  font-size: var(--t-title);
+  font-size: var(--t-display);
   font-weight: 800;
-  letter-spacing: var(--ls-brand);
-  padding-left: var(--ls-brand);
+  /* 자간은 글자가 커질수록 줄여야 같은 인상이 됩니다. 서랍의 작은 로고는
+     --ls-brand 그대로 두고, 여기만 좁힙니다. */
+  letter-spacing: 0.14em;
+  padding-left: 0.14em;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -1843,9 +1848,15 @@ a:focus-visible,
     animation: drop-in 160ms var(--ease-paper);
   }
   .topbar__brand b {
-    font-size: var(--t-body);
-    letter-spacing: 0.26em;
-    padding-left: 0.26em;
+    font-size: var(--t-title);
+    letter-spacing: 0.1em;
+    padding-left: 0.1em;
+  }
+  /* 상호가 작아진 만큼 마크도 같이 내려옵니다 — 마크가 글자보다 크면 로고가
+     아니라 마크 옆에 글자가 붙어 있는 것으로 보입니다. */
+  .topbar__brand svg {
+    width: 24px;
+    height: 24px;
   }
   .marks-button {
     padding: 0 8px;
