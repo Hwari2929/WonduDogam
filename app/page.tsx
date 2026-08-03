@@ -303,6 +303,8 @@ export default function Home() {
     setPhase("docked");
     setQuery("");
     setCursor(0);
+    // 좁은 화면에서 종이 두 장이 겹칩니다. 고르고 나면 찾던 일은 끝난 것입니다.
+    setSearchOpen(false);
     navigate(`/c/${encodeURIComponent(id)}`);
   }, []);
 
@@ -336,6 +338,9 @@ export default function Home() {
     setCodexPreviewId(null);
     setPhase("docked");
     setSidebarOpen(false);
+    // 검색 종이와 도감이 같은 자리를 두고 겹칩니다. 펴는 쪽이 이깁니다 —
+    // 검색을 펴면 영수증이 물러나는 것과 같은 규칙입니다.
+    setSearchOpen(false);
     navigate("/marks");
   }
 

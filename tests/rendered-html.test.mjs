@@ -1219,6 +1219,10 @@ test("펴고 접는 손버릇이 단추마다 같다", async () => {
   assert.match(page, /const next = !searchOpen;\s*\n\s*setSearchOpen\(next\);/);
   // 찾으러 왔으면 볼 것은 지도입니다 — 영수증이 덮은 채로 검색을 펴 주지 않습니다.
   assert.match(page, /if \(next && panelOpen\) closePanel\(\);/);
+  // 반대쪽도 같은 규칙입니다. 좁은 화면에서 종이 두 장이 같은 자리를 두고
+  // 겹치므로, 펴는 쪽이 이깁니다 — 도감을 펴도, 찾던 곳을 골라도 검색은 접힙니다.
+  assert.match(page, /function openCodex\(\) \{[\s\S]*?setSearchOpen\(false\);/);
+  assert.match(page, /const openCafe = useCallback\([\s\S]*?setSearchOpen\(false\);/);
 
   // 내려 읽다가 닫으려고 도로 올라갈 일이 없어야 합니다.
   assert.match(receipt, /<div className="receipt__top">/);
