@@ -119,8 +119,8 @@ test("도감 고르기는 종이에 끼어들지 않고 연장 아래로 펴진�
   assert.match(receipt, /event\.stopPropagation\(\);\s*setSaveOpen\(false\)/);
 
   // 상호 줄과 연장 줄은 같은 선에서 시작합니다 — 종이 안쪽 여백과 같은 값.
-  assert.match(css, /\.receipt,\n\.codex\s*\{[^}]*padding: 26px 26px 30px/s);
-  assert.match(css, /\.receipt__tools\s*\{[^}]*top: 26px;\s*right: 26px/s);
+  assert.match(css, /\.receipt,\n\.codex\s*\{[^}]*--paper-pad: 26px;[\s\S]*?padding: var\(--paper-pad\) var\(--paper-pad\) 30px/s);
+  assert.match(css, /\.receipt__tools\s*\{[^}]*top: 0;\s*\n\s*right: 0/s);
 });
 
 test("사진 밑 한 줄은 내가 적은 것이 먼저다", async () => {
@@ -1007,7 +1007,7 @@ test("좁은 화면에서는 검색이 단추 하나로 접힌다", async () => 
 
   // 흐려지며 사라지는 막은 지도 위에서 얼룩처럼 읽혔습니다. 한 색으로 덮고,
   // 한 겹 위에 있다는 것만 옅은 그림자로 말합니다.
-  assert.match(css, /\.topbar \{[^}]*background: var\(--desk\);\s*\n\s*box-shadow: 0 1px 6px var\(--shadow\);/s);
+  assert.match(css, /\.topbar \{[^}]*background: var\(--desk\);\s*\n\s*box-shadow: 0 1px 5px color-mix\(in srgb, var\(--shadow\) 45%, transparent\);/s);
   assert.doesNotMatch(css, /\.topbar \{[^}]*linear-gradient/s);
   // 자간은 글자가 커질수록 줄여야 같은 인상이 됩니다.
   assert.match(css, /\.topbar__brand b \{[^}]*font-size: var\(--t-display\);[\s\S]*?letter-spacing: 0\.14em;/s);
@@ -1205,4 +1205,24 @@ test("두 손가락으로 오므리고 벌려 배율을 바꾼다", async () => 
 
   // 브라우저가 제 나름대로 확대해 버리면 지도는 손짓을 아예 못 받습니다.
   assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);
+});
+
+test("펴고 접는 손버릇이 단추마다 같다", async () => {
+  const [page, receipt, css] = await Promise.all(
+    ["../app/page.tsx", "../app/components/Receipt.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 검색도 도감도 한 번 누르면 펴지고 다시 누르면 접힙니다. 한쪽만 안 닫히면
+  // 그게 규칙인지 버그인지 눌러 봐야 알게 됩니다.
+  assert.match(page, /onClick=\{\(\) => \(panelOpen && panel === "codex" \? closePanel\(\) : openCodex\(\)\)\}/);
+  assert.match(page, /const next = !searchOpen;\s*\n\s*setSearchOpen\(next\);/);
+  // 찾으러 왔으면 볼 것은 지도입니다 — 영수증이 덮은 채로 검색을 펴 주지 않습니다.
+  assert.match(page, /if \(next && panelOpen\) closePanel\(\);/);
+
+  // 내려 읽다가 닫으려고 도로 올라갈 일이 없어야 합니다.
+  assert.match(receipt, /<div className="receipt__top">/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.receipt__top \{\s*\n\s*position: sticky;\s*\n\s*top: 0;/);
+  // 연장은 종이가 아니라 그 덩어리를 기준으로 섭니다 — 종이 기준이면 안 따라옵니다.
+  assert.match(css, /\.receipt__top \{\s*\n\s*position: relative;\s*\n\}/);
 });

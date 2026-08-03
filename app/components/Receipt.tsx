@@ -78,65 +78,71 @@ export function Receipt({
 
   return (
     <article className={`receipt ${confirmed ? "receipt--confirmed" : "receipt--guess"}`}>
-      {/* 연장 두 개는 종이 오른쪽 위 모서리에. 본문은 상호로 시작합니다. */}
-      <div className="receipt__tools">
-        <div className={`tool-slot ${saveOpen ? "is-open" : ""}`} ref={saveRef}>
-          <button
-            className={`tool-button has-tip ${saved ? "is-saved" : ""}`}
-            type="button"
-            onClick={() => setSaveOpen((value) => !value)}
-            aria-expanded={saveOpen}
-            aria-haspopup="true"
-            aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
-          >
-            {saved ? <BookmarkCheck aria-hidden="true" /> : <BookmarkPlus aria-hidden="true" />}
-            <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
-          </button>
+      {/*
+        상호·주소와 연장 두 개는 한 덩어리입니다. 좁은 화면에서 이 덩어리가 종이
+        맨 위에 붙어 따라옵니다 — 내려 읽다가 닫으려고 도로 올라갈 일이 없고,
+        무엇을 보고 있었는지도 계속 남습니다.
+      */}
+      <div className="receipt__top">
+        <div className="receipt__tools">
+          <div className={`tool-slot ${saveOpen ? "is-open" : ""}`} ref={saveRef}>
+            <button
+              className={`tool-button has-tip ${saved ? "is-saved" : ""}`}
+              type="button"
+              onClick={() => setSaveOpen((value) => !value)}
+              aria-expanded={saveOpen}
+              aria-haspopup="true"
+              aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
+            >
+              {saved ? <BookmarkCheck aria-hidden="true" /> : <BookmarkPlus aria-hidden="true" />}
+              <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
+            </button>
 
-          {/* 종이에 끼어들지 않고 연장 아래로 펴집니다 — 고르는 동안 카페는 그대로 보여야 합니다. */}
-          {saveOpen ? (
-            <section className="save-drop" aria-label="저장할 도감 고르기">
-              <p className="meta">어느 도감에 넣을까</p>
-              <div className="receipt__collection-list">
-                {/* 큐레이터 픽은 매일 저절로 뽑히므로 손으로 담을 자리가 없습니다. */}
-                {collections.filter((collection) => collection.id !== CURATOR_COLLECTION_ID).map((collection) => {
-                  const included = selectedCollectionIds.includes(collection.id);
-                  const full = !included && fullCollectionIds.includes(collection.id);
-                  return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={ICON.sm} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;
-                })}
-              </div>
-            </section>
-          ) : null}
+            {/* 종이에 끼어들지 않고 연장 아래로 펴집니다 — 고르는 동안 카페는 그대로 보여야 합니다. */}
+            {saveOpen ? (
+              <section className="save-drop" aria-label="저장할 도감 고르기">
+                <p className="meta">어느 도감에 넣을까</p>
+                <div className="receipt__collection-list">
+                  {/* 큐레이터 픽은 매일 저절로 뽑히므로 손으로 담을 자리가 없습니다. */}
+                  {collections.filter((collection) => collection.id !== CURATOR_COLLECTION_ID).map((collection) => {
+                    const included = selectedCollectionIds.includes(collection.id);
+                    const full = !included && fullCollectionIds.includes(collection.id);
+                    return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={ICON.sm} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </div>
+
+          <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="영수증 닫기">
+            <X aria-hidden="true" />
+            <span className="tip" aria-hidden="true">닫기</span>
+          </button>
         </div>
 
-        <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="영수증 닫기">
-          <X aria-hidden="true" />
-          <span className="tip" aria-hidden="true">닫기</span>
-        </button>
-      </div>
-
-      {/* 상호와 주소 두 줄. 발행 정보·영문명·구분선은 걷어냈습니다 — 카페를 고르는
-          사람에게 필요한 건 어디인지와 어떻게 생겼는지뿐입니다. */}
-      <header className="receipt__head">
-        <h1 className="receipt__name">
-          {cafe.name}
-          {confirmed ? (
-            <span
-              className="partner-mark has-tip"
-              tabIndex={0}
-              role="note"
-              aria-label="비빈 파트너. 카페가 직접 확인해 준 정보입니다."
-            >
-              <BeanMark size={19} />
-              <span className="tip" aria-hidden="true">
-                <b>비빈 파트너</b>
-                카페가 직접 확인해 준 정보
+        {/* 상호와 주소 두 줄. 발행 정보·영문명·구분선은 걷어냈습니다 — 카페를 고르는
+            사람에게 필요한 건 어디인지와 어떻게 생겼는지뿐입니다. */}
+        <header className="receipt__head">
+          <h1 className="receipt__name">
+            {cafe.name}
+            {confirmed ? (
+              <span
+                className="partner-mark has-tip"
+                tabIndex={0}
+                role="note"
+                aria-label="비빈 파트너. 카페가 직접 확인해 준 정보입니다."
+              >
+                <BeanMark size={19} />
+                <span className="tip" aria-hidden="true">
+                  <b>비빈 파트너</b>
+                  카페가 직접 확인해 준 정보
+                </span>
               </span>
-            </span>
-          ) : null}
-        </h1>
-        <p className="receipt__address">{cafe.address}</p>
-      </header>
+            ) : null}
+          </h1>
+          <p className="receipt__address">{cafe.address}</p>
+        </header>
+      </div>
 
       <figure className="receipt__photo">
         <figcaption>PHOTO — 사진 준비 중</figcaption>

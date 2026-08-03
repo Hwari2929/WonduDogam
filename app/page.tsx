@@ -382,7 +382,13 @@ export default function Home() {
           <button
             className="search-button"
             type="button"
-            onClick={() => setSearchOpen((open) => !open)}
+            onClick={() => {
+              const next = !searchOpen;
+              setSearchOpen(next);
+              // 찾으러 왔으면 볼 것은 지도입니다. 영수증이 덮고 있는 채로 검색을
+              // 펴 주면, 고른 곳이 어디쯤인지 보려고 한 번 더 닫아야 합니다.
+              if (next && panelOpen) closePanel();
+            }}
             aria-label={searchOpen ? "검색 닫기" : "카페 찾기"}
             aria-expanded={searchOpen}
             aria-controls="search-panel"
@@ -412,7 +418,10 @@ export default function Home() {
             className="marks-button"
             type="button"
             ref={marksButtonRef}
-            onClick={openCodex}
+            /* 검색 단추와 같은 손버릇이어야 합니다 — 한 번 누르면 펴지고 다시
+               누르면 접힙니다. 한쪽만 닫히지 않으면 그게 규칙인지 버그인지
+               눌러 봐야 알게 됩니다. */
+            onClick={() => (panelOpen && panel === "codex" ? closePanel() : openCodex())}
             aria-label={`내 도감, ${marks.length}장 보관 중`}
             aria-pressed={panelOpen && panel === "codex"}
           >
