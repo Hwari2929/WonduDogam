@@ -90,6 +90,13 @@ const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
 const REVEAL_FROM = 3;
 const REVEAL_ALL = 15;
 /**
+ * 도감에서 "지도에서 위치 보기"로 찾아갈 때의 배율.
+ *
+ * 이미 더 깊이 들여다보고 있었다면 그 배율을 지킵니다 — 찾아가 준다면서 도로
+ * 물러나면, 보고 있던 자리를 잃습니다.
+ */
+const FOCUS_ZOOM = 6;
+/**
  * 창 밖으로 이만큼까지의 칸은 미리 그려 둡니다 (창 크기 대비). 딱 맞게 자르면
  * 끌기 시작하는 순간 가장자리에서 땅이 자라나는 게 보입니다.
  */
@@ -240,9 +247,14 @@ const MarkerFace = memo(function MarkerFace({ icon }: { icon: CodexIconId | null
   );
 });
 
-export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract }: {
+export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onInteract }: {
   cafes: Cafe[];
   activeId: string | null;
+  /**
+   * 찾아가 달라고 짚어 준 카페. 같은 곳을 다시 짚어도 다시 움직여야 하므로
+   * id 가 아니라 부른 시각까지 함께 받습니다.
+   */
+  focus: { id: string; at: number } | null;
   savedMarkers: Record<string, SavedCafeMarker>;
   onSelect: (id: string) => void;
   onInteract: () => void;
@@ -340,6 +352,24 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
       alive = false;
     };
   }, [wanted, dongReady]);
+
+  /** 짚어 준 카페를 화면 한가운데로 데려옵니다. */
+  useEffect(() => {
+    if (!focus || !size) return;
+    const cafe = cafes.find((entry) => entry.id === focus.id);
+    if (!cafe) return;
+    const spot = project(cafe.pos[0], cafe.pos[1]);
+    const zoom = Math.max(viewRef.current.zoom, FOCUS_ZOOM);
+    const base = baseSpan(size.width, size.height);
+    // 그 점이 화면 복판에 오도록 이동을 되짚습니다 (windowOf 의 역식).
+    const next = clampView({
+      zoom,
+      x: ((50 - spot.x) * size.width) / (base.w / zoom),
+      y: ((50 - spot.y) * size.height) / (base.h / zoom),
+    }, size.width, size.height);
+    glideTo(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   // 확대하다 단계가 바뀌면 짚어 둔 칸은 이제 지도에 없는 모양입니다. 마우스가
   // 있던 자리에서 새 단계로 다시 짚습니다 — 안 그러면 구를 짚어 둔 채 확대해

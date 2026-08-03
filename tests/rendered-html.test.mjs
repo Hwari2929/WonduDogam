@@ -1230,3 +1230,32 @@ test("펴고 접는 손버릇이 단추마다 같다", async () => {
   // 연장은 종이가 아니라 그 덩어리를 기준으로 섭니다 — 종이 기준이면 안 따라옵니다.
   assert.match(css, /\.receipt__top \{\s*\n\s*position: relative;\s*\n\}/);
 });
+
+test("도감 낱장은 줄 전체가 열고, 핀은 지도로 데려간다", async () => {
+  const [codex, page, canvas, css] = await Promise.all(
+    ["../app/components/Codex.tsx", "../app/page.tsx", "../app/components/MapCanvas.tsx", "../app/globals.css"]
+      .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 이름 옆의 작은 핀을 찾아 눌러야 열리는 건, 눌러 보기 전에는 알 수 없는
+  // 규칙이었습니다. 줄 전체가 그 카페를 여는 자리입니다.
+  assert.match(codex, /<button\s*\n\s*className="codex__slip-open"[\s\S]*?onClick=\{\(\) => cafe && onOpenCafe\(mark\.id\)\}/);
+  assert.match(css, /\.codex__slip-open \{[^}]*flex: 1 1 auto;/s);
+
+  // 핀은 "지도 어디쯤인가"를 묻는 자리입니다 — 여는 것과는 다른 일입니다.
+  assert.match(codex, /onClick=\{\(\) => cafe && onLocate\(mark\.id\)\}/);
+  assert.match(codex, /aria-label=\{`\$\{label\} 지도에서 위치 보기`\}/);
+  assert.match(page, /function locateCafe\(id: string\) \{\s*\n\s*setFocus\(\{ id, at: Date\.now\(\) \}\);/);
+  // 좁은 화면에서는 종이가 지도를 통째로 덮으므로, 접지 않으면 움직여도 볼 수 없습니다.
+  assert.match(page, /if \(isSheet\) closePanel\(\);/);
+
+  // 같은 곳을 다시 짚어도 다시 움직여야 하므로 id 만으로는 모자랍니다.
+  assert.match(canvas, /focus: \{ id: string; at: number \} \| null;/);
+  assert.match(canvas, /const FOCUS_ZOOM = 6;/);
+  // 이미 더 깊이 들여다보고 있었다면 그 배율을 지킵니다.
+  assert.match(canvas, /const zoom = Math\.max\(viewRef\.current\.zoom, FOCUS_ZOOM\);/);
+  assert.match(canvas, /x: \(\(50 - spot\.x\) \* size\.width\) \/ \(base\.w \/ zoom\)/);
+
+  // 스탬프 판이 좁은 화면의 절반을 먹고 있었습니다. 칸 수와 연장만 남깁니다.
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*?\.codex__board-lines \{\s*\n\s*display: none;/);
+});

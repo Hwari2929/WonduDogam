@@ -49,6 +49,7 @@ export function Codex({
   dateLabel,
   showMascot,
   activeCafeId,
+  onLocate,
   onSelectCollection,
   onOpenCafe,
   onNotice,
@@ -60,6 +61,8 @@ export function Codex({
   dateLabel: string;
   showMascot: boolean;
   activeCafeId: string | null;
+  /** 그 카페가 지도 어디쯤인지 보여 줍니다. 낱장을 여는 것과는 다른 일입니다. */
+  onLocate: (id: string) => void;
   onSelectCollection: (id: string) => void;
   onOpenCafe: (id: string) => void;
   onNotice: (message: string) => void;
@@ -303,19 +306,31 @@ export function Codex({
               const label = cafe?.name ?? "알 수 없는 카페";
               return (
                 <li key={mark.id} className={["codex__slip", cafe ? "" : "is-unknown", mark.id === activeCafeId ? "is-active" : ""].filter(Boolean).join(" ")} style={{ "--codex-color": colorValue(activeCollection.color) } as React.CSSProperties}>
-                  {/* 접혀 있을 땐 이름 한 줄. 긴 이름은 자르고, 연장은 오른쪽 끝에 섭니다. */}
+                  {/* 접혀 있을 땐 이름 한 줄. 긴 이름은 자르고, 연장은 오른쪽 끝에 섭니다.
+                      줄 전체가 그 카페를 여는 자리입니다 — 이름 옆의 작은 핀을
+                      찾아 눌러야 열리는 건, 눌러 보기 전에는 알 수 없는 규칙이었습니다. */}
                   <div className="codex__slip-row">
-                    <span className="codex__name" title={label}>{label}</span>
                     <button
-                      className="codex__slip-tool has-tip"
+                      className="codex__slip-open"
                       type="button"
                       onClick={() => cafe && onOpenCafe(mark.id)}
                       disabled={!cafe}
                       aria-current={mark.id === activeCafeId ? "true" : undefined}
-                      aria-label={`${label} 지도에서 보기`}
+                      aria-label={`${label} 자세히 보기`}
+                    >
+                      <span className="codex__name" title={label}>{label}</span>
+                    </button>
+                    {/* 핀은 "지도 어디쯤인가"를 묻는 자리입니다. 여는 것과는 다른 일이라
+                        같은 단추에 둘을 겹쳐 두지 않습니다. */}
+                    <button
+                      className="codex__slip-tool has-tip"
+                      type="button"
+                      onClick={() => cafe && onLocate(mark.id)}
+                      disabled={!cafe}
+                      aria-label={`${label} 지도에서 위치 보기`}
                     >
                       <MapPin size={ICON.sm} aria-hidden="true" />
-                      <span className="tip" aria-hidden="true">지도에서 보기</span>
+                      <span className="tip" aria-hidden="true">지도에서 위치 보기</span>
                     </button>
                     <button
                       className="codex__slip-tool has-tip"

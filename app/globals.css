@@ -1462,8 +1462,27 @@ a:focus-visible,
   padding: 7px 8px 7px 13px;
 }
 /* 긴 상호는 줄을 늘리지 않고 자릅니다 — 연장은 언제나 같은 자리에 있어야 합니다. */
-.codex__name {
+/* 줄 전체가 그 카페를 여는 자리입니다. 이름만 눌리는 게 아니라 이름이 놓인
+   칸 전체가 눌립니다 — 손가락으로 겨눌 것이 한 줄이면 겨눌 필요가 없습니다. */
+.codex__slip-open {
   flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.codex__slip-open:disabled {
+  cursor: default;
+}
+.codex__slip-open:hover:not(:disabled) .codex__name {
+  color: var(--bean);
+}
+.codex__name {
+  display: block;
   min-width: 0;
   overflow: hidden;
   font-family: var(--font-display);
@@ -1947,6 +1966,12 @@ a:focus-visible,
   .receipt__top .receipt__tools {
     top: var(--paper-pad);
     right: var(--paper-pad);
+  }
+  /* 스탬프 판이 화면의 절반을 먹고 있었습니다. 칸 수와 연장은 남기고, 그 아래
+     한 줄(협력업체 수·마지막 기록)은 접습니다 — 목록이 바로 밑에 있어 세어
+     주지 않아도 알 수 있는 것들입니다. */
+  .codex__board-lines {
+    display: none;
   }
   .receipt__actions {
     grid-template-columns: 1fr;

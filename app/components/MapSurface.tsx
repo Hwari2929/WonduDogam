@@ -13,9 +13,10 @@ import { MapCanvas, type SavedCafeMarker } from "./MapCanvas";
 export const MapSurface = memo(function MapSurface(props: {
   cafes: Cafe[];
   activeId: string | null;
+  focus: { id: string; at: number } | null;
   savedMarkers: Record<string, SavedCafeMarker>;
   onSelect: (id: string) => void;
   onInteract: () => void;
 }) {
-  return <MapCanvas cafes={props.cafes} activeId={props.activeId} savedMarkers={props.savedMarkers} onSelect={props.onSelect} onInteract={props.onInteract} />;
+  return <MapCanvas cafes={props.cafes} activeId={props.activeId} focus={props.focus} savedMarkers={props.savedMarkers} onSelect={props.onSelect} onInteract={props.onInteract} />;
 });

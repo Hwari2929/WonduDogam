@@ -138,6 +138,8 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [codexPreviewId, setCodexPreviewId] = useState<string | null>(null);
   const [tear, setTear] = useState<{ dx: number; dy: number; x: number; y: number; w: number; name: string } | null>(null);
+  /** 지도에게 "여기로 가 달라"고 짚어 준 카페. 같은 곳을 다시 짚어도 다시 움직입니다. */
+  const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
 
   const [cursor, setCursor] = useState(0);
   const marksButtonRef = useRef<HTMLButtonElement>(null);
@@ -348,6 +350,18 @@ export default function Home() {
     setCodexPreviewId(id);
   }
 
+  /**
+   * 도감의 핀 — 그 카페가 지도 어디쯤인지 보여 줍니다.
+   *
+   * 좁은 화면에서는 종이가 지도를 통째로 덮고 있으므로, 접지 않으면 지도가
+   * 움직여도 볼 수가 없습니다. 넓은 화면에서는 지도가 옆에 있으니 그대로 둡니다.
+   */
+  function locateCafe(id: string) {
+    setFocus({ id, at: Date.now() });
+    setTouched(true);
+    if (isSheet) closePanel();
+  }
+
   function onToggleCollection(cafe: Cafe, collectionId: string, included: boolean, event: React.MouseEvent<HTMLButtonElement>) {
     const result = setCafeInCollection(cafe.id, collectionId, dateLabel, included);
     const collection = collections.find((entry) => entry.id === collectionId);
@@ -372,6 +386,7 @@ export default function Home() {
       <MapSurface
         cafes={cafes}
         activeId={panelOpen ? (panel === "receipt" ? displayedCafe.id : codexPreviewCafe?.id ?? null) : null}
+        focus={focus}
         savedMarkers={savedMarkers}
         onSelect={openCafe}
         onInteract={dock}
@@ -562,6 +577,7 @@ export default function Home() {
                     showMascot={mascotSlot === "codex"}
                     activeCafeId={codexPreviewCafe?.id ?? null}
                     onOpenCafe={openCafeFromCodex}
+                    onLocate={locateCafe}
                     onNotice={setNotice}
                     onClose={closePanel}
                   />
