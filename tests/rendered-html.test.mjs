@@ -625,21 +625,24 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   // 변형을 걷어내면서 CSS 전이도 같이 없어졌습니다. 단추는 1.4배씩 뛰므로 그냥
   // 갈아 끼우면 툭 끊기고, 그렇다고 전이를 되살리면 그게 다시 뭉개는 원인입니다.
   // 값을 프레임마다 옮겨, 부드러우면서 매 프레임 벡터에서 다시 그리게 둡니다.
-  assert.match(canvas, /const GLIDE_MS = 80;/);
+  assert.match(canvas, /const GLIDE_MS = 160;/);
   assert.match(canvas, /function glideTo\(target: View\)/);
-  assert.match(canvas, /glideRef\.current = t < 1 \? requestAnimationFrame\(step\) : null;/);
+  assert.match(canvas, /glideRef\.current = requestAnimationFrame\(step\);/);
   assert.match(canvas, /if \(next\) glideTo\(next\);/);
   // 겹 자체에는 여전히 전이도 확대도 걸지 않습니다. 미는 것은 .map__pan 하나이고,
   // 그것도 JS 가 끄는 동안에만 인라인으로 붙입니다.
   const mapLayer = css.slice(css.indexOf(".map__layer {"), css.indexOf(".map__pins {"));
   assert.doesNotMatch(mapLayer, /transition|transform|scale/);
-  assert.match(css, /\.map__pan \{\s*\n\s*position: absolute;\s*\n\s*inset: 0;\s*\n\}/);
-  assert.match(canvas, /panRef\.current\.style\.transform = `translate3d\(\$\{dx\}px, \$\{dy\}px, 0\)`/);
+  // 기준점은 왼쪽 위. 가운데를 기준으로 두면 늘릴 때마다 지도가 어긋납니다.
+  assert.match(css, /\.map__pan \{\s*\n\s*position: absolute;\s*\n\s*inset: 0;\s*\n\s*transform-origin: 0 0;\s*\n\}/);
+  assert.match(canvas, /`translate3d\(\$\{tx\}px, \$\{ty\}px, 0\) scale\(\$\{scale\}\)`/);
   // 끌기와 휠은 이미 손을 따라오므로 미끄러짐을 끼우지 않고 즉시 놓아 줍니다.
-  assert.match(canvas, /stopGlide\(\);\s*\n\s*settlePan\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
-  assert.match(canvas, /stopGlide\(\);\s*\n\s*event\.currentTarget\.setPointerCapture/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*\/\/[^\n]*\n\s*const rate = viewRef\.current\.zoom >= FAST_FROM/);
+  // 손을 대는 순간 미끄러짐은 놓아 주고, 그 손가락은 지도가 받아 둡니다.
+  assert.match(canvas, /function onPointerDown\(event: ReactPointerEvent<HTMLElement>\) \{[\s\S]*?stopGlide\(\);/);
+  assert.match(canvas, /event\.currentTarget\.setPointerCapture\(event\.pointerId\);/);
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
-  assert.match(canvas, /stopGlide\(\);\s*\n\s*if \(frameRef\.current !== null\) cancelAnimationFrame\(frameRef\.current\);/);
+  assert.match(canvas, /stopGlide\(\);\s*\n\s*if \(settleRef\.current !== null\) window\.clearTimeout\(settleRef\.current\);/);
   // 모션을 줄인 사람에게는 미끄러지지 않고 곧바로 놓습니다.
   assert.match(canvas, /prefers-reduced-motion: reduce/);
 });
@@ -1143,10 +1146,20 @@ test("지도는 보이는 칸만 그리고, 한 프레임에 한 번만 다시 �
   assert.match(canvas, /const Terrain = memo\(function Terrain\(\{ pieces \}/);
   assert.match(canvas, /const MarkerFace = memo\(function MarkerFace/);
   assert.match(canvas, /<Terrain pieces=\{pieces\} \/>/);
-  // 손가락은 프레임보다 자주 옵니다. 값은 곧바로, 다시 그리기는 한 프레임에 한 번.
-  assert.match(canvas, /function commitViewSoon\(next: View\)/);
-  assert.match(canvas, /if \(next\) commitViewSoon\(next\);/);
-  assert.match(canvas, /flushView\(\);/);
+  // 손짓이 이어지는 동안에는 아예 다시 그리지 않습니다. 이미 그려 둔 그림을
+  // 옮기고 늘려 보여 주다가, 손을 뗄 때 제 배율로 한 번 그립니다.
+  assert.match(canvas, /function applyTransform\(\)/);
+  assert.match(canvas, /settleSoon\(\);/);
+  assert.match(canvas, /const SETTLE_MS = 140;/);
+  assert.match(canvas, /function settle\(\)/);
+  assert.match(canvas, /const renderedRef = useRef<View>\(INITIAL_VIEW\);/);
+  assert.match(canvas, /if \(outOfSpare\(\)\) redrawNow\(\);\s*\n\s*else applyTransform\(\);/);
+  assert.doesNotMatch(canvas, /commitViewSoon|flushView/);
+  // 넓게 그려 둔 여유를 넘으면 손짓 도중이라도 한 번 그립니다.
+  assert.match(canvas, /if \(scale < 1 \/ \(1 \+ OVERSCAN \* 2\)\) return true;/);
+  // 미끄러짐도 값이 아니라 보이는 변형만 옮깁니다 — 끝나야 한 번 그립니다.
+  assert.match(canvas, /applyTransform\(\);\s*\n\s*if \(t < 1\) \{/);
+  assert.match(canvas, /glideRef\.current = null;\s*\n\s*settle\(\);/);
   // 검색어 한 글자마다 지도가 딸려 오지 않게 한 번 끊습니다.
   assert.match(surface, /export const MapSurface = memo\(function MapSurface/);
   // memo 는 넘겨주는 손잡이가 렌더마다 새로 만들어지지 않아야 뜻이 있습니다.
@@ -1174,6 +1187,13 @@ test("두 손가락으로 오므리고 벌려 배율을 바꾼다", async () => 
   assert.match(canvas, /if \(touches\.size === 1\) \{[\s\S]*?startX: spot\.x, startY: spot\.y, view: viewRef\.current, tap: false/);
   // 오므리다 뗀 손은 동네를 짚는 탭이 아닙니다.
   assert.match(canvas, /if \(!drag\.tap\) return;/);
+
+  // 핀 위에 내려앉은 손가락도 손가락으로는 셉니다 — 안 세면 두 손 중 하나가
+  // 핀에 닿았다는 이유로 오므리기가 시작되지 않습니다. 대신 두 손이 모이면
+  // 지도가 둘 다 받아 두어, 떼는 순간 그 핀이 눌린 것이 되지 않게 합니다.
+  assert.match(canvas, /const onControl = !!\(event\.target as Element\)\.closest\("button, a, input"\);/);
+  assert.match(canvas, /for \(const id of touchesRef\.current\.keys\(\)\) event\.currentTarget\.setPointerCapture\?\.\(id\);/);
+  assert.match(canvas, /if \(onControl\) return;/);
 
   // 브라우저가 제 나름대로 확대해 버리면 지도는 손짓을 아예 못 받습니다.
   assert.match(css, /\.map\s*\{\s*cursor:\s*grab;\s*touch-action:\s*none;/);

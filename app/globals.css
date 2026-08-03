@@ -1880,15 +1880,26 @@ a:focus-visible,
     font-size: var(--t-body);
   }
 
-  /* 하단 시트. 우측 패널이 아니라 손이 닿는 자리로 내려옵니다. */
+  /* 시트. 우측 패널이 아니라 손이 닿는 자리로 내려오되, 위로는 상단 바 바로
+     밑까지 올라섭니다 — 영수증을 편 동안에는 그게 화면입니다. 지도 위에 떠
+     있던 확대·축소 연장도 이 종이가 덮어 가립니다(z-index 25 대 11). */
   .dock {
-    --dock-top: auto;
-    top: auto;
+    --dock-top: 70px; /* .topbar 의 좁은 화면 높이와 같은 값 */
+    top: var(--dock-top);
     right: 0;
     bottom: 0;
     width: 100%;
-    max-height: 68svh;
+    max-height: none;
     box-shadow: 0 -14px 26px var(--shadow);
+  }
+  /* 종이가 시트를 가득 채웁니다. 내용이 짧다고 아래로 지도가 비쳐 보이면
+     "덮은 화면"이 아니라 "떠 있는 쪽지"가 됩니다. */
+  .dock__scroll {
+    flex: 1 1 auto;
+  }
+  .dock__scroll > .receipt,
+  .dock__scroll > .dock__pair {
+    min-height: 100%;
   }
   .dock.has-preview {
     width: 100%;
@@ -2164,10 +2175,13 @@ a:focus-visible,
    scale() 로 키우면 브라우저는 이미 그려 둔 그림을 늘리고, 아이패드·모바일
    사파리는 겹을 훨씬 적극적으로 이미지로 구워 두어서 배율을 올릴수록 경계선도
    글자도 뭉갭니다. 늘려 붙이는 단계를 아예 없애야 어느 기기에서든 선이 삽니다. */
-/* 세 겹을 함께 미는 상자. 끄는 동안 여기에만 transform 이 붙습니다. */
+/* 세 겹을 함께 옮기는 상자. 손짓이 이어지는 동안 여기에만 transform 이 붙습니다.
+   기준점은 왼쪽 위입니다 — MapCanvas 의 셈이 화면 좌표(0,0)를 기준으로 세운 식이라,
+   가운데를 기준으로 두면 늘릴 때마다 지도가 어긋납니다. */
 .map__pan {
   position: absolute;
   inset: 0;
+  transform-origin: 0 0;
 }
 /* 화면 밖으로 사방 25% 씩 더 그려 둡니다. 그 여유가 있어야 끄는 동안 창을
    고쳐 쓰지 않고 겹을 밀기만 할 수 있습니다 — MapCanvas 의 OVERSCAN 과 같은 값. */

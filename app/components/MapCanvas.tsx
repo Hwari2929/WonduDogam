@@ -59,7 +59,9 @@ const TAP_SLOP = 10;
  * 단추 한 번에 폰이 100ms 넘게 그 일만 했습니다. 한 칸이 뛰는 게 보이지 않을
  * 만큼만 남깁니다.
  */
-const GLIDE_MS = 80;
+const GLIDE_MS = 160;
+/** 휠은 끝을 알려 주지 않습니다. 이만큼 조용하면 손짓이 끝난 것으로 봅니다(ms). */
+const SETTLE_MS = 140;
 /**
  * 100%에서도 이만큼은 밀 수 있습니다 (화면 크기 대비).
  *
@@ -260,15 +262,16 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    * 걸러내지 않습니다 — 0으로 재고 시작하면 첫 프레임이 텅 빕니다.
    */
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  /** 세 겹을 함께 미는 상자. 끄는 동안 여기에만 transform 이 붙습니다. */
+  /** 세 겹을 함께 옮기는 상자. 손짓이 이어지는 동안 여기에만 transform 이 붙습니다. */
   const panRef = useRef<HTMLDivElement>(null);
-  /** 다시 그린 다음 밀어 둔 것을 되돌려야 하는가. */
+  /** 지금 **그려져 있는** 자리. viewRef 는 손이 가 있는 자리라 둘이 어긋납니다. */
+  const renderedRef = useRef<View>(INITIAL_VIEW);
+  /** 다시 그린 다음 얹어 둔 변형을 되돌려야 하는가. */
   const restoreRef = useRef(false);
   /** 진행 중인 미끄러짐. 끌기나 휠이 끼어들면 즉시 놓아 줍니다. */
   const glideRef = useRef<number | null>(null);
-  /** 다시 그리기를 한 프레임에 한 번으로 모으는 자리. */
-  const frameRef = useRef<number | null>(null);
-  const flushRef = useRef<View | null>(null);
+  /** 휠은 끝을 알려 주지 않습니다. 조용해지면 그때 한 번 그립니다. */
+  const settleRef = useRef<number | null>(null);
   /** 마지막으로 마우스가 있던 자리. 단계가 바뀌면 여기서 다시 짚습니다. */
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   /** 마우스가 얹힌 행정구역. 경계를 밝히고, 그 안의 카페를 꺼냅니다. */
@@ -296,6 +299,8 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
+      // 얹어 둔 변형은 재 둔 크기를 기준으로 셈한 것이라, 크기가 바뀌면 어긋납니다.
+      if (panRef.current?.style.transform) redrawNow();
       setSize((current) => (current?.width === width && current?.height === height ? current : { width, height }));
     });
     observer.observe(element);
@@ -305,7 +310,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   // 화면에서 사라진 뒤에도 프레임을 잡고 있으면 안 됩니다.
   useEffect(() => () => {
     stopGlide();
-    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    if (settleRef.current !== null) window.clearTimeout(settleRef.current);
   }, []);
 
   useEffect(() => {
@@ -319,6 +324,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
   useLayoutEffect(() => {
     if (!restoreRef.current) return;
     restoreRef.current = false;
+    renderedRef.current = view;
     if (panRef.current) panRef.current.style.transform = "";
   }, [view]);
 
@@ -347,48 +353,72 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level]);
 
-  function commitView(next: View) {
-    viewRef.current = next;
-    flushRef.current = null;
-    setView(next);
-  }
-
   /**
-   * 값은 곧바로 반영하되 **다시 그리는 건 한 프레임에 한 번**으로 모읍니다.
+   * 그려져 있는 자리에서 손이 가 있는 자리까지의 **보이는 차이**를 겹에 얹습니다.
    *
-   * 손가락과 휠은 프레임보다 자주 옵니다 (폰에서 120Hz 짜리도 흔합니다). 오는
-   * 족족 다시 그리면 화면에 나오지도 못할 그림을 짓느라 정작 다음 프레임이 늦습니다.
-   * 짚기·확대 셈은 viewRef 를 보므로 한 프레임 늦어지는 값은 없습니다.
+   * 끌든 오므리든 확대하든, 손짓이 이어지는 동안에는 지도를 다시 그리지 않습니다.
+   * 이미 그려 둔 그림을 옮기고 늘려서 보여 줄 뿐입니다(합성). 늘린 동안에는 선이
+   * 조금 무릅니다만, 손을 떼는 순간 제 배율로 한 번 그려 다시 또렷해집니다 —
+   * 매 프레임 처음부터 그리느라 손을 못 따라오는 것보다 이쪽이 낫습니다.
    */
-  function commitViewSoon(next: View) {
-    viewRef.current = next;
-    flushRef.current = next;
-    if (frameRef.current !== null) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      const pending = flushRef.current;
-      if (pending) setView(pending);
-    });
+  function applyTransform() {
+    const layer = panRef.current;
+    if (!layer || !size) return;
+    const from = renderedRef.current;
+    const to = viewRef.current;
+    const before = windowOf(from, size);
+    const after = windowOf(to, size);
+    const scale = to.zoom / from.zoom;
+    const tx = ((before.x - after.x) / after.w) * size.width;
+    const ty = ((before.y - after.y) / after.h) * size.height;
+    layer.style.transform = scale === 1 && tx === 0 && ty === 0
+      ? ""
+      : `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
   }
 
-  /** 손을 뗀 순간에는 기다리지 않고 마지막 자리를 그대로 그립니다. */
-  function flushView() {
-    if (frameRef.current === null) return;
-    cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
-    if (flushRef.current) setView(flushRef.current);
-  }
-
-  /**
-   * 밀어 둔 것을 자리에 앉힙니다. 창을 새로 잡아 다시 그리고, 그 그림이 나가기
-   * 직전에 밀기를 되돌립니다(useLayoutEffect). 두 개가 같은 프레임에 일어나야
-   * 손을 뗄 때 지도가 안 튑니다.
-   */
-  function settlePan() {
+  /** 손짓이 끝났습니다. 지금 자리로 한 번 그립니다. */
+  function settle() {
+    if (settleRef.current !== null) {
+      window.clearTimeout(settleRef.current);
+      settleRef.current = null;
+    }
     const layer = panRef.current;
     if (!layer || !layer.style.transform) return;
     restoreRef.current = true;
-    commitView({ ...viewRef.current });
+    setView({ ...viewRef.current });
+  }
+
+  /** 조용해지면 그리기. 휠처럼 끝을 알려 주지 않는 것에 씁니다. */
+  function settleSoon() {
+    if (settleRef.current !== null) window.clearTimeout(settleRef.current);
+    settleRef.current = window.setTimeout(() => {
+      settleRef.current = null;
+      settle();
+    }, SETTLE_MS);
+  }
+
+  /**
+   * 넓게 그려 둔 여유를 넘었는가. 넘었으면 손짓 도중이라도 한 번 그려야 합니다 —
+   * 밀면 가장자리에 빈 자리가, 줄이면 사방에 빈 테두리가 드러납니다.
+   */
+  function outOfSpare() {
+    const layer = panRef.current;
+    if (!layer || !size) return false;
+    const from = renderedRef.current;
+    const to = viewRef.current;
+    const scale = to.zoom / from.zoom;
+    if (scale < 1 / (1 + OVERSCAN * 2)) return true;
+    const before = windowOf(from, size);
+    const after = windowOf(to, size);
+    const tx = Math.abs(((before.x - after.x) / after.w) * size.width);
+    const ty = Math.abs(((before.y - after.y) / after.h) * size.height);
+    return tx > size.width * OVERSCAN || ty > size.height * OVERSCAN;
+  }
+
+  /** 손짓 도중에 한 번 그리고 그 자리에서 이어 갑니다. */
+  function redrawNow() {
+    restoreRef.current = true;
+    setView({ ...viewRef.current });
   }
 
   function stopGlide() {
@@ -405,22 +435,28 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
    */
   function glideTo(target: View) {
     stopGlide();
-    settlePan();
     const from = viewRef.current;
     if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      commitView(target);
+      viewRef.current = target;
+      redrawNow();
       return;
     }
     const startedAt = performance.now();
     const step = (now: number) => {
       const t = Math.min(1, (now - startedAt) / GLIDE_MS);
       const eased = 1 - (1 - t) ** 3;
-      commitView({
+      viewRef.current = {
         zoom: from.zoom + (target.zoom - from.zoom) * eased,
         x: from.x + (target.x - from.x) * eased,
         y: from.y + (target.y - from.y) * eased,
-      });
-      glideRef.current = t < 1 ? requestAnimationFrame(step) : null;
+      };
+      applyTransform();
+      if (t < 1) {
+        glideRef.current = requestAnimationFrame(step);
+        return;
+      }
+      glideRef.current = null;
+      settle();
     };
     glideRef.current = requestAnimationFrame(step);
   }
@@ -456,11 +492,14 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     // 휠은 이미 조금씩 연달아 들어오므로 그대로 따라갑니다 — 여기에 미끄러짐을
     // 얹으면 손보다 지도가 늦게 따라와 미끄덩거립니다.
     stopGlide();
-    settlePan();
     // 단추와 같은 만큼 빨라집니다 — ln(1.6) / ln(1.4) ≈ 1.4배.
     const rate = viewRef.current.zoom >= FAST_FROM ? 0.0021 : 0.0015;
     const next = zoomedView(viewRef.current.zoom * Math.exp(-event.deltaY * rate), event.clientX, event.clientY);
-    if (next) commitViewSoon(next);
+    if (!next) return;
+    viewRef.current = next;
+    if (outOfSpare()) redrawNow();
+    else applyTransform();
+    settleSoon();
   }
 
   /** 두 손가락의 지금 거리와 가운데. 셋 이상이면 먼저 얹은 둘만 봅니다. */
@@ -472,21 +511,31 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
 
   function onPointerDown(event: ReactPointerEvent<HTMLElement>) {
     onInteract();
-    if (event.button !== 0 || (event.target as Element).closest("button, a, input")) return;
+    if (event.button !== 0) return;
     stopGlide();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // 핀이나 단추 위에 내려앉은 손가락도 **손가락으로는** 셉니다. 안 세면 두 손
+    // 중 하나가 핀에 닿았다는 이유로 오므리기가 아예 시작되지 않습니다 —
+    // 핀은 화면 곳곳에 있으므로 그건 자주 일어납니다.
+    const onControl = !!(event.target as Element).closest("button, a, input");
     touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     // 두 번째 손가락이 얹히면 밀기를 그만두고 오므리기로 넘어갑니다. 한 손가락
     // 밀기를 그대로 두면 두 손이 벌어지는 동안 지도가 한쪽 손만 따라갑니다.
     if (touchesRef.current.size >= 2) {
       dragRef.current = null;
-      settlePan();
+      // 두 손을 다 지도가 받아 둡니다. 핀 위에서 시작한 손가락을 그대로 두면
+      // 떼는 순간 그 핀이 눌린 것이 되어, 오므리자마자 영수증이 열립니다.
+      for (const id of touchesRef.current.keys()) event.currentTarget.setPointerCapture?.(id);
       pinchRef.current = pinchOf();
       setHovered(null);
-    } else {
-      dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, view: viewRef.current, tap: true };
+      setDragging(true);
+      return;
     }
+
+    // 한 손가락이 핀 위에 내려앉은 것은 고르려는 것입니다. 지도를 끌지 않습니다.
+    if (onControl) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, view: viewRef.current, tap: true };
     setDragging(true);
   }
 
@@ -504,7 +553,9 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     if (!rect || !last || !now || last.distance < 1 || now.distance < 1) return;
     pinchRef.current = now;
     const scaled = scaledAt(viewRef.current, now.distance / last.distance, now.x - rect.left, now.y - rect.top, rect);
-    commitViewSoon(clampView({ zoom: scaled.zoom, x: scaled.x + (now.x - last.x), y: scaled.y + (now.y - last.y) }, rect.width, rect.height));
+    viewRef.current = clampView({ zoom: scaled.zoom, x: scaled.x + (now.x - last.x), y: scaled.y + (now.y - last.y) }, rect.width, rect.height);
+    if (outOfSpare()) redrawNow();
+    else applyTransform();
   }
 
   /**
@@ -533,19 +584,10 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     const drag = dragRef.current;
     const rect = mapRef.current?.getBoundingClientRect();
     if (drag && drag.pointerId === event.pointerId && rect) {
-      const next = clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height);
       // 값은 곧바로 반영합니다 — 짚기도 확대도 늘 지금 자리를 봐야 합니다.
-      viewRef.current = next;
-      const dx = next.x - drag.view.x;
-      const dy = next.y - drag.view.y;
-      if (Math.abs(dx) > rect.width * OVERSCAN || Math.abs(dy) > rect.height * OVERSCAN) {
-        // 넓게 그려 둔 만큼을 넘었습니다. 여기서 한 번 다시 그리고 이어 갑니다.
-        dragRef.current = { ...drag, startX: event.clientX, startY: event.clientY, view: next };
-        restoreRef.current = true;
-        commitView(next);
-      } else if (panRef.current) {
-        panRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
-      }
+      viewRef.current = clampView({ zoom: drag.view.zoom, x: drag.view.x + event.clientX - drag.startX, y: drag.view.y + event.clientY - drag.startY }, rect.width, rect.height);
+      if (outOfSpare()) redrawNow();
+      else applyTransform();
       // 지도를 옮기기 시작했으면 짚어 둔 동네는 놓습니다. 누르는 순간에 놓아
       // 버리면, 손가락으로 톡 쳤을 때 방금 켠 것인지 원래 켜져 있던 것인지
       // 구분할 수 없어 같은 곳을 다시 쳐도 안 꺼집니다.
@@ -583,8 +625,7 @@ export function MapCanvas({ cafes, activeId, savedMarkers, onSelect, onInteract 
     pinchRef.current = null;
     dragRef.current = null;
     if (!wasTouching && !drag) return;
-    settlePan();
-    flushView();
+    settle();
     setDragging(false);
     if (!drag) return;
 
