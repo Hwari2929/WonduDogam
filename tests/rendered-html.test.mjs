@@ -22,8 +22,11 @@ test("server-renders the Bean Codex product shell", async () => {
   // 첫 화면은 지도와 상단 바뿐입니다 — 영수증도 "다시 보기"도 아직 없습니다.
   assert.doesNotMatch(html, /오늘의 영수증/);
   assert.match(html, /내 도감/);
-  assert.match(html, /협력업체/);
-  assert.match(html, /목업 데이터/);
+  // 왼쪽 아래는 지금 보고 있는 동네입니다. 수도권을 통째로 펼친 첫 화면에서는
+  // 어느 구도 제 몫을 못 채우므로 "수도권"입니다 — 서버가 이미 답을 압니다.
+  assert.match(html, /class="map__here" aria-live="polite"><b>수도권<\/b>/);
+  // 목업이라는 말은 서랍 아래 한 줄로 갑니다. 지도 위에 늘 띄워 둘 글이 아닙니다.
+  assert.doesNotMatch(html, /목업 데이터/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -328,7 +331,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /terrain__district/);
   assert.match(canvas, /onWheel=\{onWheel\}/);
   assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
-  assert.match(canvas, /MAX_ZOOM = 15/);
+  assert.match(canvas, /const MIN_SPAN = 0\.95;/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{ICON\.sm\} aria-hidden="true" \/>/);
   assert.match(css, /\.map__places span \{ transform: translate\(-50%, -50%\); \}/);
@@ -668,13 +671,13 @@ test("지도 연장은 우하단 한 덩어리로 모이고, 종이가 덮지 �
   assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.map__tools \{ right: 14px; bottom: 22px; \}/);
 });
 
-test("목업 카페는 백여든 곳이고 협력업체는 다섯 중 하나다", async () => {
+test("목업 카페는 천 곳이고 협력업체는 다섯 중 하나다", async () => {
   const cafes = await readFile(new URL("../app/data/cafes.ts", import.meta.url), "utf8");
   const rows = cafes.slice(cafes.indexOf("export const cafes"), cafes.indexOf("export const partnerRegions"));
   const total = (rows.match(/id: "demo-/g) ?? []).length;
   const partners = (rows.match(/partner: true/g) ?? []).length;
-  assert.equal(total, 180);
-  assert.equal(partners, 36);
+  assert.equal(total, 1000);
+  assert.equal(partners, 200);
   assert.equal(total / partners, 5, "협력업체는 1 : 4 (다섯 중 하나)여야 합니다");
   // id 와 상호가 겹치면 도감이 같은 곳을 두 번 셉니다.
   assert.equal(new Set(rows.match(/id: "[^"]+"/g)).size, total);
@@ -695,12 +698,13 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
     ["../app/components/MapCanvas.tsx", "../app/page.tsx"]
       .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
-  // 담기지 않은 카페는 300%에서 하나도 없고 1500%에서 전부입니다.
-  assert.match(canvas, /const REVEAL_FROM = 3;/);
-  assert.match(canvas, /const REVEAL_ALL = 15;/);
-  // 배율에 그대로 비례시키면 중간에 붐볐다가 끝에서 도로 휑해집니다. 화면에 남는
-  // 땅이 배율의 제곱에 반비례해 줄어드니, 나오는 비율도 제곱으로 늘려 상쇄합니다.
-  assert.match(canvas, /\(view\.zoom \*\* 2 - REVEAL_FROM \*\* 2\) \/ \(REVEAL_ALL \*\* 2 - REVEAL_FROM \*\* 2\)/);
+  // 좁혀 들어가는 건 그 동네의 카페를 한눈에 보려는 것인데 화면이 도리어 비면
+  // 좁힐 이유가 없습니다. 창이 좁아지며 줄어드는 것(z^-2)보다 가파르게 늘려야
+  // 화면에 찍히는 수가 자랍니다. 서울 위에서 100% 스무 곳 → 500% 마흔 곳입니다.
+  assert.match(canvas, /const REVEAL_ALL = 10;/);
+  assert.match(canvas, /const REVEAL_POWER = 1\.8;/);
+  assert.match(canvas, /clamp\(\(view\.zoom \/ REVEAL_ALL\) \*\* REVEAL_POWER, 0, 1\)/);
+  assert.doesNotMatch(canvas, /REVEAL_FROM/);
   assert.match(canvas, /if \(savedMarkers\[cafe\.id\] \|\| cafe\.id === activeId \|\| hoveredIds\?\.has\(cafe\.id\)\)/);
   assert.match(canvas, /if \(\(revealOrder\.get\(cafe\.id\) \?\? 0\) >= revealed\) return false;/);
   assert.match(canvas, /\{shownCafes\.map\(\(cafe\) => \{/);
@@ -719,6 +723,36 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.doesNotMatch(canvas, /level: 1/);
   assert.match(canvas, /const pieces = useMemo\(\(\) => piecesInView\(level, tile\), \[tileKey\]\);/);
   assert.match(canvas, /levelRef\.current,/);
+
+  // 좁혀 들어가면 지명이 지도에서 사라집니다. 왼쪽 아래가 지금 어디를 보고
+  // 있는지 대신 말해 줍니다 — 동 → 구 → 시도 순으로 물러섭니다.
+  const districts = await readFile(new URL("../app/data/districts.ts", import.meta.url), "utf8");
+  assert.match(canvas, /const DONG_SHARE = 0\.65;/);
+  assert.match(canvas, /const GU_SHARE = 0\.35;/);
+  assert.match(canvas, /const SIDO_SHARE = 0\.6;/);
+  assert.match(canvas, /\{ dong: DONG_SHARE, gu: GU_SHARE, sido: SIDO_SHARE \}/);
+  assert.match(canvas, /<p className="map__here" aria-live="polite">/);
+  assert.match(canvas, /here\.parent \? <i>\{here\.parent\}<\/i> : null/);
+  assert.match(canvas, /<b>수도권<\/b>/);
+  // 100%는 수도권이 통째로 든 상태입니다 — 그때는 아무 이름도 안 답니다.
+  assert.match(canvas, /const HERE_FROM = 1\.5;/);
+  assert.match(canvas, /view\.zoom < HERE_FROM/);
+  assert.match(districts, /export function districtInView\(/);
+  assert.match(districts, /if \(best && level === 3 && best\.count \/ total >= shares\.dong\)/);
+  // 몫을 안 두면 수도권 전체를 펼쳐 놓고도 가장 넓은 "파주시"라고 적습니다.
+  assert.match(districts, /if \(topGu && topGu\.count \/ total >= shares\.gu\)/);
+  assert.match(districts, /if \(topSido && topSido\.count \/ total >= shares\.sido\)/);
+  // 몫은 표가 아니라 눈금 전체로 나눕니다 — 절반이 바다인 창은 아직 "여기"가 아닙니다.
+  assert.match(districts, /const total = steps \* steps;/);
+  // 창 전체가 아니라 한복판 정사각형으로 셉니다. 폰 화면은 남북으로 3.5배 길어서,
+  // 창 전체로 세면 어떤 배율에서도 동 이름이 안 뜹니다.
+  assert.match(districts, /const side = Math\.min\(right - left, bottom - top\);/);
+  // 창을 눈금으로 훑습니다 — 가운데 한 점만 찍으면 경계에 걸친 창이 옆 동네를
+  // 자기 이름인 양 말합니다.
+  assert.match(districts, /steps = 9,/);
+  assert.match(districts, /const x = x0 \+ \(\(ix \+ 0\.5\) \/ steps\) \* \(x1 - x0\);/);
+  // 바다 위는 어느 칸에도 안 들어갑니다.
+  assert.match(districts, /if \(!counted\) return null;/);
 
   // 지도에서 도드라지는 건 지금 고른 도감뿐입니다 — 탭을 옮기면 지도도 옮겨 갑니다.
   assert.match(page, /if \(!mark\.collectionIds\.includes\(activeCollection\.id\)\) continue;/);
@@ -982,7 +1016,7 @@ test("목업 카페의 주소는 좌표가 실제로 놓인 행정구역과 맞�
   const rows = [...cafes.matchAll(
     /id: "(demo-\d+)", name: "([^"]+)"[\s\S]*?address: "([^"]+)", tel: "([^"]+)"[\s\S]*?pos: \[([-\d.]+), ([-\d.]+)\]/g,
   )];
-  assert.equal(rows.length, 180);
+  assert.equal(rows.length, 1000);
 
   const code = { 서울: "02", 경기: "031", 인천: "032" };
   for (const [, id, name, address, tel, lng, lat] of rows) {
@@ -1130,7 +1164,11 @@ test("좁은 화면의 시트는 잘리고, 닫는 길은 X 와 뒤로가기뿐�
 
   // 첫 화면은 지도와 상단 바뿐입니다 — 확대·축소도 아직 없습니다.
   assert.match(page, /data-touched=\{touched \|\| panelOpen\}/);
-  assert.match(css, /\.app-shell\[data-touched="false"\] \.map__tools,\s*\n\.app-shell\[data-touched="false"\] \.map-status \{\s*\n\s*opacity: 0;/);
+  assert.match(css, /\.app-shell\[data-touched="false"\] \.map__tools,\s*\n\.app-shell\[data-touched="false"\] \.map__here \{\s*\n\s*opacity: 0;/);
+  // 왼쪽 아래에 있던 "수도권 전체 · 협력업체 n · 목업 데이터"는 화면이 바뀌어도
+  // 안 바뀌는 글이라 없앴습니다. 그 자리는 지금 보고 있는 동네가 씁니다.
+  assert.doesNotMatch(page, /map-status/);
+  assert.doesNotMatch(css, /\.map-status/);
   // 로드 몇 백 ms 뒤에 영수증이 저절로 프린트되던 자리는 없앴습니다.
   assert.doesNotMatch(page, /setPhase\("center"\)/);
   assert.doesNotMatch(page, /"intro" \| "center"/);
@@ -1385,12 +1423,23 @@ test("문서가 코드와 같은 값을 적고 있다", async () => {
   assert.match(css, /\.topbar__brand b \{[^}]*letter-spacing: 0\.14em;/s);
 
   // 명세 쪽 숫자들.
-  assert.match(canvas, /const MAX_ZOOM = 15;/);
-  assert.ok(spec.includes("1500%"), "최대 배율이 명세와 다릅니다");
+  // 천장은 배율이 아니라 땅입니다 — 화면마다 배율 숫자가 다르게 나옵니다.
+  assert.match(canvas, /const MIN_SPAN = 0\.95;/);
+  assert.doesNotMatch(canvas, /MAX_ZOOM/);
+  assert.ok(spec.includes("`MIN_SPAN = 0.95`"), "배율 천장이 명세와 다릅니다");
+  assert.ok(spec.includes("1.45km"), "최대 배율에서 담기는 땅이 명세와 다릅니다");
   assert.match(canvas, /\{ from: 5, level: 3 \}/);
   assert.ok(spec.includes("500% 아래는 **시군구**, 위는 **읍면동**"), "단계가 갈리는 배율이 명세와 다릅니다");
-  assert.match(canvas, /const REVEAL_FROM = 3;[\s\S]*?const REVEAL_ALL = 15;/);
-  assert.ok(spec.includes("300% ~ 1500%"), "핀이 나오는 구간이 명세와 다릅니다");
+  assert.match(canvas, /const REVEAL_ALL = 10;[\s\S]*?const REVEAL_POWER = 1\.8;/);
+  assert.ok(spec.includes("`z^1.8`"), "표출 곡선이 명세와 다릅니다");
+  // 왼쪽 아래 이름표의 세 문턱.
+  assert.match(canvas, /const DONG_SHARE = 0\.65;/);
+  assert.match(canvas, /const GU_SHARE = 0\.35;/);
+  assert.match(canvas, /const SIDO_SHARE = 0\.6;/);
+  assert.match(canvas, /const HERE_FROM = 1\.5;/);
+  assert.ok(spec.includes("**65%**") && spec.includes("**35%**") && spec.includes("**60%**"),
+    "이름표 문턱이 명세와 다릅니다");
+  assert.ok(spec.includes("150% 아래"), "이름표를 쉬는 배율이 명세와 다릅니다");
   assert.match(canvas, /const OVERSCAN = 0\.25;/);
   assert.ok(spec.includes("사방 25%"), "겹 여유가 명세와 다릅니다");
   assert.match(canvas, /const FOCUS_ZOOM = 6;/);

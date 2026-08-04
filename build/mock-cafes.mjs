@@ -14,9 +14,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 const ROOT = new URL("..", import.meta.url);
 const CAFES = new URL("app/data/cafes.ts", ROOT);
 const CORE = new URL("app/data/districts-data.ts", ROOT);
-const WANTED = 100;
+/** 다 채웠을 때의 전체 곳 수. 이미 있는 것을 빼고 모자란 만큼만 짓습니다. */
+const TARGET = 1000;
 /** 협력업체 : 일반 = 1 : 4. */
 const PARTNER_EVERY = 5;
+/**
+ * 어느 구에 몇 곳을 둘 것인가.
+ *
+ * 고르게 뿌리면 김포 들판과 종로가 같은 밀도가 되어, 확대해 들어가도 도심이
+ * 도심처럼 안 보입니다. 좁은 구일수록 촘촘하게 두되(면적의 세제곱근에 반비례),
+ * 넓은 군도 한두 곳은 갖도록 바닥을 깔아 둡니다.
+ */
+const FLOOR = 2;
 
 const BOUNDS = { west: 126.12, east: 127.85, north: 37.85, south: 37.0 };
 const project = (lng, lat) => ({
@@ -37,6 +46,21 @@ function random() {
 const pick = (list) => list[Math.floor(random() * list.length)];
 
 // ── 경계 ────────────────────────────────────────────────────────────
+/** 신발끈 공식. 0..100 공간의 넓이라 절대값은 안 쓰고 비교에만 씁니다. */
+function areaOf(loops) {
+  let total = 0;
+  for (const loop of loops) {
+    let sum = 0;
+    for (let i = 0; i < loop.length; i += 1) {
+      const [x0, y0] = loop[i];
+      const [x1, y1] = loop[(i + 1) % loop.length];
+      sum += x0 * y1 - x1 * y0;
+    }
+    total += Math.abs(sum) / 2;
+  }
+  return total;
+}
+
 function loopsOf(path) {
   return path
     .split("M")
@@ -87,15 +111,44 @@ for (const cafe of existing) {
   if (found) counts.set(found.id, counts.get(found.id) + 1);
 }
 
-// 한 곳도 없는 구부터, 그 다음 한 곳뿐인 구 순으로 채웁니다.
-const empty = districts.filter((district) => counts.get(district.id) === 0);
-const thin = districts.filter((district) => counts.get(district.id) === 1);
+// 구마다 몇 곳을 더 지을지 정합니다.
+for (const district of districts) district.weight = 1 / Math.cbrt(Math.max(areaOf(district.loops), 0.02));
+const weightSum = districts.reduce((sum, district) => sum + district.weight, 0);
+const short = TARGET - existing.length;
+if (short <= 0) throw new Error(`이미 ${existing.length}곳이라 더 지을 것이 없습니다`);
+
+const plan = [];
+for (const district of districts) {
+  const want = Math.max(FLOOR, Math.round((district.weight / weightSum) * TARGET));
+  const need = Math.max(0, want - counts.get(district.id));
+  for (let i = 0; i < need; i += 1) plan.push(district);
+}
+// 넘치면 이미 많은 구부터 덜어 내고, 모자라면 좁은 구부터 한 곳씩 더합니다.
+plan.sort((a, b) => b.weight - a.weight);
+if (plan.length > short) plan.length = short;
+const dense = [...districts].sort((a, b) => b.weight - a.weight);
+for (let i = 0; plan.length < short; i += 1) plan.push(dense[i % dense.length]);
 
 // ── 말 ──────────────────────────────────────────────────────────────
-const HEAD = ["깊은", "맑은", "너른", "고요한", "낡은", "묵은", "밝은", "둥근", "작은", "얕은", "가는", "조용한", "흐린", "이른", "늦은", "잔잔한", "성긴", "옅은", "따뜻한", "서늘한", "무른", "곧은"];
-const TAIL = ["계단", "모퉁이", "처마", "그늘", "언덕", "물결", "바람", "마당", "우물", "여백", "창고", "골목", "담장", "지붕", "돌담", "툇마루", "안뜰", "낮달", "초저녁", "빗물", "노을", "새벽"];
-const HEAD_EN = { 깊은: "DEEP", 맑은: "CLEAR", 너른: "WIDE", 고요한: "STILL", 낡은: "WORN", 묵은: "AGED", 밝은: "BRIGHT", 둥근: "ROUND", 작은: "SMALL", 얕은: "SHALLOW", 가는: "THIN", 조용한: "QUIET", 흐린: "HAZY", 이른: "EARLY", 늦은: "LATE", 잔잔한: "CALM", 성긴: "SPARSE", 옅은: "FAINT", 따뜻한: "WARM", 서늘한: "COOL", 무른: "SOFT", 곧은: "STRAIGHT" };
-const TAIL_EN = { 계단: "STAIRS", 모퉁이: "CORNER", 처마: "EAVES", 그늘: "SHADE", 언덕: "HILL", 물결: "RIPPLE", 바람: "WIND", 마당: "YARD", 우물: "WELL", 여백: "MARGIN", 창고: "DEPOT", 골목: "ALLEY", 담장: "WALL", 지붕: "ROOF", 돌담: "STONE WALL", 툇마루: "PORCH", 안뜰: "COURT", 낮달: "DAY MOON", 초저녁: "DUSK", 빗물: "RAINDROP", 노을: "AFTERGLOW", 새벽: "DAYBREAK" };
+const HEAD_EN = {
+  깊은: "DEEP", 맑은: "CLEAR", 너른: "WIDE", 고요한: "STILL", 낡은: "WORN", 묵은: "AGED",
+  밝은: "BRIGHT", 둥근: "ROUND", 작은: "SMALL", 얕은: "SHALLOW", 가는: "THIN", 조용한: "QUIET",
+  흐린: "HAZY", 이른: "EARLY", 늦은: "LATE", 잔잔한: "CALM", 성긴: "SPARSE", 옅은: "FAINT",
+  따뜻한: "WARM", 서늘한: "COOL", 무른: "SOFT", 곧은: "STRAIGHT", 나직한: "LOW", 오래된: "OLD",
+  한적한: "SECLUDED", 나른한: "LANGUID", 정갈한: "TIDY", 느린: "SLOW", 반듯한: "EVEN",
+  조붓한: "NARROW", 어둑한: "DUSKY", 환한: "RADIANT", 포근한: "SNUG", 청량한: "CRISP",
+};
+const TAIL_EN = {
+  계단: "STAIRS", 모퉁이: "CORNER", 처마: "EAVES", 그늘: "SHADE", 언덕: "HILL", 물결: "RIPPLE",
+  바람: "WIND", 마당: "YARD", 우물: "WELL", 여백: "MARGIN", 창고: "DEPOT", 골목: "ALLEY",
+  담장: "WALL", 지붕: "ROOF", 돌담: "STONE WALL", 툇마루: "PORCH", 안뜰: "COURT", 낮달: "DAY MOON",
+  초저녁: "DUSK", 빗물: "RAINDROP", 노을: "AFTERGLOW", 새벽: "DAYBREAK", 다락: "ATTIC",
+  창문: "WINDOW", 문간: "DOORWAY", 화단: "FLOWERBED", 계절: "SEASON", 오후: "AFTERNOON",
+  아침: "MORNING", 저녁: "EVENING", 숲길: "FOREST PATH", 물가: "WATERSIDE", 모래: "SAND",
+  자갈: "PEBBLE",
+};
+const HEAD = Object.keys(HEAD_EN);
+const TAIL = Object.keys(TAIL_EN);
 const ROADS = ["한들로", "서로", "동편길", "중앙로", "너른들길", "벚꽃로", "윗마을길", "백석로", "가로수길", "솔밭길", "물레방아길", "돌담길"];
 const PLACES = ["카페", "다방", "로스터리", "북카페", "커피집"];
 const WHERE = ["골목 안쪽의", "상가 이층의", "언덕 위", "역에서 조금 걷는", "큰길에서 한 블록 들어간", "주택가에 있는", "공원 건너편", "시장 옆", "천변에 있는", "학교 앞"];
@@ -130,25 +183,37 @@ function spotIn(district) {
   return [lx, ly];
 }
 
-function nameFor() {
-  for (let tries = 0; tries < 400; tries += 1) {
-    const head = pick(HEAD);
-    const tail = pick(TAIL);
+/**
+ * 쓸 수 있는 이름을 미리 다 만들어 섞어 두고 하나씩 꺼냅니다.
+ *
+ * 무작위로 뽑아 겹치면 다시 뽑는 방식은, 남은 자리가 줄수록 헛돌이가 급격히
+ * 늘어 끝에서 사실상 멈춥니다. 34 × 34 = 1,156 가지를 한 번에 세워 둡니다.
+ */
+const pool = [];
+for (const head of HEAD) {
+  for (const tail of TAIL) {
     const name = `${head}${tail}`;
-    if (taken.has(name)) continue;
-    taken.add(name);
-    return { name, romanized: `${HEAD_EN[head]} ${TAIL_EN[tail]}` };
+    if (!taken.has(name)) pool.push({ name, romanized: `${HEAD_EN[head]} ${TAIL_EN[tail]}` });
   }
-  throw new Error("이름이 동났습니다");
+}
+for (let i = pool.length - 1; i > 0; i -= 1) {
+  const j = Math.floor(random() * (i + 1));
+  [pool[i], pool[j]] = [pool[j], pool[i]];
+}
+function nameFor() {
+  const next = pool.pop();
+  if (!next) throw new Error("이름이 동났습니다 — 낱말을 더 넣으세요");
+  taken.add(next.name);
+  return next;
 }
 
 // ── 짓기 ────────────────────────────────────────────────────────────
-/** 빈 구를 한 바퀴 돌고, 남으면 한 곳뿐인 구를 한 바퀴 더 돕니다. */
-const plan = [];
-for (const district of empty) plan.push(district);
-for (const district of thin) plan.push(district);
-while (plan.length < WANTED) plan.push(empty[plan.length % Math.max(empty.length, 1)]);
-plan.length = WANTED;
+// 한 구가 몰려 나오지 않게 섞습니다 — id 가 곧 표출 차례는 아니지만, 목록을
+// 눈으로 훑을 때 지역이 번갈아 나오는 편이 읽힙니다.
+for (let i = plan.length - 1; i > 0; i -= 1) {
+  const j = Math.floor(random() * (i + 1));
+  [plan[i], plan[j]] = [plan[j], plan[i]];
+}
 
 const rows = [];
 plan.forEach((district, index) => {
@@ -173,10 +238,15 @@ const partners = rows.filter((row) => row.includes("partner: true")).length;
 const spread = new Map();
 for (const district of plan) spread.set(district.parent, (spread.get(district.parent) ?? 0) + 1);
 
-console.log(`시군구 ${districts.length}칸 중 카페가 없던 곳 ${empty.length}칸, 한 곳뿐이던 곳 ${thin.length}칸`);
-console.log(`새로 ${rows.length}곳 — 협력 ${partners} : 일반 ${rows.length - partners} (1:${(rows.length - partners) / partners})`);
-console.log("시도별:", [...spread].map(([k, v]) => `${k} ${v}`).join(" · "));
-console.log("아직 빈 채로 남는 곳:", empty.filter((d) => !plan.includes(d)).map((d) => d.name).join(", ") || "없음");
+const per = new Map();
+for (const district of plan) per.set(district.name, (per.get(district.name) ?? 0) + counts.get(district.id) * 0 + 1);
+const total = new Map(districts.map((d) => [d.name, counts.get(d.id) + (per.get(d.name) ?? 0)]));
+const sorted = [...total].sort((a, b) => b[1] - a[1]);
+console.log(`이미 ${existing.length}곳 + 새로 ${rows.length}곳 = ${existing.length + rows.length}곳`);
+console.log(`새로 짓는 것의 협력 ${partners} : 일반 ${rows.length - partners}`);
+console.log("시도별 새로:", [...spread].map(([k, v]) => `${k} ${v}`).join(" · "));
+console.log("가장 촘촘한 다섯 칸:", sorted.slice(0, 5).map(([k, v]) => `${k} ${v}`).join(" · "));
+console.log("가장 성긴 다섯 칸:", sorted.slice(-5).map(([k, v]) => `${k} ${v}`).join(" · "));
 
 if (!process.argv.includes("--write")) {
   console.log("\n미리보기 세 줄:");

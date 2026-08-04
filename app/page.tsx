@@ -174,7 +174,6 @@ export default function Home() {
 
   const displayedCafe = cafes.find((cafe) => cafe.id === selectedId) ?? dailyCafe;
   const codexPreviewCafe = cafes.find((cafe) => cafe.id === codexPreviewId) ?? null;
-  const partnerCount = cafes.filter((cafe) => cafe.partner).length;
 
   const matches = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ko");
@@ -563,14 +562,6 @@ export default function Home() {
           </div>
         ) : null}
       </section>
-
-      <div className="map-status plate">
-        <span>수도권 전체</span>
-        <span>
-          협력업체 <i className="tabular">{partnerCount}</i>
-        </span>
-        <span className="map-status__note">목업 데이터</span>
-      </div>
 
       {panelOpen ? (
         <>

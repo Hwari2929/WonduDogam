@@ -582,33 +582,40 @@ a:focus-visible,
   place-content: center;
 }
 
-/* 조각 세 개가 아니라 쪽지 한 장. 흩어져 있으면 정보가 아니라 부스러기로 보입니다. */
-.map-status {
+/*
+ * 지금 보고 있는 동네.
+ *
+ * 왼쪽 아래는 지도에서 가장 오래 비어 있는 자리입니다. 예전에는 "수도권 전체 ·
+ * 협력업체 n · 목업 데이터"가 있었는데, 셋 다 화면이 바뀌어도 안 바뀌는 글이라
+ * 읽을 이유가 없었습니다(협력업체 수는 서랍에, 목업이라는 말은 서랍 아래에
+ * 이미 있습니다). 여기는 움직이는 것이 앉을 자리입니다.
+ */
+.map__here {
   position: absolute;
   z-index: 10;
   left: var(--rail);
   bottom: 26px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 13px;
-  color: var(--ink-soft);
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  white-space: nowrap;
+}
+.map__here b {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-label);
+  font-weight: 600;
+}
+.map__here i {
+  color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
+  font-style: normal;
   letter-spacing: var(--ls-mono);
-}
-.map-status span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.map-status span + span::before {
-  content: "·";
-  margin-right: 5px;
-  color: var(--rule);
-}
-.map-status__note {
-  color: var(--ink-faint);
 }
 
 /* ══ 4. 상단 바 ════════════════════════════════════════════════════ */
@@ -744,11 +751,11 @@ a:focus-visible,
    들이밀 이유가 없고, 좁은 화면에서는 그 조작기가 지도 위에 늘 떠 있는 짐이
    됩니다. 지도에 손이 닿으면 그때 나옵니다. */
 .app-shell[data-touched="false"] .map__tools,
-.app-shell[data-touched="false"] .map-status {
+.app-shell[data-touched="false"] .map__here {
   opacity: 0;
   pointer-events: none;
 }
-.map-status {
+.map__here {
   transition: opacity 160ms var(--ease-paper);
 }
 
@@ -2011,10 +2018,22 @@ a:focus-visible,
   .map-marker__name {
     display: none;
   }
-  .map-status,
+  /* 축척 막대는 뺍니다 — 좁은 화면에서 "이 길이가 2km"라는 정보를 실제로 재
+     보는 사람은 없고, 같은 자리에 앉을 것이 하나 더 있습니다. 지금 보고 있는
+     동네 이름은 남깁니다. 확대해 들어갈수록 지도에서 사라지는 것이 지명이라,
+     좁은 화면일수록 오히려 더 필요한 글입니다. */
   .map__scale {
     display: none;
   }
+  .map__here {
+    left: 14px;
+    bottom: 22px;
+    max-width: calc(100vw - 28px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* 치워 둔 띠 위로 — 오른쪽 조작기와 같은 높이로 올라섭니다. */
+  .app-shell[data-phase="peek"] .map__here { bottom: 74px; }
   /* 좁은 화면에는 "다시 보기" 탭을 두지 않습니다. 손이 닿는 자리를 늘 한 줄
      차지하면서, 정작 하는 일은 지도를 덮는 것뿐이었습니다. 닫은 영수증은
      핀을 다시 치거나 뒤로가기로 돌아옵니다. */

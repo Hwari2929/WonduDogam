@@ -14,7 +14,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
-import { BASE_LEVEL, cafesIn, districtAt, hasLevel, loadDongDistricts, piecesInView, type DistrictLevel, type DistrictPiece } from "../data/districts";
+import { BASE_LEVEL, cafesIn, districtAt, districtInView, hasLevel, loadDongDistricts, piecesInView, type DistrictLevel, type DistrictPiece } from "../data/districts";
 import { project, SPAN_KM, UNIT_ASPECT } from "../data/geo";
 import { ICON } from "../icons";
 import { outside, sea, type District } from "../data/districts-data";
@@ -28,7 +28,25 @@ const PLACES: { label: string; lng: number; lat: number; sea?: boolean }[] = [
   { label: "수원", lng: 127.029, lat: 37.263 }, { label: "서해", lng: 126.5, lat: 37.34, sea: true },
 ];
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 15;
+/**
+ * 가장 좁혀 볼 수 있는 땅의 폭 — 배율이 아니라 **화면에 담기는 실제 크기**입니다.
+ *
+ * 배율 숫자는 화면마다 뜻이 다릅니다. 100%는 "수도권이 한 화면에 들어온 상태"라
+ * 세로로 긴 휴대폰은 좌우가 잘려 처음부터 좁게 보고, 넓은 모니터는 같은 배율에서
+ * 세 배 넓게 봅니다. 그래서 배율로 한계를 그으면 휴대폰만 동네까지 들어가고
+ * 모니터는 구에서 멈춥니다. 한계는 배율이 아니라 땅으로 그어야 둘이 같은 곳까지
+ * 갑니다.
+ *
+ * 0..100 공간에서 1 은 1.53km 입니다(수도권 가로폭 153km 를 100으로 잡았습니다).
+ * 0.95 면 1.45km — 서울의 동 하나가 화면을 채우는 크기이고, 왼쪽 아래 이름표가
+ * 동까지 내려가는 지점이기도 합니다.
+ */
+const MIN_SPAN = 0.95;
+/** 이 화면에서 더 이상 좁힐 수 없는 배율. 좁은 화면은 30배쯤, 넓은 화면은 그 서너 배입니다. */
+function maxZoomFor(size: { width: number; height: number }) {
+  const base = baseSpan(size.width, size.height);
+  return Math.max(2, Math.min(base.w, base.h) / MIN_SPAN);
+}
 /**
  * 단추 한 번에 곱해지는 배율. 더하기로 올리면 배율이 높을수록 한 번의 체감이
  * 줄어들어, 끝으로 갈수록 눌러도 눌러도 그대로인 것처럼 보입니다.
@@ -81,14 +99,25 @@ const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
   { from: 1, level: 2 },
 ];
 /**
- * 담기지 않은 카페가 나오기 시작하는 배율과, 전부 나오는 배율.
+ * 전부 나오는 배율, 그리고 거기까지 가는 기울기.
  *
- * 여든 곳이 한 칸에서 우르르 나타나면 지도가 아니라 얼룩이 됩니다. 이 사이에서는
- * 카페마다 정해진 제 차례에 하나씩 나옵니다 — 차례를 id 로 정하므로 끌거나
- * 확대를 되돌려도 나왔다 들어갔다 깜박이지 않습니다.
+ * 확대할수록 화면에 **더 많이** 보여야 합니다 — 좁혀 들어가는 건 그 동네의
+ * 카페를 한눈에 보려는 것인데, 화면이 도리어 비면 좁힐 이유가 없습니다.
+ *
+ * 창이 좁아지면 그 안의 카페 수는 z^-2 로 줄어듭니다 — 창이 사방으로 좁아지니
+ * 넓이가 그만큼 주는 것뿐입니다. 그러니 화면에 찍히는 수가 늘어나려면 나오는
+ * 비율이 그보다 가파르게 자라야 합니다. z^1.8 이 서울 위에서 100% 열여덟 곳 →
+ * 500% 마흔 곳 남짓, 대략 두 배를 만듭니다.
+ *
+ * 1000% 부터는 전부입니다. 그 위로는 창 안에 있는 카페를 하나도 안 숨기는데도
+ * 수가 줄어드는데, 그건 골라 낸 게 아니라 그 동네에 그만큼밖에 없어서입니다 —
+ * 목업 천 곳은 수도권 한 곳당 14km² 꼴이라 450m 짜리 화면에는 두어 곳이 한계입니다.
+ * 여기서 더 늘리려면 손댈 곳은 이 곡선이 아니라 데이터 수입니다.
+ *
+ * 차례는 id 해시로 정하므로 끌거나 확대를 되돌려도 나왔다 들어갔다 깜박이지 않습니다.
  */
-const REVEAL_FROM = 3;
-const REVEAL_ALL = 15;
+const REVEAL_ALL = 10;
+const REVEAL_POWER = 1.8;
 /**
  * 도감에서 "지도에서 위치 보기"로 찾아갈 때의 배율.
  *
@@ -103,6 +132,33 @@ const FOCUS_ZOOM = 6;
 const TILE_MARGIN = 0.4;
 /** 창이 이만큼(창 크기 대비) 움직이기 전에는 그리는 목록을 다시 내지 않습니다. */
 const TILE_STEP = 0.25;
+/**
+ * 한 읍면동이 화면 한복판의 이만큼을 차지하면 그 동 이름을 적습니다. 못 넘으면
+ * 구로 물러섭니다 — 여러 동이 섞여 있는데 그중 하나만 적으면 나머지를 못 본
+ * 것입니다. 서울의 동은 1km 남짓이라, 이 몫에 닿는 건 거의 끝까지 좁혔을 때입니다.
+ */
+const DONG_SHARE = 0.65;
+/**
+ * 구가 최소한 이만큼은 차지해야 그 이름을 적습니다.
+ *
+ * 없으면 수도권 전체를 펼쳐 놓고도 "파주시"라고 적습니다 — 넓기만 할 뿐 아무도
+ * 그걸 보고 있지 않은데 말입니다. 동보다 낮게 잡는 건 구가 원래 여러 개 걸치는
+ * 크기여서입니다: 한 구가 화면의 1/3이면 그 동네를 보고 있는 게 맞습니다.
+ */
+const GU_SHARE = 0.35;
+/**
+ * 시도는 이만큼을 넘어야 이름을 답니다. 구보다 훨씬 높은 건 크기 차이 때문입니다 —
+ * 도 하나가 화면의 3분의 1이라는 건 나머지 3분의 2가 남의 땅이라는 뜻이라,
+ * 그걸 "여기"라고 부르면 보고 있는 것의 대부분을 못 본 것이 됩니다.
+ */
+const SIDO_SHARE = 0.6;
+/**
+ * 이 배율 아래로는 이름을 안 답니다.
+ *
+ * 100% 는 수도권이 통째로 화면에 든 상태입니다. 그때 "여기가 어디인지" 묻는 건
+ * 이미 보이는 걸 다시 말해 달라는 것이라, 답은 수도권 하나뿐입니다.
+ */
+const HERE_FROM = 1.5;
 /**
  * 화면 밖으로 이만큼 더 그려 둡니다 (화면 크기 대비, 사방으로).
  *
@@ -174,7 +230,7 @@ function baseSpan(width: number, height: number) {
  * 배율에서 같은 자리에 안 서게 됩니다.
  */
 function scaledAt(view: View, factor: number, focusX: number, focusY: number, size: { width: number; height: number }): View {
-  const zoom = clamp(view.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+  const zoom = clamp(view.zoom * factor, MIN_ZOOM, maxZoomFor(size));
   const ratio = zoom / view.zoom;
   return {
     zoom,
@@ -526,7 +582,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
     const rect = mapRef.current?.getBoundingClientRect();
     if (!rect) return null;
     const current = viewRef.current;
-    const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    const zoom = clamp(nextZoom, MIN_ZOOM, maxZoomFor(rect));
     if (Math.abs(zoom - current.zoom) < 0.001) return null;
     const focusX = clientX === undefined ? rect.width / 2 : clientX - rect.left;
     const focusY = clientY === undefined ? rect.height / 2 : clientY - rect.top;
@@ -719,22 +775,12 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
 
 
   /**
-   * 담기지 않은 카페가 얼마나 나와 있는가 (0..1). 300%에서 하나도 없고 1500%에서
-   * 전부입니다.
-   *
-   * 배율에 그대로 비례시키지 않고 **제곱**에 비례시킵니다. 확대하면 화면에 남는
-   * 땅이 배율의 제곱에 반비례해 줄어드는데, 나오는 비율만 곧게 늘리면 중간에서
-   * 한 번 붐볐다가 끝으로 갈수록 도로 휑해집니다. 제곱으로 늘리면 줄어드는 땅과
-   * 상쇄되어, 확대하는 내내 화면에 찍힌 핀 수가 고르게 유지됩니다.
+   * 담기지 않은 카페가 얼마나 나와 있는가 (0..1). 100%에서 1.6% 남짓, 1000%에서 전부.
    *
    * 열어 둔 카페와 내 도감의 카페는 이것과 무관하게 늘 남습니다 — 검색으로 막
    * 고른 곳이 사라지면 안 되니까요.
    */
-  const revealed = clamp(
-    (view.zoom ** 2 - REVEAL_FROM ** 2) / (REVEAL_ALL ** 2 - REVEAL_FROM ** 2),
-    0,
-    1,
-  );
+  const revealed = clamp((view.zoom / REVEAL_ALL) ** REVEAL_POWER, 0, 1);
   const zoomedIn = revealed > 0;
 
   /** 지금 보고 있는 땅의 창문. 축척과 짚기는 이 하나를 봅니다. */
@@ -766,6 +812,23 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   const tileKey = `${level}:${tile.join(",")}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const pieces = useMemo(() => piecesInView(level, tile), [tileKey]);
+
+  /**
+   * 지금 보고 있는 동네. 창을 눈금으로 훑는 셈이라 프레임마다 하지 않고, 창이
+   * 눈금 한 칸만큼 움직였을 때만 다시 냅니다(그리는 목록과 같은 기준).
+   *
+   * 아직 수도권을 통째로 펼쳐 놓은 동안에는 아무 이름도 안 답니다. 몫으로만
+   * 따지면 첫 화면이 "경기"가 되는데(폰에서는 화면 한복판이 정말로 경기입니다),
+   * 지도를 열자마자 한 도를 짚어 주는 건 답이라기보다 오답에 가깝습니다.
+   */
+  const windowKey = `${level}:${window_.x.toFixed(2)},${window_.y.toFixed(2)},${window_.w.toFixed(2)}`;
+  const here = useMemo(
+    () => (view.zoom < HERE_FROM
+      ? null
+      : districtInView([window_.x, window_.y, window_.x + window_.w, window_.y + window_.h], { dong: DONG_SHARE, gu: GU_SHARE, sido: SIDO_SHARE })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [windowKey, view.zoom < HERE_FROM],
+  );
 
   /**
    * 지도 좌표(0..100) → 화면 위의 백분율.
@@ -831,6 +894,8 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   const scaleLabel = barKilometres >= 1
     ? `${barKilometres.toFixed(barKilometres < 10 ? 1 : 0)} km`
     : `${Math.round(barKilometres * 1000 / 10) * 10} m`;
+  /** 아직 화면 크기를 모르는 첫 프레임에는 단추를 잠그지 않습니다. */
+  const maxZoom = size ? maxZoomFor(size) : Infinity;
 
   const mapClass = ["map", dragging ? "is-dragging" : "", zoomedIn ? "is-zoomed" : ""]
     .filter(Boolean)
@@ -908,12 +973,17 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
       </div>
       <div className="map__grain" aria-hidden="true" />
 
+      {/* 지금 보고 있는 동네. 왼쪽 아래는 지도에서 가장 오래 비어 있는 자리입니다. */}
+      <p className="map__here" aria-live="polite">
+        {here ? <><b>{here.name}</b>{here.parent ? <i>{here.parent}</i> : null}</> : <b>수도권</b>}
+      </p>
+
       <div className="map__tools">
         <div className="map__scale" aria-hidden="true"><i /><span>{scaleLabel}</span></div>
         <div className="map__zoom" role="group" aria-label="지도 확대 축소" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" onClick={() => changeZoom(-1)} disabled={view.zoom <= MIN_ZOOM + 0.01} aria-label="지도 축소"><Minus /></button>
         <output aria-live="polite" aria-label={`지도 확대율 ${Math.round(view.zoom * 100)}퍼센트`}>{Math.round(view.zoom * 100)}%</output>
-        <button type="button" onClick={() => changeZoom(1)} disabled={view.zoom >= MAX_ZOOM - 0.01} aria-label="지도 확대"><Plus /></button>
+        <button type="button" onClick={() => changeZoom(1)} disabled={view.zoom >= maxZoom - 0.01} aria-label="지도 확대"><Plus /></button>
           <button type="button" className="map__zoom-reset" onClick={resetView} disabled={view.zoom <= MIN_ZOOM + 0.01 && view.x === 0 && view.y === 0} aria-label="지도 위치와 확대율 초기화"><RotateCcw /></button>
         </div>
       </div>

@@ -169,6 +169,107 @@ export function piecesInView(level: DistrictLevel, box: Bounds): DistrictPiece[]
   return pieces;
 }
 
+/** 지금 보고 있는 동네. `parent` 는 한 단계 위이고, 없으면 빈 문자열입니다. */
+export type Here = { name: string; parent: string };
+
+function tally(box: Map<string, { key: string; label: string; count: number }>, key: string, label: string, count: number) {
+  const seen = box.get(key);
+  if (seen) seen.count += count;
+  else box.set(key, { key, label, count });
+}
+
+function widest<T extends { count: number }>(box: Map<string, T>): T | undefined {
+  return [...box.values()].sort((a, b) => b.count - a.count)[0];
+}
+
+/**
+ * 이 창이 **어느 동네를 보고 있는가**.
+ *
+ * 창의 한복판 정사각형을 눈금으로 훑어 어느 칸이 얼마나 차지하는지 셉니다.
+ * 가운데 한 점만 찍으면 경계에 걸친 창이 옆 동네를 자기 이름인 양 말합니다.
+ * 그렇다고 창 전체로 세면 세로로 긴 폰이 손해를 봅니다 — 화면은 남북으로 3.5배
+ * 길어서, 서울의 동 하나가 화면 폭을 다 채워도 위아래로는 다른 동 서넛이 같이
+ * 잡힙니다. 이름표가 말해야 하는 건 "지금 보고 있는 곳", 즉 화면 한복판입니다.
+ *
+ * 세 단계로 물러섭니다. 한 읍면동이 한복판의 `shares.dong` 을 넘게 차지하면 그 동을,
+ * 여러 동이 섞였으면 그 동들이 속한 구 중 넓은 쪽을, 구 하나로도 안 채워질 만큼
+ * 넓게 보고 있으면 시도를 답합니다. 서로 다른 구의 동이 섞여도 같은 셈이 그대로
+ * 답을 냅니다(넓은 쪽이 이깁니다).
+ *
+ * 물러설 때마다 최소 몫을 둡니다. 이게 없으면 수도권 전체를 펼쳐 놓고도
+ * 가장 넓다는 이유로 "파주시"라고 적습니다 — 넓기만 할 뿐 아무도 그걸 보고
+ * 있지 않은데 말입니다. 어느 쪽도 몫을 못 채우면 null 이고, 그때는 부르는
+ * 이름이 따로 없습니다.
+ *
+ * 바다 위는 어느 칸에도 안 들어가므로 셈에서 빠집니다. 몫은 표가 아니라 눈금
+ * 전체로 나눕니다 — 창의 절반이 바다인데 남은 절반의 주인을 "여기"라고 하면
+ * 실제로 보이는 것과 안 맞습니다.
+ */
+export function districtInView(
+  box: Bounds,
+  shares: { dong: number; gu: number; sido: number },
+  steps = 9,
+): Here | null {
+  const [left, top, right, bottom] = box;
+  const side = Math.min(right - left, bottom - top);
+  const x0 = (left + right - side) / 2;
+  const y0 = (top + bottom - side) / 2;
+  const x1 = x0 + side;
+  const y1 = y0 + side;
+  const votes = new Map<string, { district: District; count: number }>();
+  const dong = byLevel.get(3);
+  const level: DistrictLevel = dong ? 3 : BASE_LEVEL;
+  const shapes = byLevel.get(level) ?? [];
+  let counted = 0;
+
+  for (let ix = 0; ix < steps; ix += 1) {
+    for (let iy = 0; iy < steps; iy += 1) {
+      const x = x0 + ((ix + 0.5) / steps) * (x1 - x0);
+      const y = y0 + ((iy + 0.5) / steps) * (y1 - y0);
+      const found = shapes.find((shape) => {
+        const [bx0, by0, bx1, by1] = shape.bounds;
+        if (x < bx0 || x > bx1 || y < by0 || y > by1) return false;
+        return inside(loopsFor(shape), x, y);
+      });
+      if (!found) continue;
+      counted += 1;
+      const seen = votes.get(found.district.id);
+      if (seen) seen.count += 1;
+      else votes.set(found.district.id, { district: found.district, count: 1 });
+    }
+  }
+  if (!counted) return null;
+  const total = steps * steps;
+
+  const best = widest(votes);
+  if (best && level === 3 && best.count / total >= shares.dong) {
+    return { name: best.district.name, parent: best.district.parent };
+  }
+
+  const gus = new Map<string, { key: string; label: string; count: number; parent: string }>();
+  for (const { district, count } of votes.values()) {
+    const gu = level === 3
+      ? (byLevel.get(BASE_LEVEL) ?? []).find((shape) => shape.district.name === district.parent)?.district
+      : district;
+    const key = gu?.id ?? district.parent;
+    const seen = gus.get(key);
+    if (seen) seen.count += count;
+    else gus.set(key, { key, label: gu?.name ?? district.parent, count, parent: gu?.parent ?? "" });
+  }
+  const topGu = widest(gus);
+  if (topGu && topGu.count / total >= shares.gu) {
+    return { name: topGu.label, parent: topGu.parent };
+  }
+
+  const sido = new Map<string, { key: string; label: string; count: number }>();
+  for (const gu of gus.values()) if (gu.parent) tally(sido, gu.parent, gu.parent, gu.count);
+  const topSido = widest(sido);
+  if (topSido && topSido.count / total >= shares.sido) {
+    return { name: topSido.label, parent: "" };
+  }
+  return null;
+}
+
 /**
  * 그 칸 안의 카페.
  *
