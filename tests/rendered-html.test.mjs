@@ -668,19 +668,25 @@ test("지도 연장은 우하단 한 덩어리로 모이고, 종이가 덮지 �
   assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.map__tools \{ right: 14px; bottom: 22px; \}/);
 });
 
-test("목업 카페는 여든 곳이고 협력업체는 다섯 중 하나다", async () => {
+test("목업 카페는 백여든 곳이고 협력업체는 다섯 중 하나다", async () => {
   const cafes = await readFile(new URL("../app/data/cafes.ts", import.meta.url), "utf8");
   const rows = cafes.slice(cafes.indexOf("export const cafes"), cafes.indexOf("export const partnerRegions"));
   const total = (rows.match(/id: "demo-/g) ?? []).length;
   const partners = (rows.match(/partner: true/g) ?? []).length;
-  assert.equal(total, 80);
-  assert.equal(partners, 16);
+  assert.equal(total, 180);
+  assert.equal(partners, 36);
   assert.equal(total / partners, 5, "협력업체는 1 : 4 (다섯 중 하나)여야 합니다");
   // id 와 상호가 겹치면 도감이 같은 곳을 두 번 셉니다.
   assert.equal(new Set(rows.match(/id: "[^"]+"/g)).size, total);
   assert.equal(new Set(rows.match(/name: "[^"]+"/g)).size, total);
   // 서랍의 지역 집계는 손으로 적지 않고 목록에서 셉니다.
   assert.match(cafes, /export const partnerRegions = \(\(\) => \{/);
+  // 세 시도에 고루 있어야 합니다 — 한 곳에 몰리면 지도가 절반만 쓰입니다.
+  for (const where of ["서울", "경기", "인천"]) {
+    const mine = rows.split("\n").filter((row) => row.includes(`address: "${where} `));
+    assert.ok(mine.length >= 20, `${where} 가 ${mine.length}곳뿐입니다`);
+    assert.ok(mine.some((row) => row.includes("partner: true")), `${where} 에 협력업체가 없습니다`);
+  }
   assert.doesNotMatch(cafes, /count: 52/);
 });
 
@@ -976,7 +982,7 @@ test("목업 카페의 주소는 좌표가 실제로 놓인 행정구역과 맞�
   const rows = [...cafes.matchAll(
     /id: "(demo-\d+)", name: "([^"]+)"[\s\S]*?address: "([^"]+)", tel: "([^"]+)"[\s\S]*?pos: \[([-\d.]+), ([-\d.]+)\]/g,
   )];
-  assert.equal(rows.length, 80);
+  assert.equal(rows.length, 180);
 
   const code = { 서울: "02", 경기: "031", 인천: "032" };
   for (const [, id, name, address, tel, lng, lat] of rows) {
