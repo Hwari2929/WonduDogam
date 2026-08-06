@@ -331,7 +331,7 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.match(canvas, /terrain__district/);
   assert.match(canvas, /onWheel=\{onWheel\}/);
   assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
-  assert.match(canvas, /const MIN_SPAN = 0\.95;/);
+  assert.match(canvas, /const MIN_SPAN = 0\.57;/);
   assert.match(canvas, /className="map__zoom"/);
   assert.match(canvas, /<Coffee size=\{ICON\.sm\} aria-hidden="true" \/>/);
   assert.match(css, /\.map__places span \{ transform: translate\(-50%, -50%\); \}/);
@@ -596,7 +596,8 @@ test("확대해도 핀은 뭉개지지 않는다", async () => {
   // 강조된 경계가 지형 위에 정확히 겹칩니다.
   assert.match(canvas, /function windowOf\(view: View, size: \{ width: number; height: number \}\)/);
   assert.match(canvas, /const viewBox = `\$\{draw\.x\} \$\{draw\.y\} \$\{draw\.w\} \$\{draw\.h\}`;/);
-  assert.equal((canvas.match(/viewBox=\{viewBox\}/g) ?? []).length, 2);
+  // 지형 · 짚은 칸 · 지금 보고 있는 칸, 셋입니다.
+  assert.equal((canvas.match(/viewBox=\{viewBox\}/g) ?? []).length, 3);
 
   // 창의 비율이 화면 비율을 따라가야 지도가 안 찌그러집니다. 정사각형 창을 쓰면
   // 세로로 긴 폰에서 가로가 2.8배 눌립니다.
@@ -741,17 +742,42 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   // 마무리 섞기가 없으면 demo-01 과 demo-02 가 이웃한 값이 되어 한 동네가 통째로 튀어나옵니다.
   assert.match(canvas, /hash = Math\.imul\(hash \^ \(hash >>> 15\), 2246822507\);/);
 
-  // 구로 시작해 500%부터 동으로 갈립니다. 시도까지 세 단계면 확대하는 동안
-  // 경계가 두 번 바뀌어 어지럽습니다.
-  assert.match(canvas, /\{ from: 5, level: 3 \}/);
+  // 구로 시작해 650%부터 동으로 갈립니다. 시도까지 세 단계면 확대하는 동안
+  // 경계가 두 번 바뀌어 어지럽습니다. 지도에 적히는 이름도 이 선을 따릅니다.
+  assert.match(canvas, /\{ from: 6\.5, level: 3 \}/);
   assert.match(canvas, /\{ from: 1, level: 2 \}/);
   assert.doesNotMatch(canvas, /level: 1/);
   assert.match(canvas, /const pieces = useMemo\(\(\) => piecesInView\(level, tile\), \[tileKey\]\);/);
   assert.match(canvas, /levelRef\.current,/);
 
+  // 지도가 자기 위에 뭐가 있는지 말합니다 — 예전에는 짚어야 나왔습니다.
+  const districts = await readFile(new URL("../app/data/districts.ts", import.meta.url), "utf8");
+  assert.match(districts, /export function labelsInView\(level: DistrictLevel, box: Bounds\): DistrictLabel\[\]/);
+  assert.match(canvas, /<div className="map__names" aria-hidden="true">/);
+  // 이름이 제 칸 안에 앉을 만해야 합니다.
+  assert.match(canvas, /if \(\(bounds\[2\] - bounds\[0\]\) \* perUnitX < LABEL_MIN_PX\) return false;/);
+  assert.match(canvas, /if \(\(bounds\[3\] - bounds\[1\]\) \* perUnitY < LABEL_MIN_PX\) return false;/);
+  // 이름은 자리를 가운데로 잡고 좌우로 벌어집니다 — 가장자리에 두면 잘립니다.
+  assert.match(canvas, /const padX = LABEL_EDGE_PX \/ perUnitX;/);
+  // 구 이름이 나오기 시작하면 도시 이름표는 물러섭니다. 바다만 끝까지 남습니다.
+  assert.match(canvas, /if \(!place\.sea && view\.zoom >= PLACES_UNTIL\) return null;/);
+
+  // 왼쪽 아래가 이름을 말하고, 지도가 그 자리를 가리킵니다.
+  assert.match(canvas, /className="map__layer map__regions map__regions--here"/);
+  assert.match(canvas, /className=\{one\.id === hereLabel\?\.id \? "is-here" : undefined\}/);
+  // 채움 없이 선만 굵게 — 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려집니다.
+  assert.match(css, /\.map__regions--here path \{\s*\n\s*fill: none;\s*\n\s*stroke:[^;]*;\s*\n\s*stroke-width: 2\.5;/);
+  // 지금 어디인지 말하는 글자가 핀(z-index 5) 뒤에 숨으면 강조한 뜻이 없습니다.
+  assert.match(css, /\.map__names span\.is-here \{\s*\n\s*z-index: 6;/);
+  // 이름자리가 화면 밖이면 칸과 창이 겹치는 만큼의 한가운데로 옮깁니다.
+  assert.match(canvas, /at = \[\(ix0 \+ ix1\) \/ 2, \(iy0 \+ iy1\) \/ 2\];/);
+  // 동으로 갈린 지도에 구 이름 하나를 끌어다 붙이지 않습니다.
+  assert.match(canvas, /if \(!here_ \|\| !size \|\| here_\.district\.level !== level\) return null;/);
+  // 끄는 동안에도 이 테두리는 남습니다 — 창을 따라가므로 안 떨립니다.
+  assert.match(css, /\.map\.is-dragging \.map__regions:not\(\.map__regions--here\) \{/);
+
   // 좁혀 들어가면 지명이 지도에서 사라집니다. 왼쪽 아래가 지금 어디를 보고
   // 있는지 대신 말해 줍니다 — 동 → 구 → 시도 순으로 물러섭니다.
-  const districts = await readFile(new URL("../app/data/districts.ts", import.meta.url), "utf8");
   assert.match(canvas, /const DONG_SHARE = 0\.65;/);
   assert.match(canvas, /const GU_SHARE = 0\.35;/);
   assert.match(canvas, /const SIDO_SHARE = 0\.6;/);
@@ -974,7 +1000,8 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
   assert.match(canvas, /<div className="map__layer map__regions"/);
   assert.match(css, /\.map__regions \{\s*\n\s*z-index: 3;/);
   assert.match(css, /\.map__pins,\s*\n\.map__places,\s*\n\.map__regions \{\s*\n\s*pointer-events: none;/);
-  assert.match(css, /\.map\.is-dragging \.map__regions \{\s*\n\s*display: none;/);
+  // 지금 보고 있는 칸의 테두리는 남깁니다 — 창을 따라가므로 안 떨립니다.
+  assert.match(css, /\.map\.is-dragging \.map__regions:not\(\.map__regions--here\) \{\s*\n\s*display: none;/);
   // 이름표도 자기 자리를 셈해서 놓입니다. 되돌리기는 없습니다.
   assert.match(canvas, /const labelSpot = hovered \? toScreen\(hovered\.label\[0\], hovered\.label\[1\]\) : \{ x: 0, y: 0 \};/);
   assert.match(canvas, /style=\{\{ left: `\$\{labelSpot\.x\}%`, top: `\$\{labelSpot\.y\}%` \}\}/);
@@ -1449,12 +1476,19 @@ test("문서가 코드와 같은 값을 적고 있다", async () => {
 
   // 명세 쪽 숫자들.
   // 천장은 배율이 아니라 땅입니다 — 화면마다 배율 숫자가 다르게 나옵니다.
-  assert.match(canvas, /const MIN_SPAN = 0\.95;/);
+  assert.match(canvas, /const MIN_SPAN = 0\.57;/);
   assert.doesNotMatch(canvas, /MAX_ZOOM/);
-  assert.ok(spec.includes("`MIN_SPAN = 0.95`"), "배율 천장이 명세와 다릅니다");
-  assert.ok(spec.includes("1.45km"), "최대 배율에서 담기는 땅이 명세와 다릅니다");
-  assert.match(canvas, /\{ from: 5, level: 3 \}/);
-  assert.ok(spec.includes("500% 아래는 **시군구**, 위는 **읍면동**"), "단계가 갈리는 배율이 명세와 다릅니다");
+  assert.ok(spec.includes("`MIN_SPAN = 0.57`"), "배율 천장이 명세와 다릅니다");
+  assert.ok(spec.includes("870m"), "최대 배율에서 담기는 땅이 명세와 다릅니다");
+  assert.match(canvas, /\{ from: 6\.5, level: 3 \}/);
+  assert.ok(spec.includes("650% 아래는 **시군구**, 위는 **읍면동**"), "단계가 갈리는 배율이 명세와 다릅니다");
+  // 지도 위에 적히는 이름.
+  assert.match(canvas, /const LABEL_MIN_PX = 110;/);
+  assert.match(canvas, /const LABEL_EDGE_PX = 44;/);
+  assert.match(canvas, /const PLACES_UNTIL = 1\.6;/);
+  assert.ok(spec.includes("**110px** 이상"), "이름을 다는 크기가 명세와 다릅니다");
+  assert.ok(spec.includes("**44px** 안쪽"), "이름과 가장자리 사이가 명세와 다릅니다");
+  assert.ok(spec.includes("160%까지만"), "도시 이름표가 물러서는 배율이 명세와 다릅니다");
   assert.match(canvas, /const REVEAL_ALL = 10;[\s\S]*?const REVEAL_POWER = 1\.8;/);
   assert.ok(spec.includes("`z^1.8`"), "표출 곡선이 명세와 다릅니다");
   // 왼쪽 아래 이름표의 세 문턱.

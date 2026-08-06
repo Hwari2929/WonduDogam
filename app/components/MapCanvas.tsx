@@ -14,7 +14,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import type { Cafe } from "../data/cafes";
-import { BASE_LEVEL, cafesIn, districtAt, districtInView, hasLevel, loadDongDistricts, piecesInView, type DistrictLevel, type DistrictPiece } from "../data/districts";
+import { BASE_LEVEL, cafesIn, districtAt, districtById, districtInView, hasLevel, labelsInView, loadDongDistricts, piecesInView, type DistrictLevel, type DistrictPiece } from "../data/districts";
 import { project, SPAN_KM, UNIT_ASPECT } from "../data/geo";
 import { ICON } from "../icons";
 import { outside, sea, type District } from "../data/districts-data";
@@ -38,10 +38,13 @@ const MIN_ZOOM = 1;
  * 갑니다.
  *
  * 0..100 공간에서 1 은 1.53km 입니다(수도권 가로폭 153km 를 100으로 잡았습니다).
- * 0.95 면 1.45km — 서울의 동 하나가 화면을 채우는 크기이고, 왼쪽 아래 이름표가
- * 동까지 내려가는 지점이기도 합니다.
+ * 0.57 이면 870m — 폰에서 5000%, 넓은 화면에서 17000% 쯤입니다.
+ *
+ * 1.45km(0.95)였을 때는 핀 세 곳 이상이 몰린 무리가 끝까지 좁혀도 안 갈라졌습니다.
+ * 핀은 40px 안쪽이면 하나로 모으는데, 그게 1.45km 화면에서는 150m 짜리 반경이라
+ * 한 골목 안의 카페들이 끝내 한 핀에 묶였습니다. 870m 화면에서는 90m 입니다.
  */
-const MIN_SPAN = 0.95;
+const MIN_SPAN = 0.57;
 /** 이 화면에서 더 이상 좁힐 수 없는 배율. 좁은 화면은 30배쯤, 넓은 화면은 그 서너 배입니다. */
 function maxZoomFor(size: { width: number; height: number }) {
   const base = baseSpan(size.width, size.height);
@@ -91,13 +94,43 @@ const PAN_SLACK = 0.2;
 /** 축척 막대의 폭(px). globals.css 의 .map__scale i 와 같아야 합니다. */
 const SCALE_BAR_PX = 56;
 /**
- * 지도가 쪼개지는 배율. 구로 시작해 500%부터 동으로 갈립니다.
+ * 지도가 쪼개지는 배율. 구로 시작해 650%부터 동으로 갈립니다.
  * 시도까지 세 단계로 두면 확대하는 동안 경계가 두 번 바뀌어 어지럽습니다.
+ *
+ * 지도에 적히는 이름도 이 선을 따릅니다 — 선과 글자가 다른 단위면 읽을 것이
+ * 둘이 됩니다. 650%면 서울의 동 하나가 폰 화면에서 90px 쯤이라, 갈라지는 그
+ * 순간부터 이름을 적을 만한 크기가 됩니다.
  */
 const LEVEL_AT: { from: number; level: DistrictLevel }[] = [
-  { from: 5, level: 3 },
+  { from: 6.5, level: 3 },
   { from: 1, level: 2 },
 ];
+/**
+ * 칸이 화면에서 이만큼은 되어야 그 위에 이름을 적습니다 (px, 가로·세로 모두).
+ *
+ * 이름이 제 칸 안에 앉을 만해야 한다는 뜻입니다. 이 하나로 배율마다 어느 이름이
+ * 나올지가 저절로 정해집니다 — 100%에서 서울의 구는 60px 남짓이라 아직 안 나오고,
+ * 화성시·양평군처럼 넓은 칸은 벌써 나옵니다. 서울의 구는 200%쯤에서 들어옵니다.
+ *
+ * 64px 로 잡았을 때는 100% 화면에 이름이 스물다섯 개 섰습니다. 그 배율에서
+ * 서울의 구는 이름 넉 자가 제 칸보다 긴 크기라, 지도가 아니라 이름표 밭이 됩니다.
+ */
+const LABEL_MIN_PX = 110;
+/**
+ * 화면 가장자리에서 이만큼 안쪽에 있어야 이름을 적습니다 (px).
+ *
+ * 이름은 놓을 자리를 가운데로 잡고 좌우로 벌어지므로, 자리만 화면 안이면
+ * 글자는 반쯤 잘려 나갑니다("안산시 단원구"의 앞 두 자가 그랬습니다).
+ */
+const LABEL_EDGE_PX = 44;
+/**
+ * 도시 이름표(서울·인천·성남…)를 쓰는 배율의 끝.
+ *
+ * 구 이름이 나오기 시작하면 물러섭니다. 둘은 같은 것을 두 번 말하는 셈이고,
+ * "서울" 위에 "종로구"가 겹치면 어느 쪽이 지금 보는 곳인지 되레 헷갈립니다.
+ * 서해만 남습니다 — 바다에는 대신 적어 줄 칸이 없습니다.
+ */
+const PLACES_UNTIL = 1.6;
 /**
  * 전부 나오는 배율, 그리고 거기까지 가는 기울기.
  *
@@ -124,8 +157,8 @@ const REVEAL_POWER = 1.8;
  * 핀 지름이 30px 이니 사이가 10px 뜹니다 — 서로 안 물리는 가장 좁은 간격입니다.
  * 겹쳐 선 핀은 세 개든 열 개든 전하는 게 "여기 뭔가 많다" 하나뿐이라 굳이 다
  * 세울 이유가 없지만, 너무 넉넉히 잡으면 반대쪽 문제가 생깁니다: 끝까지 좁혀도
- * 안 갈라지는 무리가 남습니다. 폰 화면(390px)이 최대 배율에서 담는 땅이 1.45km
- * 이므로 60px 은 220m, 40px 은 150m 입니다 — 그 차이가 한 골목입니다.
+ * 안 갈라지는 무리가 남습니다. 폰 화면(390px)이 최대 배율에서 담는 땅이 870m
+ * 이므로 40px 은 90m 입니다 — 마주 보는 두 가게가 각자 서는 크기입니다.
  */
 const MIN_GAP = 40;
 /**
@@ -414,7 +447,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   }, [view]);
 
   // 읍면동은 그 배율에 처음 닿을 때 한 번만 불러옵니다. 첫 화면에 천 칸을 들고
-  // 있을 이유가 없습니다 — 500% 아래에서는 시군구만 보이니까요.
+  // 있을 이유가 없습니다 — 650% 아래에서는 시군구만 보이니까요.
   useEffect(() => {
     if (wanted !== 3 || dongReady) return;
     let alive = true;
@@ -841,6 +874,91 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   );
 
   /**
+   * 지도 위에 적히는 동네 이름.
+   *
+   * 예전에는 짚어 봐야 알 수 있었습니다. 지도가 자기 위에 뭐가 있는지 말을 안 하고
+   * 물어봐야만 답하는 셈이라, 어디를 보고 있는지 알려면 일단 찍어 봐야 했습니다.
+   *
+   * 이름을 다는 칸은 **화면에 충분히 든 칸**입니다. 두 가지를 봅니다.
+   *
+   * - 화면에서 가로·세로가 LABEL_MIN_PX 는 되어야 합니다. 이름 석 자가 들어갈
+   *   자리는 있어야 하고, 이 하나로 배율마다 어느 이름이 나올지가 저절로 정해집니다.
+   * - 이름을 놓을 자리가 창 안에 있어야 합니다. 가장자리에 살짝 걸친 칸의 이름을
+   *   화면 밖 어딘가에 적어 둘 이유가 없습니다. 대신 반쪽만 보이는 칸은 이름을
+   *   모르는데, 그건 조금만 밀면 풀립니다.
+   */
+  const labels = useMemo(() => {
+    if (!size) return [];
+    const perUnitX = size.width / window_.w;
+    const perUnitY = size.height / window_.h;
+    const padX = LABEL_EDGE_PX / perUnitX;
+    const padY = LABEL_EDGE_PX / perUnitY;
+    return labelsInView(level, [window_.x, window_.y, window_.x + window_.w, window_.y + window_.h])
+      .filter(({ at, bounds }) => {
+        if ((bounds[2] - bounds[0]) * perUnitX < LABEL_MIN_PX) return false;
+        if ((bounds[3] - bounds[1]) * perUnitY < LABEL_MIN_PX) return false;
+        return at[0] >= window_.x + padX && at[0] <= window_.x + window_.w - padX
+          && at[1] >= window_.y + padY && at[1] <= window_.y + window_.h - padY;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowKey, size?.width, size?.height]);
+
+  /**
+   * 지금 보고 있는 칸의 테두리. 이 하나만 굵게 덧그립니다.
+   *
+   * 땅 색은 안 건드립니다 — 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려지는데,
+   * 여기서 말하려는 건 "이 안이 다르다"가 아니라 "여기까지가 이 동네다"입니다.
+   */
+  const here_ = useMemo(
+    () => (here?.id ? districtById(here.id, here.id.startsWith("3 ") ? 3 : BASE_LEVEL) : null),
+    [here?.id],
+  );
+  const hereShape = here_?.district ?? null;
+  /**
+   * 지금 보고 있는 칸의 이름표. 위의 목록과 따로 냅니다.
+   *
+   * 650% 위에서는 지도가 동으로 갈리는데 왼쪽 아래는 여러 동이 섞였다며 구로
+   * 물러설 때가 많습니다. 그러면 굵은 테두리만 그어져 있고 그게 무엇인지는 지도
+   * 어디에도 안 적힌 상태가 됩니다 — 왼쪽 아래에 적힌 이름과 지도 위에서 도드라진
+   * 이름은 늘 같아야 합니다. 크기는 안 봅니다: 지금 보고 있는 칸이라는 건 이미
+   * 화면을 그만큼 차지한다는 뜻입니다.
+   *
+   * 자리는 제 이름자리를 먼저 쓰고, 그게 화면 밖이면 **보이는 만큼의 한가운데**로
+   * 옮깁니다. 한 칸을 크게 확대해 그 귀퉁이를 보고 있으면 이름자리는 화면 밖인데,
+   * 그렇다고 이름을 안 적으면 굵은 선만 남습니다. 가장자리로 끌어다 붙이는 것도
+   * 안 됩니다 — 거기서 글자가 잘리고 배율 조작기와 겹칩니다.
+   *
+   * 단, **지금 그리는 단계와 같은 칸일 때만** 그렇게 합니다. 동으로 갈린 지도에
+   * 구 이름을 하나 끌어다 붙이면 그게 옆의 동 이름들과 같은 무게로 읽혀, 지금
+   * 보고 있는 곳이 어느 쪽인지 되레 흐려집니다. 그때는 굵은 테두리와 왼쪽 아래
+   * 이름표가 대신 말합니다.
+   */
+  const hereLabel = useMemo(() => {
+    if (!here_ || !size || here_.district.level !== level) return null;
+    const padX = (LABEL_EDGE_PX / size.width) * window_.w;
+    const padY = (LABEL_EDGE_PX / size.height) * window_.h;
+    const left = window_.x + padX;
+    const right = window_.x + window_.w - padX;
+    const top = window_.y + padY;
+    const bottom = window_.y + window_.h - padY;
+    if (right <= left || bottom <= top) return null;
+    const [x, y] = here_.district.label;
+    let at: readonly [number, number] = [x, y];
+    if (x < left || x > right || y < top || y > bottom) {
+      // 이름자리가 화면 밖입니다. 칸과 창이 겹치는 네모의 한가운데로 옮깁니다.
+      const [bx0, by0, bx1, by1] = here_.bounds;
+      const ix0 = Math.max(bx0, left);
+      const ix1 = Math.min(bx1, right);
+      const iy0 = Math.max(by0, top);
+      const iy1 = Math.min(by1, bottom);
+      if (ix1 <= ix0 || iy1 <= iy0) return null;
+      at = [(ix0 + ix1) / 2, (iy0 + iy1) / 2];
+    }
+    return { id: here_.district.id, name: here_.district.name, at };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [here_, level, windowKey, size?.width, size?.height]);
+
+  /**
    * 지도 좌표(0..100) → 화면 위의 백분율.
    *
    * 겹을 통째로 확대하지 않으므로, 핀과 이름표는 자기가 설 자리를 직접 셈해서
@@ -1049,8 +1167,37 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
         ) : null}
       </div>
 
+      {/* 지금 보고 있는 칸의 테두리. 얹힌 칸과 같은 겹에 두되 채움 없이 선만
+          굵게 긋습니다 — 둘이 같은 칸일 때 자연스럽게 포개집니다. */}
+      <div className="map__layer map__regions map__regions--here" aria-hidden="true">
+        {hereShape ? (
+          <svg viewBox={viewBox} preserveAspectRatio="none">
+            <path key={hereShape.id} d={hereShape.path} />
+          </svg>
+        ) : null}
+      </div>
+
       <div className="map__layer map__pins">
-        <div className="map__places" aria-hidden="true">{PLACES.map((place) => { const spot = project(place.lng, place.lat); const { x, y } = toScreen(spot.x, spot.y); return <span key={place.label} className={place.sea ? "map__sea-label" : undefined} style={{ left: `${x}%`, top: `${y}%` }}>{place.label}</span>; })}</div>
+        <div className="map__places" aria-hidden="true">{PLACES.map((place) => {
+          // 구 이름이 나오기 시작하면 도시 이름표는 물러섭니다. 바다는 대신 적어
+          // 줄 칸이 없으므로 서해만 끝까지 남습니다.
+          if (!place.sea && view.zoom >= PLACES_UNTIL) return null;
+          const spot = project(place.lng, place.lat);
+          const { x, y } = toScreen(spot.x, spot.y);
+          return <span key={place.label} className={place.sea ? "map__sea-label" : undefined} style={{ left: `${x}%`, top: `${y}%` }}>{place.label}</span>;
+        })}</div>
+        {/* 동네 이름. 지금 보고 있는 칸만 진하게 적습니다. */}
+        <div className="map__names" aria-hidden="true">{[
+          ...labels.filter((one) => one.id !== hereLabel?.id).map((one) => ({ id: one.id, name: one.name, at: one.at })),
+          ...(hereLabel ? [hereLabel] : []),
+        ].map((one) => {
+          const { x, y } = toScreen(one.at[0], one.at[1]);
+          return <span
+            key={one.id}
+            className={one.id === hereLabel?.id ? "is-here" : undefined}
+            style={{ left: `${x}%`, top: `${y}%` }}
+          >{one.name}</span>;
+        })}</div>
         {shownCafes.map(({ cafe, hidden }) => {
           const active = activeId === cafe.id;
           const saved = savedMarkers[cafe.id];

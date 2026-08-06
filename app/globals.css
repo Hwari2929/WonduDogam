@@ -534,6 +534,39 @@ a:focus-visible,
   color: color-mix(in srgb, var(--ink-faint) 70%, transparent);
 }
 
+/*
+ * 지도 위에 적히는 동네 이름.
+ *
+ * 예전에는 짚어 봐야 알 수 있었습니다. 지도가 자기 위에 뭐가 있는지 물어봐야만
+ * 답하는 셈이라, 어디를 보고 있는지 알려면 일단 찍어 봐야 했습니다.
+ *
+ * 지도는 배경이고 기록이 전경입니다(02 §5). 그래서 이름은 종이에 스민 정도로만
+ * 옅게 두고, 판을 깔지 않습니다 — 스물몇 개가 한꺼번에 서는데 저마다 흰 상자를
+ * 지고 있으면 지도가 아니라 이름표 밭이 됩니다. 배경과 섞이지 않을 만큼만
+ * 흐릿한 획 하나를 밑에 깔아 둡니다.
+ */
+.map__names span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: color-mix(in srgb, var(--ink-faint) 60%, transparent);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--ls-mono);
+  paint-order: stroke fill;
+  -webkit-text-stroke: 3px color-mix(in srgb, var(--desk) 72%, transparent);
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 지금 보고 있는 칸. 왼쪽 아래에 적힌 그 이름이 지도 위 어디인지 잇습니다.
+   이 하나만 핀 위로 올립니다 — 나머지 이름은 핀에 가려도 되지만, 지금 어디인지를
+   말하는 글자가 핀 뒤에 숨으면 강조한 뜻이 없습니다(핀은 z-index 5). */
+.map__names span.is-here {
+  z-index: 6;
+  color: var(--ink);
+  font-weight: 700;
+  -webkit-text-stroke-width: 4px;
+}
+
 .map__scale {
   display: flex;
   align-items: center;
@@ -2357,6 +2390,19 @@ a:focus-visible,
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* ── 지금 보고 있는 칸 ──
+   채움 없이 선만 굵게 긋습니다. 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려지는데,
+   여기서 말하려는 건 "이 안이 다르다"가 아니라 "여기까지가 이 동네다"입니다.
+   짚어 본 칸과 겹칠 때 자연스럽게 포개지도록 한 겹 밑에 둡니다. */
+.map__regions--here {
+  z-index: 2;
+}
+.map__regions--here path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink) 46%, transparent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
 /* 이름표는 배율을 되돌려 늘 같은 크기로 섭니다 — 마커·지명과 같은 규칙입니다. */
 .region-label {
   position: absolute;
@@ -2384,9 +2430,10 @@ a:focus-visible,
   font-style: normal;
   color: var(--ink-faint);
 }
-/* 끄는 동안에는 동네가 커서를 따라 깜박입니다. 지도를 옮기는 중이지 고르는
-   중이 아니라서, 아예 내려 둡니다. */
-.map.is-dragging .map__regions {
+/* 끄는 동안에는 짚은 동네가 커서를 따라 깜박입니다. 지도를 옮기는 중이지 고르는
+   중이 아니라서, 아예 내려 둡니다. 지금 보고 있는 칸의 테두리는 남깁니다 — 그건
+   커서가 아니라 창을 따라가고, 창은 손을 뗀 뒤에나 다시 셈하므로 안 떨립니다. */
+.map.is-dragging .map__regions:not(.map__regions--here) {
   display: none;
 }
 .map-marker {

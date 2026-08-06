@@ -169,8 +169,44 @@ export function piecesInView(level: DistrictLevel, box: Bounds): DistrictPiece[]
   return pieces;
 }
 
-/** 지금 보고 있는 동네. `parent` 는 한 단계 위이고, 없으면 빈 문자열입니다. */
-export type Here = { name: string; parent: string };
+/**
+ * 이 창에 걸치는 칸의 **이름표**.
+ *
+ * 그리는 목록(`piecesInView`)과 따로 두는 건 쓰는 곳이 다르기 때문입니다. 그림은
+ * 화면 밖으로 넉넉히 그려 두어야 밀 때 땅이 자라나지 않지만, 이름표는 화면 안에
+ * 든 칸만 씁니다 — 가장자리에 살짝 걸친 칸의 이름을 화면 밖 어딘가에 적어 둘
+ * 이유가 없습니다.
+ *
+ * 얼마나 커야 이름을 다는지는 부르는 쪽이 정합니다. 여기는 네 귀퉁이만 알려
+ * 주고, px 로 재는 건 화면 크기를 아는 쪽의 몫입니다.
+ */
+export type DistrictLabel = { id: string; name: string; at: readonly [number, number]; bounds: Bounds };
+
+export function labelsInView(level: DistrictLevel, box: Bounds): DistrictLabel[] {
+  const [x0, y0, x1, y1] = box;
+  const labels: DistrictLabel[] = [];
+  for (const shape of byLevel.get(level) ?? []) {
+    const [bx0, by0, bx1, by1] = shape.bounds;
+    if (bx1 < x0 || bx0 > x1 || by1 < y0 || by0 > y1) continue;
+    labels.push({ id: shape.district.id, name: shape.district.name, at: shape.district.label, bounds: shape.bounds });
+  }
+  return labels;
+}
+
+/**
+ * 한 칸의 그림과 네 귀퉁이. 지금 보고 있는 칸을 굵게 덧그리고, 그 이름을 화면에
+ * 보이는 만큼의 한가운데에 놓을 때 씁니다.
+ */
+export function districtById(id: string, level: DistrictLevel): { district: District; bounds: Bounds } | null {
+  const shape = (byLevel.get(level) ?? []).find((one) => one.district.id === id);
+  return shape ? { district: shape.district, bounds: shape.bounds } : null;
+}
+
+/**
+ * 지금 보고 있는 동네. `parent` 는 한 단계 위이고, 없으면 빈 문자열입니다.
+ * `id` 는 시도로 물러섰을 때 비어 있습니다 — 시도는 그려 둔 칸이 아닙니다.
+ */
+export type Here = { id: string; name: string; parent: string };
 
 function tally(box: Map<string, { key: string; label: string; count: number }>, key: string, label: string, count: number) {
   const seen = box.get(key);
@@ -243,10 +279,10 @@ export function districtInView(
 
   const best = widest(votes);
   if (best && level === 3 && best.count / total >= shares.dong) {
-    return { name: best.district.name, parent: best.district.parent };
+    return { id: best.district.id, name: best.district.name, parent: best.district.parent };
   }
 
-  const gus = new Map<string, { key: string; label: string; count: number; parent: string }>();
+  const gus = new Map<string, { key: string; label: string; count: number; parent: string; id: string }>();
   for (const { district, count } of votes.values()) {
     const gu = level === 3
       ? (byLevel.get(BASE_LEVEL) ?? []).find((shape) => shape.district.name === district.parent)?.district
@@ -254,18 +290,18 @@ export function districtInView(
     const key = gu?.id ?? district.parent;
     const seen = gus.get(key);
     if (seen) seen.count += count;
-    else gus.set(key, { key, label: gu?.name ?? district.parent, count, parent: gu?.parent ?? "" });
+    else gus.set(key, { key, label: gu?.name ?? district.parent, count, parent: gu?.parent ?? "", id: gu?.id ?? "" });
   }
   const topGu = widest(gus);
   if (topGu && topGu.count / total >= shares.gu) {
-    return { name: topGu.label, parent: topGu.parent };
+    return { id: topGu.id, name: topGu.label, parent: topGu.parent };
   }
 
   const sido = new Map<string, { key: string; label: string; count: number }>();
   for (const gu of gus.values()) if (gu.parent) tally(sido, gu.parent, gu.parent, gu.count);
   const topSido = widest(sido);
   if (topSido && topSido.count / total >= shares.sido) {
-    return { name: topSido.label, parent: "" };
+    return { id: "", name: topSido.label, parent: "" };
   }
   return null;
 }
