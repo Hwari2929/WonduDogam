@@ -707,9 +707,10 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.doesNotMatch(canvas, /REVEAL_FROM/);
   assert.match(canvas, /\{shownCafes\.map\(\(\{ cafe, hidden \}\) => \{/);
 
-  // 겹쳐 선 핀은 솎아 냅니다. 핀 지름이 30px 이니 둘 사이에 핀 하나가 들어갈
-  // 만큼(60px) 떨어져야 둘 다 섭니다.
-  assert.match(canvas, /const MIN_GAP = 60;/);
+  // 겹쳐 선 핀은 솎아 냅니다. 핀 지름이 30px 이니 40px 이면 사이가 10px 뜹니다 —
+  // 서로 안 물리는 가장 좁은 간격입니다. 넉넉히 잡으면 끝까지 좁혀도 안 갈라지는
+  // 무리가 남습니다.
+  assert.match(canvas, /const MIN_GAP = 40;/);
   assert.match(css, /\.map-marker--plain \{\s*\n\s*width: 30px;/);
   assert.match(canvas, /if \(Math\.hypot\(pin\.px - px, pin\.py - py\) < MIN_GAP\) return pin;/);
   // 이웃한 아홉 칸만 봅니다 — 전부와 재면 핀 수의 제곱이 됩니다.
@@ -1464,8 +1465,8 @@ test("문서가 코드와 같은 값을 적고 있다", async () => {
   assert.ok(spec.includes("**65%**") && spec.includes("**35%**") && spec.includes("**60%**"),
     "이름표 문턱이 명세와 다릅니다");
   assert.ok(spec.includes("150% 아래"), "이름표를 쉬는 배율이 명세와 다릅니다");
-  assert.match(canvas, /const MIN_GAP = 60;/);
-  assert.ok(spec.includes("**중심 사이가 60px**"), "핀 간격이 명세와 다릅니다");
+  assert.match(canvas, /const MIN_GAP = 40;/);
+  assert.ok(spec.includes("**중심 사이가 40px**"), "핀 간격이 명세와 다릅니다");
   assert.match(canvas, /const OVERSCAN = 0\.25;/);
   assert.ok(spec.includes("사방 25%"), "겹 여유가 명세와 다릅니다");
   assert.match(canvas, /const FOCUS_ZOOM = 6;/);
