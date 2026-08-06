@@ -1,6 +1,8 @@
+import { LucideProvider } from "lucide-react";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
+import { ICON, ICON_STROKE } from "./icons";
 import { themeBootScript } from "./theme";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -34,9 +36,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
+  // 비빈 디자인 시스템 v0.1 §01 의 page 값. 다크 기본값은 Warm Dark 입니다.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#DCD3C2" },
-    { media: "(prefers-color-scheme: dark)", color: "#100E0A" },
+    { media: "(prefers-color-scheme: light)", color: "#EFE7DB" },
+    { media: "(prefers-color-scheme: dark)", color: "#221A13" },
   ],
 };
 
@@ -47,8 +50,21 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         {/* 첫 페인트 전에 테마를 확정합니다. 늦으면 밝은 종이가 한 번 번쩍입니다. */}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        {/* 본문 활자. Paperlogy·MonoplexKR 은 globals.css 의 @font-face 가 맡습니다.
+            셋 다 swap 이라 CDN이 늦어도 폴백 스택으로 먼저 읽힙니다. */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2/fonts/variable/woff2/SUIT-Variable.css"
+        />
       </head>
-      <body>{children}</body>
+      {/* 굵기와 기본 크기를 여기 한 번만 적습니다. 아이콘마다 따로 적어 두면
+          늘리거나 줄일 때 한둘이 빠져 결국 굵기가 섞입니다 (app/icons.ts). */}
+      <body>
+        <LucideProvider size={ICON.md} strokeWidth={ICON_STROKE} absoluteStrokeWidth>
+          {children}
+        </LucideProvider>
+      </body>
     </html>
   );
 }

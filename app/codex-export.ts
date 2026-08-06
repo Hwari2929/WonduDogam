@@ -1,5 +1,6 @@
 "use client";
 
+import { asset } from "./base-path";
 import type { Mark } from "./marks";
 
 /**
@@ -80,22 +81,26 @@ export type ExportRow = { name: string; area: string; note: string; partner: boo
  * 타임라인에서 홀로 놓이는데, 거기서 어두운 판은 종이가 아니라 스크린샷으로
  * 읽힙니다. 이 이미지는 종이여야 합니다.
  */
-const PAPER = "#FAF6EC";
-const INK = "#22201C";
+/* 비빈 디자인 시스템 v0.1 §01 Light Sepia. globals.css 의 :root 와 같은 값이어야
+   뽑아 낸 이미지가 화면에서 뜯은 종이와 같은 종이로 보입니다. */
+const PAPER = "#F7F1E7";
+const INK = "#2C2118";
 const INK_SOFT = "#5C554B";
-const INK_FAINT = "#766D60";
-const RULE = "#B7AB96";
+const INK_FAINT = "#74624F";
+const RULE = "#CDBBA4";
 const STAMP = "#A63A2E";
-const BEAN = "#6B4A2F";
+const BEAN = "#9D4F24";
 
 const WIDTH = 480;
 const PAD = 34;
 const TEAR = 8;
 
 const DISPLAY_FONT =
-  '"Paperlogy", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
-const BODY_FONT = '"SUIT", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
-const MONO_FONT = '"IBM Plex Mono", ui-monospace, Consolas, "Malgun Gothic", monospace';
+  '"Paperlogy", "SUIT Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+const BODY_FONT =
+  '"SUIT Variable", "SUIT", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+const MONO_FONT =
+  '"MonoplexKR", "IBM Plex Mono", ui-monospace, Consolas, "Malgun Gothic", monospace';
 
 function dashedRule(ctx: CanvasRenderingContext2D, y: number) {
   ctx.save();
@@ -165,7 +170,7 @@ async function grain(ctx: CanvasRenderingContext2D, height: number) {
     image.onerror = () => resolve(false);
     setTimeout(() => resolve(false), 700);
   });
-  image.src = "/tex/grain-128.png";
+  image.src = asset("/tex/grain-128.png");
 
   if (!(await ready) || !image.naturalWidth) return;
 

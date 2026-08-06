@@ -1,83 +1,169 @@
-/* 원두도감 — 02_디자인_시스템 구현
-   화면은 책상이고, 카페는 그 위에 놓인 영수증 한 장이다. */
+/* 원두도감 — 비빈 디자인 시스템 v0.1 구현
+   화면은 책상이고, 카페는 그 위에 놓인 영수증 한 장이다.
+
+   v0.1 이 바꾼 것 세 가지:
+     · 테마가 셋이다 (Light Sepia / Warm Dark / Cool Dark). 다크는 검정이 아니라 어두운 종이.
+     · 높이는 그림자가 아니라 1px 실선으로 말한다. 인쇄물에는 그림자가 없다.
+     · 모서리는 각지게. 둥근 것은 도장과 핀에만 허용한다. */
+
+/* ══ 0. 활자 ═══════════════════════════════════════════════════════
+   디자인 시스템이 지정한 세 벌. Paperlogy는 제목과 숫자에만, SUIT는 읽는 모든 것에,
+   MonoplexKR은 값·좌표·라벨에. 전부 font-display:swap 이므로 CDN이 늦거나 막혀도
+   아래 폴백 스택으로 그대로 읽힙니다. */
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-4Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-6SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-8ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "MonoplexKR";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_Monoplex-kr@1.0/MonoplexKR-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "MonoplexKR";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_Monoplex-kr@1.0/MonoplexKR-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
 
 /* ══ 1. 토큰 ═══════════════════════════════════════════════════════ */
 
-:root {
-  /* 라이트 · 새 감열지 */
-  --desk: #dcd3c2;
-  --desk-deep: #c9bfa9;
-  --paper: #faf6ec;
-  --paper-edge: #efe7d6;
+:root,
+[data-theme="light"] {
+  /* Light Sepia — 새 감열지.
+     시스템 문서값: page #efe7db · surface #f7f1e7 · line #cdbba4 · dim #7b6a58
+                    ink #2c2118 · accent #b45f33 */
+  --desk: #efe7db;
+  --desk-deep: #e3d9c9;
+  --paper: #f7f1e7;
+  --paper-edge: #ece2d2;
 
-  --ink: #22201c;
+  --ink: #2c2118;
   --ink-soft: #5c554b;
-  --ink-faint: #766d60; /* 문서값 #948A79 는 --paper 위에서 4.5:1 에 못 미쳐 낮춤 */
-  --rule: #b7ab96;
+  /* 문서값 #7b6a58 은 --desk 위에서 4.23:1 이라 본문 기준(4.5:1)에 닿지 않습니다.
+     같은 색상각을 유지한 채 명도만 내려 4.75:1 로 맞췄습니다. */
+  --ink-faint: #74624f;
+  --rule: #cdbba4;
 
-  --stamp: #a63a2e; /* 협력업체 도장 전용. 에러·경고에 재사용 금지 */
-  --bean: #6b4a2f;
-  --shadow: rgba(58, 46, 30, 0.18);
+  /* accent 는 채우기·표시·도장용, bean 은 accent 색 글자용입니다.
+     #b45f33 은 종이 위에서 4.04:1 이라 15px 글자로 쓰면 읽기가 나빠집니다. */
+  --accent: #b45f33;
+  --bean: #9d4f24;
 
-  --grain-opacity: 0.055;
+  --stamp: #a63a2e; /* 지우기·되돌릴 수 없는 것 전용. 강조에 재사용 금지 */
+  --shadow: rgba(58, 46, 30, 0.16);
+
+  --grain-opacity: 0.05;
   --grain-blend: multiply;
-  --grain-invert: 0;
-  --map-wash-color: color-mix(in srgb, var(--desk) 18%, transparent);
-  --map-wash-filter: saturate(0.55) sepia(0.08) contrast(0.95);
+}
 
-  /* 타이포 — 정식 폰트는 라이선스 원문 확보 후(04_착수_검증), 지금은 시스템 폴백.
+[data-theme="warm"] {
+  /* Warm Dark — 서랍에서 갈변한 감열지. 색 반전이 아니라 같은 물건의 다른 시간.
+     문서값: page #221a13 · surface #2d231a · line #4b3a2c · dim #a2907c
+             ink #efe4d5 · accent #d6835a */
+  --desk: #221a13;
+  --desk-deep: #191309;
+  --paper: #2d231a;
+  --paper-edge: #382c20;
+
+  --ink: #efe4d5; /* 회색·흰색이 아니라 갈황색. 여기서 흰 글자를 쓰면 종이가 사라집니다. */
+  --ink-soft: #c8b6a1;
+  --ink-faint: #a2907c;
+  --rule: #4b3a2c;
+
+  --accent: #d6835a;
+  --bean: #d6835a; /* 어두운 종이 위에서는 문서값 그대로 5.3:1 이라 글자에도 씁니다 */
+
+  --stamp: #cf6152;
+  --shadow: rgba(0, 0, 0, 0.5);
+
+  --grain-opacity: 0.075;
+  --grain-blend: screen;
+}
+
+[data-theme="cool"] {
+  /* Cool Dark — 형광등 아래 식은 종이. 세피아를 뺀 자리에 회청을 넣습니다.
+     문서값: page #191c1d · surface #232729 · line #3b4245 · dim #8e9899
+             ink #e6e8e6 · accent #c9784f */
+  --desk: #191c1d;
+  --desk-deep: #111314;
+  --paper: #232729;
+  --paper-edge: #2c3133;
+
+  --ink: #e6e8e6;
+  --ink-soft: #b6bebd;
+  --ink-faint: #8e9899;
+  --rule: #3b4245;
+
+  --accent: #c9784f;
+  --bean: #c9784f;
+
+  --stamp: #cc6152;
+  --shadow: rgba(0, 0, 0, 0.55);
+
+  --grain-opacity: 0.06;
+  --grain-blend: screen;
+}
+
+:root {
+  /* 타이포 — 디자인 시스템 §02. Paperlogy는 제목과 숫자에만, SUIT는 읽는 모든 것에.
      모노 스택 끝에 한글 폰트를 두어 `영업시간` 같은 라벨이 굴림체로 떨어지지 않게 합니다. */
-  --font-body: "SUIT", "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo",
-    "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
-  --font-display: "Paperlogy", "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo",
-    "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", "D2Coding", ui-monospace, "SFMono-Regular", Consolas, Menlo,
-    "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", monospace;
+  --font-body: "SUIT Variable", "SUIT", "Pretendard Variable", "Pretendard",
+    "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --font-display: "Paperlogy", "SUIT Variable", "Pretendard Variable", "Pretendard",
+    "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "MonoplexKR", "IBM Plex Mono", "D2Coding", ui-monospace, "SFMono-Regular",
+    Consolas, Menlo, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", monospace;
 
-  /* 다섯 개가 전부입니다. 새 크기 대신 여백이나 굵기를 쓰세요. */
+  /* 다섯 개가 전부입니다. 새 크기 대신 여백이나 굵기를 쓰세요.
+     본문 최소 14px, 캡션 최소 11px (§02 RULES). */
   --t-display: 1.75rem;
   --t-title: 1.25rem;
   --t-body: 0.9375rem;
-  --t-label: 0.8125rem;
+  --t-label: 0.875rem;
   --t-micro: 0.6875rem;
 
   --ls-mono: 0.12em; /* 값·숫자 */
-  --ls-label: 0.32em; /* 라틴 라벨 */
-  --ls-label-ko: 0.5em; /* 한글은 더 벌려야 같은 인상 */
-  --ls-brand: 0.42em;
+  --ls-meta: 0.14em; /* 발행 정보 한 줄 */
+  --ls-label: 0.16em; /* 라틴 라벨 */
+  --ls-label-ko: 0.34em; /* 한글은 더 벌려야 같은 인상 */
+  --ls-brand: 0.34em;
 
   /* 지도 위에 뜬 것들이 모두 같은 여백선에 서야 화면이 정갈해집니다. */
   --rail: 32px;
   --gap: 12px;
 
-  /* 그림자는 두 단계뿐입니다. 종이가 책상에 놓인 높이와 손에 든 높이. */
-  --lift-1: 0 6px 18px var(--shadow);
-  --lift-2: 0 16px 34px var(--shadow);
+  /* 인쇄물에는 그림자가 없습니다. 높이는 실선 한 줄과 아주 옅은 낙차로만 말합니다 —
+     지도 위에 뜬 종이라 완전히 없애면 배경에 붙어 버립니다. */
+  --lift-1: 0 1px 0 var(--rule), 0 4px 14px var(--shadow);
+  --lift-2: 0 1px 0 var(--rule), 0 10px 26px var(--shadow);
+
+  /* 점선 절취선과 이중 괘선. 디자인 시스템 §08 DIVIDER 그대로. */
+  --perforation: repeating-linear-gradient(90deg, var(--rule) 0 5px, transparent 5px 10px);
+  /* 준비 중인 사진 자리 (§03) */
+  --hatch: repeating-linear-gradient(
+    45deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--rule) 55%, transparent) 6px 7px
+  );
 
   --ease-paper: cubic-bezier(0.2, 0.86, 0.3, 1);
-}
-
-[data-theme="dark"] {
-  /* 다크 · 서랍에서 3년 묵어 갈변한 감열지. 색 반전이 아니라 같은 물건의 다른 시간. */
-  --desk: #100e0a;
-  --desk-deep: #080705;
-  --paper: #241e16;
-  --paper-edge: #2e2619;
-
-  --ink: #e9dbc0; /* 회색·흰색이 아니라 갈황색. 여기서 흰 글자를 쓰면 종이가 사라집니다. */
-  --ink-soft: #b0a088;
-  --ink-faint: #9a896e;
-  --rule: #584a38;
-
-  --stamp: #cf6152;
-  --bean: #dda86b;
-  --shadow: rgba(0, 0, 0, 0.55);
-
-  --grain-opacity: 0.08;
-  --grain-blend: screen;
-  --grain-invert: 1;
-  --map-wash-color: color-mix(in srgb, var(--desk) 24%, transparent);
-  --map-wash-filter: saturate(0.5) brightness(0.76) contrast(0.92);
 }
 
 /* ══ 2. 바탕 ═══════════════════════════════════════════════════════ */
@@ -101,9 +187,10 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--t-body);
-  line-height: 1.65;
+  line-height: 1.7; /* §02 BODY — SUIT 400 · 15/1.7 */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  word-break: keep-all;
 }
 
 h1,
@@ -142,12 +229,26 @@ a:focus-visible,
   outline-offset: 4px;
 }
 
+/* 화면에는 없고 읽히기만 하는 글. 머리줄의 "찾기"는 장식이라 aria 로는 감춰
+   두었으므로, 입력칸의 이름은 이 이름표가 집니다. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .skip-link {
   position: fixed;
   z-index: 100;
   top: -4rem;
   left: 1rem;
   padding: 0.75rem 1rem;
+  border: 1px solid var(--ink);
   background: var(--paper);
   color: var(--ink);
 }
@@ -172,14 +273,50 @@ a:focus-visible,
   font-style: normal;
 }
 
+/* 값·좌표·수량·발행정보는 전부 이 한 벌로 (§02 RULES).
+   대문자 라틴 + 넓은 자간 = 인쇄물 라벨 신호. */
+.meta {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+  font-style: normal;
+  letter-spacing: var(--ls-meta);
+  line-height: 1.7;
+}
+
 .dashed-rule {
   width: 100%;
   margin: 14px 0;
   border-top: 1px dashed var(--rule);
 }
 
-/* 지도 위에 뜬 종이 조각. 검색·상태·탭이 같은 재질이어야 따로 놀지 않습니다. */
+/* §08 TAG · CHIP — 모노, 각진 상자. 두 가지 상태가 전부입니다. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.chip--accent {
+  border-color: var(--bean);
+  color: var(--bean);
+}
+
+/* 지도 위에 뜬 종이 조각. 검색·상태·탭이 같은 재질이어야 따로 놀지 않습니다.
+   v0.1: 높이는 그림자가 아니라 테두리 한 줄이 말합니다. */
 .plate {
+  border: 1px solid var(--rule);
   background: var(--paper);
   box-shadow: var(--lift-1);
 }
@@ -191,7 +328,7 @@ a:focus-visible,
   background: transparent;
   color: var(--bean);
   font-size: var(--t-label);
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
 }
@@ -204,25 +341,29 @@ a:focus-visible,
   cursor: default;
 }
 
+/* §08 BUTTON — 채운 것 하나, 선만 있는 것 하나. 셋째는 없습니다. */
 .pill-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
-  border: 1.5px solid var(--bean);
-  background: transparent;
-  color: var(--bean);
+  padding: 11px 18px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--desk);
   font-size: var(--t-label);
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 .pill-button:hover:not(:disabled) {
-  background: var(--bean);
-  color: var(--paper);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--desk);
 }
 .pill-button:disabled {
   border-color: var(--rule);
+  background: transparent;
   color: var(--ink-faint);
   cursor: default;
 }
@@ -241,19 +382,34 @@ a:focus-visible,
   position: absolute;
   inset: 0;
   overflow: hidden;
+  background: var(--desk);
+}
+
+/*
+ * 책상과 눈금.
+ *
+ * 움직이지도 바뀌지도 않는 그림이라 따로 떼어 냅니다. 지도와 한 겹에 두면
+ * 확대할 때마다 이 격자까지 같이 구워지는데, 측정해 보니 확대 한 번의 래스터 중
+ * 37%가 여기서 나왔습니다. 제 겹으로 올려 두면 한 번만 굽고 그 뒤로는 합성뿐입니다.
+ */
+.map__desk {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background:
-    /* 좌표 격자 */
+    /* 좌표 격자 — §05 지도 화면. 56px 눈금, 선은 --rule 을 35% 로 눕힌 것. */
     repeating-linear-gradient(
       90deg,
-      color-mix(in srgb, var(--rule) 30%, transparent) 0 1px,
-      transparent 1px 72px
+      color-mix(in srgb, var(--rule) 35%, transparent) 0 1px,
+      transparent 1px 56px
     ),
     repeating-linear-gradient(
       0deg,
-      color-mix(in srgb, var(--rule) 30%, transparent) 0 1px,
-      transparent 1px 72px
+      color-mix(in srgb, var(--rule) 35%, transparent) 0 1px,
+      transparent 1px 56px
     ),
     radial-gradient(120% 90% at 50% 40%, var(--desk) 40%, var(--desk-deep) 100%);
+  will-change: transform;
 }
 
 .map__terrain {
@@ -268,30 +424,6 @@ a:focus-visible,
 .map--live {
   background: var(--desk);
 }
-.map__tiles {
-  position: absolute;
-  inset: 0;
-}
-
-/* 타일 자체의 스타일은 건드리지 않고, 지도 전체를 투명한 테마 막으로 덮습니다.
-   옅은 색막과 backdrop-filter가 채도·대비만 낮추므로 지도 세부 정보는 계속 보입니다. */
-.map__wash {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: var(--map-wash-color);
-  -webkit-backdrop-filter: var(--map-wash-filter);
-  backdrop-filter: var(--map-wash-filter);
-}
-/* SDK 오버레이는 자기 좌표에 놓이므로 마커가 스스로 중심을 잡지 않습니다. */
-.map-marker--pinned {
-  position: relative;
-  left: auto;
-  top: auto;
-  transform: none;
-}
-
 .terrain__sea,
 .terrain__river,
 .terrain__stream,
@@ -302,12 +434,15 @@ a:focus-visible,
 
 /* 물은 면으로 그립니다. 선으로 그리면 하구가 상류와 같은 굵기가 됩니다.
    채움이 불투명해야 지천이 한강에 합류하는 자리가 겹쳐서 진해지지 않습니다. */
+/* 지도는 배경이고, 기록이 전경입니다 (§05). 물빛을 강조색에서 뽑으면 바다가
+   화면에서 제일 진한 덩어리가 되므로, 괘선 색을 옅게 눕혀 씁니다 — 인쇄 지도에서
+   물을 옅은 망점으로 찍던 방식과 같습니다. */
 .map {
-  --water: color-mix(in srgb, var(--bean) 15%, var(--desk));
+  --water: color-mix(in srgb, var(--rule) 52%, var(--desk));
 }
-/* 다크에서는 같은 비율이 훨씬 세게 보입니다 — 바다가 갈색 덩어리가 되지 않게 낮춥니다. */
-[data-theme="dark"] .map {
-  --water: color-mix(in srgb, var(--bean) 9%, var(--desk));
+[data-theme="warm"] .map,
+[data-theme="cool"] .map {
+  --water: color-mix(in srgb, var(--rule) 40%, var(--desk));
 }
 .terrain__sea,
 .terrain__river,
@@ -317,6 +452,13 @@ a:focus-visible,
 .terrain__sea {
   stroke: color-mix(in srgb, var(--ink-faint) 62%, transparent);
   stroke-width: 1;
+}
+/* 수도권 밖 (강원·충청 언저리). 경계 데이터가 없어서 바다 도려내기에 같이 뚫리는
+   자리라, 뭍 색으로 덮어 둡니다. 선은 긋지 않습니다 — 그건 경계가 아니라 자료가
+   끝나는 자리일 뿐이라, 선을 그으면 없는 행정경계를 그린 셈이 됩니다. */
+.terrain__outside {
+  fill: var(--desk);
+  stroke: none;
 }
 /* 경계는 아주 옅게. 스물한 개가 또렷하면 지도가 아니라 그물이 됩니다. */
 .terrain__district {
@@ -356,7 +498,25 @@ a:focus-visible,
   background-size: 128px 128px;
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
-  filter: invert(var(--grain-invert));
+}
+/*
+ * 지도 위의 결만 섞기를 뺍니다.
+ *
+ * 섞기는 밑에 깔린 것을 매번 다시 읽어야 해서, 지도가 다시 그려질 때마다 화면
+ * 전체를 한 번 더 훑습니다(확대 한 번의 래스터 중 28%). 종이 위의 결은 종이가
+ * 작고 자주 안 바뀌니 그대로 둡니다 — 결은 종이에서 더 중요하기도 합니다.
+ */
+.map__grain {
+  mix-blend-mode: normal;
+  opacity: calc(var(--grain-opacity) * 0.8);
+}
+/* invert(0) 도 필터라, 지도가 움직이는 프레임마다 화면 전체를 한 번 더 훑습니다.
+   뒤집을 일이 있는 어두운 종이에서만 겁니다. */
+[data-theme="warm"] .map__grain,
+[data-theme="cool"] .map__grain,
+[data-theme="warm"] .codex::before,
+[data-theme="cool"] .codex::before {
+  filter: invert(1);
 }
 
 .map__places span {
@@ -371,14 +531,43 @@ a:focus-visible,
   white-space: nowrap;
 }
 .map__places .map__sea-label {
-  color: color-mix(in srgb, var(--bean) 62%, transparent);
+  color: color-mix(in srgb, var(--ink-faint) 70%, transparent);
+}
+
+/*
+ * 지도 위에 적히는 동네 이름.
+ *
+ * 예전에는 짚어 봐야 알 수 있었습니다. 지도가 자기 위에 뭐가 있는지 물어봐야만
+ * 답하는 셈이라, 어디를 보고 있는지 알려면 일단 찍어 봐야 했습니다.
+ *
+ * 지도는 배경이고 기록이 전경입니다(02 §5). 그래서 이름은 종이에 스민 정도로만
+ * 옅게 두고, 판을 깔지 않습니다 — 스물몇 개가 한꺼번에 서는데 저마다 흰 상자를
+ * 지고 있으면 지도가 아니라 이름표 밭이 됩니다. 배경과 섞이지 않을 만큼만
+ * 흐릿한 획 하나를 밑에 깔아 둡니다.
+ */
+.map__names span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: color-mix(in srgb, var(--ink-faint) 60%, transparent);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--ls-mono);
+  paint-order: stroke fill;
+  -webkit-text-stroke: 3px color-mix(in srgb, var(--desk) 72%, transparent);
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 지금 보고 있는 칸. 왼쪽 아래에 적힌 그 이름이 지도 위 어디인지 잇습니다.
+   이 하나만 핀 위로 올립니다 — 나머지 이름은 핀에 가려도 되지만, 지금 어디인지를
+   말하는 글자가 핀 뒤에 숨으면 강조한 뜻이 없습니다(핀은 z-index 5). */
+.map__names span.is-here {
+  z-index: 6;
+  color: var(--ink);
+  font-weight: 700;
+  -webkit-text-stroke-width: 4px;
 }
 
 .map__scale {
-  position: absolute;
-  z-index: 8;
-  right: var(--rail);
-  bottom: 26px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -426,48 +615,63 @@ a:focus-visible,
   place-content: center;
 }
 
-/* 조각 세 개가 아니라 쪽지 한 장. 흩어져 있으면 정보가 아니라 부스러기로 보입니다. */
-.map-status {
+/*
+ * 겹쳐 선 이웃의 수.
+ *
+ * 핀 하나가 여럿을 대표할 때만 붙습니다. 핀은 도장이라 둥글지만 이건 셈한 숫자라
+ * 각지게 두었습니다 — 영수증 위의 수량 칸과 같은 몫이고, 모노 숫자도 그래서입니다.
+ */
+.map-marker__more {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  min-width: 13px;
+  padding: 0 2px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-style: normal;
+  line-height: 11px;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+/*
+ * 지금 보고 있는 동네.
+ *
+ * 왼쪽 아래는 지도에서 가장 오래 비어 있는 자리입니다. 예전에는 "수도권 전체 ·
+ * 협력업체 n · 목업 데이터"가 있었는데, 셋 다 화면이 바뀌어도 안 바뀌는 글이라
+ * 읽을 이유가 없었습니다(협력업체 수는 서랍에, 목업이라는 말은 서랍 아래에
+ * 이미 있습니다). 여기는 움직이는 것이 앉을 자리입니다.
+ */
+.map__here {
   position: absolute;
   z-index: 10;
   left: var(--rail);
   bottom: 26px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 13px;
-  color: var(--ink-soft);
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  white-space: nowrap;
+}
+.map__here b {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-label);
+  font-weight: 600;
+}
+.map__here i {
+  color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
+  font-style: normal;
   letter-spacing: var(--ls-mono);
-}
-.map-status span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.map-status span + span::before {
-  content: "·";
-  margin-right: 5px;
-  color: var(--rule);
-}
-.map-status__note {
-  color: var(--ink-faint);
-}
-
-/* 첫 진입에서 지도를 뒤로 물립니다. 클릭은 그대로 통과시켜야
-   "지도를 만지면 접힘"이 성립합니다. */
-.stage-veil {
-  position: absolute;
-  z-index: 12;
-  inset: 0;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--desk) 62%, transparent);
-  opacity: 0;
-  transition: opacity 520ms ease;
-}
-.stage-veil.is-on {
-  opacity: 1;
 }
 
 /* ══ 4. 상단 바 ════════════════════════════════════════════════════ */
@@ -481,31 +685,38 @@ a:focus-visible,
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 var(--rail);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--desk) 94%, transparent), transparent);
+  /* 흐려지며 사라지는 막은 지도 위에서 얼룩처럼 읽혔습니다. 한 색으로 덮고,
+     지도보다 한 겹 위에 있다는 것만 옅은 그림자로 말합니다. */
+  background: var(--desk);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--shadow) 45%, transparent);
 }
 
-.menu-button {
+/* 메뉴와 검색은 왼쪽에 나란히. 상단바의 첫 칸이 둘을 함께 받습니다. */
+.topbar__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+/* 상단바의 두 단추는 같은 판입니다 — 44px 칸 안에 아이콘 하나. */
+.menu-button,
+.search-button {
   width: 44px;
   height: 44px;
   display: grid;
-  align-content: center;
-  justify-content: center;
-  gap: 7px;
+  place-items: center;
   padding: 0;
   border: 0;
   background: transparent;
+  color: inherit;
   cursor: pointer;
 }
-.menu-button span {
-  width: 22px;
-  border-top: 1.5px solid currentColor;
-  transition: width 160ms var(--ease-paper);
+/* 검색 단추는 좁은 화면에만 나옵니다 — 넓은 화면에서는 검색 종이가 늘 펴져
+   있으므로, 같은 일을 하는 단추를 하나 더 두면 무엇을 눌러야 할지 헷갈립니다. */
+.search-button {
+  display: none;
 }
-.menu-button span:last-child {
-  width: 14px;
-}
-.menu-button:hover span:last-child {
-  width: 22px;
+.search-button[aria-expanded="true"] {
+  color: var(--bean);
 }
 
 .topbar__brand {
@@ -517,10 +728,12 @@ a:focus-visible,
 }
 .topbar__brand b {
   font-family: var(--font-display);
-  font-size: var(--t-title);
+  font-size: var(--t-display);
   font-weight: 800;
-  letter-spacing: var(--ls-brand);
-  padding-left: var(--ls-brand);
+  /* 자간은 글자가 커질수록 줄여야 같은 인상이 됩니다. 서랍의 작은 로고는
+     --ls-brand 그대로 두고, 여기만 좁힙니다. */
+  letter-spacing: 0.14em;
+  padding-left: 0.14em;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -529,9 +742,9 @@ a:focus-visible,
   color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  padding-left: 0.22em;
+  font-weight: 400;
+  letter-spacing: var(--ls-meta);
+  padding-left: var(--ls-meta);
 }
 
 .topbar__actions {
@@ -540,49 +753,66 @@ a:focus-visible,
   align-items: center;
   gap: 6px;
 }
-/* 상시 점선 밑줄은 버튼을 기입란처럼 보이게 했습니다. 지금은 눌릴 자리만 밝힙니다. */
+/* 상시 점선 밑줄은 버튼을 기입란처럼 보이게 했습니다. 지금은 눌릴 자리만 밝힙니다.
+   v0.1: 모서리를 각지게 하고, 눌린 탭만 종이와 이어집니다 (§06 TAB RULES). */
+.theme-button,
+.map__tools {
+  transition: opacity 160ms var(--ease-paper);
+}
 .theme-button,
 .marks-button {
-  height: 36px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 2px;
+  padding: 0 11px;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: var(--t-label);
-  font-weight: 700;
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: 0.1em;
   white-space: nowrap;
-  transition: background-color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 .theme-button:hover,
 .marks-button:hover {
-  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  border-color: var(--rule);
+  background: color-mix(in srgb, var(--paper) 76%, transparent);
 }
-.theme-button span {
-  color: var(--bean);
+.theme-button svg {
+  color: var(--accent);
 }
 .marks-button[aria-pressed="true"] {
-  background: var(--paper);
-  box-shadow: var(--lift-1);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--desk);
 }
 .marks-button strong {
   display: inline-grid;
-  min-width: 22px;
-  height: 22px;
+  min-width: 20px;
+  height: 20px;
   place-items: center;
-  border: 1px solid var(--ink-soft);
-  border-radius: 50%;
+  padding: 0 3px;
+  border: 1px solid var(--rule);
   font-size: var(--t-micro);
   transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 .marks-button[aria-pressed="true"] strong {
-  border-color: var(--bean);
-  background: var(--bean);
-  color: var(--paper);
+  border-color: var(--desk);
+}
+
+/* 첫 화면은 지도와 상단 바뿐입니다. 아직 아무것도 안 한 사람에게 조작기부터
+   들이밀 이유가 없고, 좁은 화면에서는 그 조작기가 지도 위에 늘 떠 있는 짐이
+   됩니다. 지도에 손이 닿으면 그때 나옵니다. */
+.app-shell[data-touched="false"] .map__tools,
+.app-shell[data-touched="false"] .map__here {
+  opacity: 0;
+  pointer-events: none;
+}
+.map__here {
+  transition: opacity 160ms var(--ease-paper);
 }
 
 /* ══ 5. 검색 — 영수증에는 사각 입력 필드가 없고 적어 넣는 빈 줄만 있습니다 ══ */
@@ -593,104 +823,115 @@ a:focus-visible,
   top: 104px; /* 도크와 같은 선에서 시작해야 좌우가 나란해 보입니다. */
   left: var(--rail);
   width: min(360px, calc(100vw - var(--rail) * 2));
-  padding: 18px 20px 16px;
+  padding: 14px 18px 8px;
   box-shadow: var(--lift-2);
 }
-/* 위아래로 뜯긴 쪽지 */
-.search-panel::before,
-.search-panel::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 7px;
-  background: radial-gradient(circle at 7px 0, transparent 6px, var(--paper) 6.5px) 0 0 / 14px 7px
-    repeat-x;
-}
-.search-panel::before {
-  top: -7px;
-  transform: rotate(180deg);
-}
-.search-panel::after {
-  bottom: -7px;
-}
 
-.search-panel label {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--ink-soft);
-}
-.search-line {
+/* 머리줄 — "찾기" 한 낱말이 이 종이가 무엇인지를 집니다. 앞에 돋보기를 또 그리고
+   위에 안내 문구를 또 얹으면 같은 말이 세 번입니다. 오른쪽 끝은 칠 것이 없을 때는
+   단축키, 치고 나면 걸린 곳 수 — 한 자리가 한 번에 한 가지만 말합니다. */
+.search-panel__head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
   color: var(--ink-faint);
 }
+.search-panel__head i {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--rule);
+}
+.search-panel__head b {
+  font-weight: 400;
+}
+.search-panel__head .chip {
+  padding: 3px 6px;
+  letter-spacing: 0.1em;
+}
+
+/* §08 SEARCH — 각진 상자가 아니라 적어 넣는 줄 하나. 종이 테두리 안에 테두리를
+   한 겹 더 그리면 어디가 종이고 어디가 칸인지 흐려집니다. */
+.search-field {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  padding: 6px 0 8px;
+  border-bottom: 1.5px solid var(--ink-soft);
+  transition: border-color 140ms ease;
+}
+/* 줄 하나가 곧 포커스 표시입니다. */
+.search-field:focus-within {
+  border-bottom-color: var(--accent);
+}
+.search:focus-visible {
+  outline: none;
+}
 .search {
-  width: 100%;
-  padding: 5px 0 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
   border: 0;
-  border-bottom: 1.5px solid var(--rule);
   border-radius: 0;
   outline: none;
   background: transparent;
   color: var(--ink);
-  font-size: var(--t-title);
+  font-size: var(--t-body);
 }
 .search::placeholder {
   color: var(--ink-faint);
 }
-.search:focus {
-  border-bottom-color: var(--bean);
-  border-bottom-style: dashed;
-  box-shadow: 0 2px 0 var(--bean);
-}
 
 .search-results {
-  padding-top: 14px;
+  padding: 2px 0 4px;
 }
-.search-results__count {
-  margin-bottom: 4px;
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-}
-.search-results__count i {
-  color: var(--ink-soft);
-  font-style: normal;
-}
-.search-results > button {
-  width: 100%;
+.search-results > button,
+.search-results__list > button {
+  /* 짚은 줄은 종이 끝까지 칠해집니다 — 가운데만 칠하면 줄이 아니라 딱지로 보입니다.
+     좌우로 뺀 만큼 안쪽에 다시 넣어, 글자는 위 입력줄과 같은 선에서 시작합니다. */
+  width: calc(100% + 36px);
+  margin: 0 -18px;
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
   gap: 10px;
-  padding: 10px 8px;
-  margin-inline: -8px;
-  width: calc(100% + 16px);
+  padding: 9px 18px;
   border: 0;
-  border-top: 1px dashed var(--rule);
   background: transparent;
   text-align: left;
   cursor: pointer;
   transition: background-color 120ms ease;
 }
-/* 줄 전체가 눌린다는 걸 쉬는 상태에서도 알 수 있어야 합니다. */
-.search-results > button:hover {
-  background: var(--paper-edge);
+.search-results__list > button + button {
+  border-top: 1px dashed var(--rule);
 }
-.search-results small {
-  color: var(--ink-faint);
-  font-size: var(--t-micro);
+/* 줄 전체가 눌린다는 걸 쉬는 상태에서도 알 수 있어야 합니다.
+   키보드로 짚은 줄과 마우스로 가리킨 줄이 같은 표시를 씁니다. */
+.search-results__list > button:hover,
+.search-results__list > button.is-cursor {
+  background: var(--desk);
+}
+.search-results__name mark {
+  background: transparent;
+  color: var(--bean);
+}
+.search-results .empty-state {
+  padding: 14px 0 10px;
 }
 
+/* §08 TAG · CHIP — 협력업체 표시. 도장이 아니라 라벨이므로 기울이지 않습니다. */
 .partner-badge {
-  padding: 2px 5px;
-  border: 1px solid var(--stamp);
-  color: var(--stamp);
+  padding: 3px 6px;
+  border: 1px solid var(--bean);
+  color: var(--bean);
+  font-family: var(--font-mono);
   font-size: var(--t-micro);
-  font-weight: 700;
-  transform: rotate(-4deg);
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* 검색창 밑줄이 이미 구분선이라 여기 또 줄을 그으면 선이 두 개로 겹쳐 보입니다. */
@@ -705,7 +946,8 @@ a:focus-visible,
 /* 묵은 종이(#241E16) 위에서는 캐릭터의 짙은 외곽선이 배경에 먹혀 실루엣이
    사라집니다. 얇은 중간톤 테두리로 형태만 되살립니다 — 밝은 테두리를 쓰면
    종이에 인쇄된 그림이 아니라 오려 붙인 스티커로 보입니다. */
-[data-theme="dark"] .mascot {
+[data-theme="warm"] .mascot,
+[data-theme="cool"] .mascot {
   filter: drop-shadow(1.5px 0 0 var(--ink-faint)) drop-shadow(-1.5px 0 0 var(--ink-faint))
     drop-shadow(0 1.5px 0 var(--ink-faint)) drop-shadow(0 -1.5px 0 var(--ink-faint));
 }
@@ -745,11 +987,33 @@ a:focus-visible,
   top: var(--dock-top);
   right: var(--dock-right);
   width: var(--card-w);
-  max-height: calc(100svh - var(--dock-top) - 28px);
-  overflow: auto;
+  /* 아래끝은 지도 연장(축척·확대축소) 몫으로 비웁니다. 종이는 안에서 스크롤되지만,
+     닿지 않는 단추는 없는 단추라 그쪽을 먼저 지킵니다. */
+  max-height: calc(100svh - var(--dock-top) - 104px);
+  display: flex;
+  flex-direction: column;
+  /* 흐르는 건 안쪽(.dock__scroll)입니다. 여기서 흘리면 손잡이가 같이 흘러갑니다. */
+  overflow: hidden;
+  /* drop-shadow 는 필터라, 시트가 움직이는 프레임마다 흐림을 다시 굽습니다.
+     같은 그림자를 box-shadow 로 그리면 합성만으로 끝납니다. */
+  box-shadow: 0 10px 20px var(--shadow);
+}
+
+.dock__peek,
+.dock__hint {
+  display: none;
+}
+
+.dock__scroll {
+  min-height: 0;
+  overflow-y: auto;
   scrollbar-width: none;
-  filter: drop-shadow(0 18px 26px var(--shadow));
-  transition: transform 640ms var(--ease-paper);
+  /* 종이 끝에서 더 밀어도 뒤의 페이지가 따라 움직이지 않습니다. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.dock__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .dock.has-preview {
@@ -768,64 +1032,170 @@ a:focus-visible,
 .dock__codex {
   min-width: 0;
 }
-.dock::-webkit-scrollbar {
-  display: none;
-}
-
-/* 첫 진입: 도크 자리에서 화면 한가운데로 옮겨 놓았다가, 지도를 만지면
-   제자리로 돌아갑니다. 위치를 계산으로 잡아 두면 애니메이션이 transform 하나로 끝납니다.
-   하단 시트로 내려가는 폭에서는 이 계산이 아예 성립하지 않으므로(--dock-top: auto)
-   min-width 로 잘라 둡니다. 뒤에서 덮어쓰려 하면 계산이 무효가 되면서 transform 이
-   통째로 사라집니다. */
-@media (min-width: 768px) {
-  .dock.is-center {
-    transform: translate(
-      calc(var(--dock-right) + var(--card-w) / 2 - 50vw),
-      calc(50svh - var(--dock-top) - 50%)
-    );
-  }
-}
-
+/* §03 핵심 컨테이너 — 영수증 = 한 번의 기록.
+   v0.1 부터 종이는 각지고, 가장자리는 뜯긴 마스크가 아니라 실선 한 줄입니다.
+   뜯을 수 있다는 신호는 아래끝의 절취선(::after)이 혼자 맡습니다. */
 .receipt,
 .codex {
+  /* 종이 안쪽 여백. 머리를 붙여 둘 때 이 값만큼 좌우로 넓혀 덮어야 하므로,
+     세 군데가 같은 값을 봐야 합니다. */
+  --paper-pad: 26px;
   position: relative;
-  padding: 24px 20px 28px;
+  padding: var(--paper-pad) var(--paper-pad) 30px;
+  border: 1px solid var(--rule);
   background: var(--paper);
   color: var(--ink);
-  --tear: 7px;
-  animation: print 900ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+  animation: print 260ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
 }
-.codex {
-  mask:
-    radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2)
-      100% repeat-x,
-    radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% /
-      calc(var(--tear) * 2) 100% repeat-x;
-  mask-composite: intersect;
+.receipt::after,
+.codex::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 13px;
+  height: 1px;
+  background: var(--perforation);
+  pointer-events: none;
 }
-.receipt {
-  --ticket-notch-y: 138px;
-  mask:
-    radial-gradient(circle 11px at 0 var(--ticket-notch-y), transparent 98%, #010101) 0 0 / 100%
-      100% no-repeat,
-    radial-gradient(circle 11px at 100% var(--ticket-notch-y), transparent 98%, #010101) 0 0 /
-      100% 100% no-repeat,
-    radial-gradient(var(--tear) at 50% 0, transparent 98%, #010101) 0 0 / calc(var(--tear) * 2)
-      100% repeat-x,
-    radial-gradient(var(--tear) at 50% 100%, transparent 98%, #010101) 0 100% /
-      calc(var(--tear) * 2) 100% repeat-x;
-  mask-composite: intersect;
+
+/* 상호 한 줄, 주소 한 줄. 그 아래는 바로 사진입니다 — 발행 정보와 구분선이
+   차지하던 자리를 사진이 가져갑니다. */
+.receipt__head {
+  padding-right: 82px; /* 오른쪽 위 연장 두 칸 자리 */
 }
-.receipt__topline {
+.receipt__address {
+  margin-top: 5px;
+  color: var(--ink-faint);
+  font-size: var(--t-label);
+  word-break: keep-all;
+}
+
+/* 아이콘만 남은 조작은 뜻을 잃기 쉽습니다. 가리키거나 포커스가 닿으면 이름을
+   아래로 폅니다 — 위로 펴면 도크가 스크롤 상자라 말풍선이 잘립니다. */
+.has-tip {
+  position: relative;
+}
+.tip {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: calc(100% + 8px);
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: 220px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  color: var(--ink-faint);
+  font-family: var(--font-body);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: normal;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+.tip b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+.has-tip:hover > .tip,
+.has-tip:focus-visible > .tip {
+  opacity: 1;
+}
+
+/* 원두 하나가 곧 "비빈 파트너"입니다. 상시 라벨은 상호보다 길어져 이름을 밀어냅니다. */
+.partner-mark {
+  display: inline-grid;
+  place-items: center;
+  vertical-align: -0.12em;
+  margin-left: 8px;
+  color: var(--accent);
+  cursor: help;
+}
+
+/* 종이 오른쪽 위의 연장 두 개. 정사각 칸에 하나씩 (§08 — 모서리는 각지게). */
+/* 상호의 첫 줄과 같은 선에서 시작합니다. 종이 안쪽 여백(26/22px)과 같은 값이라
+   글줄 상자와 단추 상자의 위끝이 정확히 맞습니다 — 둘 다 34px 높이입니다. */
+/* 상호·주소와 연장 두 개가 한 덩어리입니다. 연장은 이 덩어리의 오른쪽 위에
+   붙습니다 — 종이 기준으로 재면 덩어리가 움직일 때 따라오지 못합니다. */
+.receipt__top {
+  position: relative;
+}
+.receipt__tools {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  gap: 6px;
 }
+.tool-slot {
+  position: relative;
+}
+/* 드롭다운이 열려 있으면 같은 자리에서 말풍선이 겹칩니다. */
+.tool-slot.is-open .tip {
+  display: none;
+}
+.tool-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.tool-button:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.tool-button--sm {
+  width: 30px;
+  height: 30px;
+}
+.tool-button--danger:hover:not(:disabled) {
+  border-color: var(--stamp);
+  color: var(--stamp);
+}
+.tool-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tool-button:disabled:hover {
+  border-color: var(--rule);
+  color: var(--ink-faint);
+}
+/* 이미 뜯어 둔 곳은 채우지 않습니다 — 채운 칸은 "아직 안 한 일" 자리입니다. */
+.tool-button.is-saved {
+  border-color: var(--bean);
+  color: var(--bean);
+}
+/* 종이 오른쪽 끝에 붙은 연장이라, 말풍선을 가운데에 맞추면 종이 밖으로 나갑니다. */
+.receipt__tools .tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 .brand-lockup {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--bean);
+  color: var(--accent);
 }
 .brand-lockup b {
   font-family: var(--font-display);
@@ -837,118 +1207,120 @@ a:focus-visible,
 }
 
 .icon-button {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
   border: 0;
   background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: var(--t-title);
-  line-height: 1;
-}
-
-.receipt__issue {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 2px 0 0 26px;
   color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--t-micro);
-  letter-spacing: var(--ls-mono);
+  cursor: pointer;
+  transition: color 140ms ease;
 }
-.receipt__issue i {
-  margin-left: 10px;
-  font-style: normal;
+.icon-button:hover {
+  color: var(--ink);
 }
 
-.receipt__identity {
-  margin: 18px -20px 0;
-  padding: 20px 30px 18px;
-  background: var(--paper-edge);
-}
 .receipt__name {
   font-family: var(--font-display);
   font-size: var(--t-display);
   font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
   word-break: keep-all;
-}
-.romanized {
-  margin-top: 4px;
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  font-weight: 700;
-  letter-spacing: 0.14em;
 }
 /* 확정 정보와 추정 정보는 눈으로 즉시 구분되어야 합니다 (결정서 §3 Q34).
    구분이 없으면 AI가 조립한 문장이 사실로 유통됩니다.
    협력업체 소개는 실선에 진한 잉크, 추정 서술은 점선에 흐린 잉크. */
 .intro {
-  margin: 20px 0 22px;
+  margin: 16px 0 20px;
   padding-left: 13px;
   word-break: keep-all;
 }
 .receipt--confirmed .intro {
-  border-left: 2px solid var(--bean);
+  border-left: 2px solid var(--accent);
 }
 .receipt--guess .intro {
   border-left: 2px dashed var(--rule);
   color: var(--ink-faint);
 }
-
-/* ── 점선 리더 ── 라벨과 값이 실제로 이어져야 영수증이 됩니다. */
-.receipt__specs .spec {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 11px 0;
+/* 내가 적은 문장은 추정이 아닙니다. 카페 등급과 상관없이 확정 표시로 섭니다. */
+.receipt .intro--mine {
+  border-left: 2px solid var(--bean);
+  color: var(--ink);
 }
-.receipt__specs dt {
-  flex: 1 1 auto;
+.intro__by {
+  display: block;
+  margin-bottom: 3px;
+}
+
+/* §03 야장 — 취급 원두는 문장이 아니라 라벨입니다. 칩으로 끊어 둡니다. */
+.bean-tags {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  color: var(--ink-soft);
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 2px;
+}
+
+/* §06 상세 — "상세는 표(모노) 중심, 요약은 문장(SUIT) 중심."
+   요약이 읽는 것이라면 상세는 확인하는 것이라, 값이 오른쪽 한 줄에 정렬됩니다. */
+/* 구분선은 BEAN LIST 앞의 한 줄뿐입니다. 나머지 사이는 여백이 벌립니다 —
+   표 하나에 점선 셋이면 읽는 리듬이 아니라 격자가 됩니다. */
+.detail {
+  margin-top: 16px;
+  animation: unfold 220ms var(--ease-paper) both;
+}
+.detail__table {
+  display: grid;
   font-family: var(--font-mono);
-  font-size: var(--t-label);
-  font-weight: 700;
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+  line-height: 2.2;
+}
+.detail__table > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.detail__table dt {
+  color: var(--ink-faint);
   letter-spacing: var(--ls-label-ko);
   white-space: nowrap;
 }
-.receipt__specs dt::after {
-  content: "";
-  flex: 1 1 auto;
-  min-width: 14px;
-  border-bottom: 1px dotted var(--rule);
-  transform: translateY(-0.3em);
-}
-.receipt__specs dd {
-  flex: 0 1 auto;
+.detail__table dd {
   text-align: right;
-  line-height: 1.5;
   word-break: keep-all;
 }
-.receipt__specs dd a {
+.detail__table dd a {
   text-decoration: underline dotted;
   text-underline-offset: 4px;
 }
-
-.receipt__close {
-  margin-top: 14px;
-  padding: 2px 0 0;
+.detail .bean-tags {
+  margin: 10px 0 0;
 }
-.guess-note {
-  justify-self: stretch;
+.detail .guess-note {
+  margin-top: 12px;
+}
+/* 상세 안의 바깥 링크는 종이 한 장을 가로지르는 한 줄로 둡니다. */
+.detail > .receipt-action {
+  width: 100%;
+  margin-top: 16px;
 }
 
-/* 협력업체 도장(.stamp)은 제거했습니다. 파트너 표시는 영수증 머리의 "비빈 파트너"
-   록업과 목록·지도의 뱃지가 맡습니다. 도장을 되살릴 일이 생기면 02 §4.4에 CSS가,
+@keyframes unfold {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+  to {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+}
+
+/* 협력업체 도장(.stamp)은 제거했습니다. 파트너 표시는 상호 옆의 원두 마크와
+   목록·지도의 뱃지가 맡습니다. 도장을 되살릴 일이 생기면 02 §4.4에 CSS가,
    §6.2에 press 모션이 그대로 적혀 있습니다. */
 
 .guess-note {
@@ -956,75 +1328,81 @@ a:focus-visible,
   padding: 11px 12px;
   border: 1px dashed var(--rule);
   color: var(--ink-faint);
-  font-size: var(--t-micro);
+  font-size: var(--t-label);
   line-height: 1.6;
   word-break: keep-all;
 }
 
+/* §08 BUTTON — 채운 것 하나, 선만 있는 것 하나. 어느 쪽이 주된 행동인지 형태로 말합니다. */
+/* 저장은 오른쪽 위 연장으로 올라갔습니다. 여기 남는 건 상세 하나뿐입니다. */
 .receipt__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 20px;
+  margin-top: 18px;
 }
 .receipt-action {
-  min-height: 48px;
+  min-height: 46px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 11px 12px;
-  border: 1.5px solid var(--rule);
-  border-radius: 3px;
-  background: var(--paper-edge);
-  color: var(--ink-soft);
+  padding: 11px 16px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--desk);
   font-size: var(--t-label);
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.35;
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 150ms var(--ease-paper), box-shadow 150ms ease, border-color 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 .receipt-action:hover {
-  border-color: var(--bean);
-  box-shadow: 0 4px 10px var(--shadow);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--desk);
   text-decoration: none;
-  transform: translateY(-1px);
-}
-.receipt-action:active {
-  box-shadow: none;
-  transform: translateY(1px);
-}
-.save-button {
-  color: var(--bean);
 }
 .save-button span {
   flex: 0 0 auto;
 }
+/* 이미 뜯어 둔 것은 채우지 않습니다 — 채운 버튼은 "아직 안 한 일" 자리입니다. */
 .save-button.is-saved {
   border-color: var(--bean);
-  background: color-mix(in srgb, var(--bean) 8%, var(--paper-edge));
+  background: transparent;
+  color: var(--bean);
+}
+.save-button.is-saved:hover {
+  border-color: var(--accent);
+  background: transparent;
+  color: var(--accent);
 }
 .text-button {
-  color: var(--ink-soft);
+  border-color: var(--rule);
+  background: transparent;
+  color: var(--ink);
 }
+.text-button:hover {
+  border-color: var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
 .dock-tab {
   position: absolute;
   z-index: 15;
   right: var(--rail);
   bottom: 64px;
-  padding: 12px 16px;
-  border: 0;
-  color: var(--bean);
+  padding: 11px 16px;
+  color: var(--ink);
   font-size: var(--t-label);
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
-  transition: box-shadow 160ms ease, transform 160ms var(--ease-paper);
+  transition: border-color 160ms ease, color 160ms ease;
 }
 .dock-tab:hover {
-  box-shadow: var(--lift-2);
-  transform: translateY(-2px);
+  border-color: var(--ink);
+  color: var(--bean);
 }
 
 /* ── 내 도감 — 뜯어둔 영수증이 겹쳐 쌓인 묶음 (02 §5) ── */
@@ -1041,96 +1419,238 @@ a:focus-visible,
   color: var(--ink-soft);
 }
 
+/* 목록만 흐르고 머리는 제자리에 남습니다. 스크롤 상자는 .dock 이라 여기서
+   top: 0 이 곧 종이의 윗변입니다. 좌우로 밀어낸 만큼 다시 채워, 띠가 종이
+   폭을 꽉 덮게 합니다 — 안 그러면 지나가는 목록이 옆구리로 비칩니다. */
+.codex {
+  padding-top: 0;
+}
+.codex__top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-inline: -26px;
+  padding: 30px 26px 12px;
+  background: var(--paper);
+}
+
+.codex__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+}
+.codex__title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: var(--ls-brand);
+  padding-left: var(--ls-brand);
+}
+
+.codex__collection-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.codex__collection-row .codex__collections {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* §04 COLLECTION — 몇 곳인지와 이 도감으로 할 수 있는 일. */
+.codex__board {
+  display: grid;
+  gap: 11px;
+  margin-top: 4px;
+  padding: 13px 14px;
+  border: 1px solid var(--rule);
+  animation: drop-in 180ms var(--ease-paper) both;
+}
+.codex__board-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+/* 숫자가 무엇을 센 것인지 답하는 두 줄. 모노라 값처럼 읽히고, 도감이
+   채워질수록 내용이 붙습니다. */
+.codex__board-lines {
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+  word-break: keep-all;
+}
+.codex__board-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.codex__progress-count {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0 6px;
+  font-family: var(--font-display);
+}
+.codex__progress-count .meta {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+}
+.codex__progress-count b {
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.codex__progress-count span {
+  color: var(--ink-faint);
+  font-size: var(--t-title);
+  font-weight: 600;
+}
+/* 칸 하나가 카페 한 곳. 채운 칸은 뜯어 둔 곳, 빈 칸은 아직 안 가 본 곳.
+   칸 수가 늘어도 줄만 늘고 칸 크기는 그대로여야 "몇 칸 남았나"가 눈에 들어옵니다. */
+/* 5×2 — 도감 한 권의 열 칸을 그대로 옮긴 격자입니다. */
+.codex__progress-dots {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, 14px);
+  grid-template-rows: repeat(2, 14px);
+  gap: 4px;
+}
+.codex__progress-dots i {
+  display: block;
+  aspect-ratio: 1;
+  border: 1px solid var(--rule);
+  opacity: 0.6;
+}
+.codex__progress-dots i.is-on {
+  border-color: transparent;
+  background: var(--accent);
+  opacity: 0.85;
+}
 .codex__stack {
   display: grid;
   gap: 9px;
-  margin: 4px 0 2px;
+  margin: 14px 0 2px;
 }
-/* 낱장이 살짝 겹쳐 보이도록 위쪽에 종이 그림자를 얹습니다. */
+/* §04 도감 카드 — 접혀 있을 땐 이름 한 줄. 필요한 것만 폅니다. */
 .codex__slip {
   position: relative;
-  padding: 12px 13px 11px;
-  background: var(--paper-edge);
-  box-shadow: 0 1px 0 var(--rule);
+  border: 1px solid var(--rule);
+  background: var(--paper);
 }
 .codex__slip.is-active {
-  box-shadow: inset 3px 0 var(--bean), 0 1px 0 var(--rule);
+  border-color: var(--codex-color, var(--accent));
+  box-shadow: inset 3px 0 var(--codex-color, var(--accent));
 }
-
 .codex__slip.is-unknown {
+  border-style: dashed;
   background: transparent;
-  border: 1px dashed var(--rule);
-  box-shadow: none;
 }
-.codex__slip-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-.codex__name {
-  flex: 1 1 auto;
+.codex__slip-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0;
+  gap: 4px;
+  padding: 7px 8px 7px 13px;
+}
+/* 긴 상호는 줄을 늘리지 않고 자릅니다 — 연장은 언제나 같은 자리에 있어야 합니다. */
+/* 줄 전체가 그 카페를 여는 자리입니다. 이름만 눌리는 게 아니라 이름이 놓인
+   칸 전체가 눌립니다 — 손가락으로 겨눌 것이 한 줄이면 겨눌 필요가 없습니다. */
+.codex__slip-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  padding: 3px 0;
   border: 0;
   background: transparent;
-  font-weight: 700;
+  color: inherit;
   text-align: left;
   cursor: pointer;
 }
-.codex__name:hover:not(:disabled) {
-  text-decoration: underline dotted;
-  text-underline-offset: 4px;
-}
-.codex__name:disabled {
-  color: var(--ink-faint);
+.codex__slip-open:disabled {
   cursor: default;
 }
-.codex__drop {
+.codex__slip-open:hover:not(:disabled) .codex__name {
+  color: var(--bean);
+}
+.codex__name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.codex__slip.is-unknown .codex__name {
+  color: var(--ink-faint);
+}
+
+.codex__slip-tool {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
   cursor: pointer;
+  transition: color 140ms ease;
 }
-.codex__drop:hover {
+.codex__slip-tool:hover:not(:disabled) {
+  color: var(--ink);
+}
+.codex__slip-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.codex__slip-tool--danger {
   color: var(--stamp);
 }
-.codex__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 3px;
-  color: var(--ink-faint);
-  font-size: var(--t-micro);
+.codex__slip-tool--danger:hover:not(:disabled) {
+  color: var(--stamp);
 }
-/* 영수증 여백에 손으로 적는 자리. 상자가 아니라 빈 줄입니다. */
+/* 목록 안에서는 말풍선을 왼쪽으로 물려야 종이 밖으로 나가지 않습니다. */
+.codex__slip-tool .tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.codex__slip-body {
+  padding: 0 8px 9px 13px;
+  animation: drop-in 160ms var(--ease-paper) both;
+}
+.codex__slip-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+}
+/* §03 야장 — 손으로 적는 자리는 상자가 아니라 괘선 한 줄입니다. */
 .codex__note {
   width: 100%;
-  margin-top: 7px;
-  padding: 3px 0;
+  height: 26px;
+  padding: 0;
   border: 0;
-  border-bottom: 1px dashed transparent;
-  background: transparent;
+  background: repeating-linear-gradient(180deg, transparent 0 25px, var(--rule) 25px 26px);
   color: var(--ink-soft);
-  font-size: var(--t-micro);
+  font-size: var(--t-label);
+  line-height: 25px;
   outline: none;
 }
 .codex__note::placeholder {
   color: color-mix(in srgb, var(--ink-faint) 70%, transparent);
 }
-.codex__slip:hover .codex__note,
 .codex__note:focus {
-  border-bottom-color: var(--rule);
-}
-.codex__note:focus {
-  border-bottom-color: var(--bean);
+  background: repeating-linear-gradient(180deg, transparent 0 25px, var(--accent) 25px 26px);
   color: var(--ink);
 }
 
@@ -1141,43 +1661,29 @@ a:focus-visible,
 }
 .codex__hint {
   color: var(--ink-faint);
-  font-size: var(--t-micro);
-  line-height: 1.65;
+  font-size: var(--t-label);
+  line-height: 1.7;
   word-break: keep-all;
 }
 .codex__code {
   width: 100%;
   padding: 10px;
   border: 1px dashed var(--rule);
-  background: var(--paper-edge);
+  background: transparent;
   color: var(--ink-soft);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  line-height: 1.5;
+  line-height: 1.6;
   resize: vertical;
   outline: none;
   word-break: break-all;
 }
 .codex__code:focus {
-  border-color: var(--bean);
+  border-color: var(--accent);
 }
 .codex__panel-actions {
   display: flex;
   gap: 16px;
-}
-.codex__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin-top: 16px;
-}
-.codex__actions .pill-button {
-  margin-right: auto;
-}
-
-.sheet-handle {
-  display: none;
 }
 
 /* ══ 7. 서랍 ═══════════════════════════════════════════════════════ */
@@ -1269,28 +1775,30 @@ a:focus-visible,
   gap: 12px;
   color: var(--ink-soft);
 }
+/* §08 TAG · CHIP — 고른 쪽은 잉크로 채웁니다. 점선 상자는 "아직 안 정해짐"으로 읽힙니다. */
 .segmented {
   display: flex;
-  gap: 14px;
+  gap: 6px;
 }
-/* 고른 쪽에 점선 상자를 두면 "아직 안 정해짐"으로 읽힙니다. 실선 밑줄이 결정입니다. */
 .segmented button {
-  padding: 6px 2px;
-  border: 0;
-  border-bottom: 1.5px solid transparent;
+  padding: 7px 9px;
+  border: 1px solid var(--rule);
   background: transparent;
   color: var(--ink-faint);
-  font-size: var(--t-label);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
   cursor: pointer;
-  transition: color 140ms ease;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 .segmented button:hover {
+  border-color: var(--ink-faint);
   color: var(--ink-soft);
 }
 .segmented button[aria-pressed="true"] {
-  border-bottom-color: var(--bean);
-  color: var(--bean);
-  font-weight: 700;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--desk);
 }
 
 .drawer__links a {
@@ -1312,9 +1820,10 @@ a:focus-visible,
   font-size: var(--t-micro);
   text-decoration: none;
 }
-.drawer__links i {
+.drawer__links a > svg,
+.drawer__nav-go {
+  flex: none;
   color: var(--ink-faint);
-  font-style: normal;
 }
 
 .drawer__foot {
@@ -1337,13 +1846,15 @@ a:focus-visible,
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 16px;
+  padding: 10px 16px;
+  border: 1px solid var(--rule);
   background: var(--paper);
-  color: var(--bean);
-  box-shadow: 0 12px 30px var(--shadow);
+  color: var(--ink);
+  box-shadow: 0 10px 26px var(--shadow);
   transform: translateX(-50%);
   animation: toast-in 220ms ease-out both;
-  font-weight: 700;
+  font-size: var(--t-label);
+  font-weight: 600;
 }
 
 /* 02 §6.3 — 북마크에 넣으면 카드 조각이 점선을 따라 뜯겨 서랍으로 들어갑니다. */
@@ -1417,11 +1928,13 @@ a:focus-visible,
   :root {
     --rail: 18px;
   }
-  .topbar {
-    grid-template-columns: auto 1fr auto;
-  }
+  /* 양옆 칸을 1fr 로 두어야 왼쪽(메뉴·검색)과 오른쪽(도감)의 폭이 달라도
+     상호가 화면 한가운데에 섭니다. auto 로 두면 넓은 쪽만큼 밀립니다. */
   .topbar__brand {
     justify-self: center;
+  }
+  .topbar__actions {
+    justify-self: end;
   }
   .topbar__brand small,
   .theme-button {
@@ -1429,7 +1942,9 @@ a:focus-visible,
   }
   .search-panel {
     top: 90px;
-    width: min(340px, calc(100vw - var(--rail) * 2));
+    left: var(--rail);
+    right: var(--rail);
+    width: auto;
   }
   .dock {
     --dock-top: 90px;
@@ -1441,10 +1956,28 @@ a:focus-visible,
   .topbar {
     height: 70px;
   }
+  .search-button {
+    display: inline-flex;
+  }
+  /* 접혀 있을 때는 지도가 통째로 드러납니다 — 좁은 화면에서 종이 한 장이
+     차지하는 자리는 넓은 화면의 그것과 다릅니다. */
+  .search-panel {
+    display: none;
+  }
+  .search-panel.is-open {
+    display: block;
+    animation: drop-in 160ms var(--ease-paper);
+  }
   .topbar__brand b {
-    font-size: var(--t-body);
-    letter-spacing: 0.26em;
-    padding-left: 0.26em;
+    font-size: var(--t-title);
+    letter-spacing: 0.1em;
+    padding-left: 0.1em;
+  }
+  /* 상호가 작아진 만큼 마크도 같이 내려옵니다 — 마크가 글자보다 크면 로고가
+     아니라 마크 옆에 글자가 붙어 있는 것으로 보입니다. */
+  .topbar__brand svg {
+    width: 24px;
+    height: 24px;
   }
   .marks-button {
     padding: 0 8px;
@@ -1454,37 +1987,51 @@ a:focus-visible,
   }
   .search-panel {
     top: 80px;
-    padding-block: 14px 12px;
+    padding-block: 10px 6px;
   }
-  .search-panel label {
+  /* 검색을 펴면 확대·축소 단추는 물러납니다. 좁은 화면에서 종이가 펴진 동안에는
+     지도를 만지는 게 아니라 고르는 중입니다. */
+  .app-shell[data-search-open="true"] .map__tools {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* 도감은 숫자만 남으면 그게 무엇의 수인지 알 수 없습니다. 좁은 화면에서는
+     아이콘 하나로 둡니다. `.marks-button strong` 이 더 구체적이라 같이 적습니다. */
+  .marks-button strong.marks-button__count {
     display: none;
+  }
+  /* 손바닥만 한 종이에 장식 줄까지 얹으면 정작 칠 자리가 밀립니다.
+     걸린 곳 수도 목록이 바로 밑에 있어 굳이 세어 줄 필요가 없습니다. */
+  .search-panel__head {
+    display: none;
+  }
+  .search-field {
+    margin-top: 0;
   }
   .search {
     font-size: var(--t-body);
   }
 
-  /* 하단 시트. 우측 패널이 아니라 손이 닿는 자리로 내려옵니다. */
+  /* 시트. 우측 패널이 아니라 손이 닿는 자리로 내려오되, 위로는 상단 바 바로
+     밑까지 올라섭니다 — 영수증을 편 동안에는 그게 화면입니다. 지도 위에 떠
+     있던 확대·축소 연장도 이 종이가 덮어 가립니다(z-index 25 대 11). */
   .dock {
-    --dock-top: auto;
-    top: auto;
+    --dock-top: 70px; /* .topbar 의 좁은 화면 높이와 같은 값 */
+    top: var(--dock-top);
     right: 0;
     bottom: 0;
     width: 100%;
-    max-height: 68svh;
-    padding-top: 16px;
-    filter: drop-shadow(0 -14px 26px var(--shadow));
+    max-height: none;
+    box-shadow: 0 -14px 26px var(--shadow);
   }
-  /* 모바일에서는 처음부터 시트 자리에서 프린트되고, 이후엔 끌기만 자리를 바꿉니다. */
-  .dock.is-center,
-  .dock.is-docked {
-    transform: translateY(var(--sheet-y, 0));
-    transition: transform 320ms var(--ease-paper);
+  /* 종이가 시트를 가득 채웁니다. 내용이 짧다고 아래로 지도가 비쳐 보이면
+     "덮은 화면"이 아니라 "떠 있는 쪽지"가 됩니다. */
+  .dock__scroll {
+    flex: 1 1 auto;
   }
-  .dock.is-peek {
-    --sheet-y: 42%;
-  }
-  .dock.is-dragging {
-    transition: none; /* 손가락을 따라와야 합니다 */
+  .dock__scroll > .receipt,
+  .dock__scroll > .dock__pair {
+    min-height: 100%;
   }
   .dock.has-preview {
     width: 100%;
@@ -1496,33 +2043,29 @@ a:focus-visible,
     display: none;
   }
 
-  .sheet-handle {
+  /* 내려 읽다가 닫으려고 도로 올라갈 일이 없어야 합니다. 상호·주소·연장이
+     종이 맨 위에 붙어 따라오고, 밑으로는 사진부터 흐릅니다. 좌우로는 종이
+     안쪽 여백만큼 넓혀 덮습니다 — 안 그러면 글이 옆으로 비쳐 지나갑니다. */
+  .receipt__top {
     position: sticky;
     top: 0;
-    z-index: 2;
-    display: block;
-    width: 100%;
-    height: 22px;
-    padding: 0;
-    margin: 0 auto 6px;
-    border: 0;
-    background: transparent;
-    cursor: grab;
-    touch-action: none; /* 끄는 동안 페이지가 같이 스크롤되지 않게 */
+    z-index: 3;
+    margin: calc(var(--paper-pad) * -1) calc(var(--paper-pad) * -1) 0;
+    padding: var(--paper-pad) var(--paper-pad) 14px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
   }
-  .sheet-handle::before {
-    content: "";
-    display: block;
-    width: 46px;
-    height: 5px;
-    margin: 0 auto;
-    border-radius: 3px;
-    background: var(--ink-faint);
-    /* 손잡이가 지도 위에 떠 있으므로 뒤에 책상색을 깔아야 보입니다. */
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--desk) 78%, transparent);
+  /* 연장의 기준은 이 덩어리의 안쪽 상자가 아니라 바깥 테두리입니다 — 넓힌
+     만큼 도로 들여놓지 않으면 종이 밖으로 밀려 잘립니다. */
+  .receipt__top .receipt__tools {
+    top: var(--paper-pad);
+    right: var(--paper-pad);
   }
-  .dock.is-dragging .sheet-handle {
-    cursor: grabbing;
+  /* 스탬프 판이 화면의 절반을 먹고 있었습니다. 칸 수와 연장은 남기고, 그 아래
+     한 줄(협력업체 수·마지막 기록)은 접습니다 — 목록이 바로 밑에 있어 세어
+     주지 않아도 알 수 있는 것들입니다. */
+  .codex__board-lines {
+    display: none;
   }
   .receipt__actions {
     grid-template-columns: 1fr;
@@ -1531,14 +2074,26 @@ a:focus-visible,
   .map-marker__name {
     display: none;
   }
-  .map-status,
+  /* 축척 막대는 뺍니다 — 좁은 화면에서 "이 길이가 2km"라는 정보를 실제로 재
+     보는 사람은 없고, 같은 자리에 앉을 것이 하나 더 있습니다. 지금 보고 있는
+     동네 이름은 남깁니다. 확대해 들어갈수록 지도에서 사라지는 것이 지명이라,
+     좁은 화면일수록 오히려 더 필요한 글입니다. */
   .map__scale {
     display: none;
   }
-  .dock-tab {
+  .map__here {
+    left: 14px;
     bottom: 22px;
+    max-width: calc(100vw - 28px);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .stage-veil {
+  /* 치워 둔 띠 위로 — 오른쪽 조작기와 같은 높이로 올라섭니다. */
+  .app-shell[data-phase="peek"] .map__here { bottom: 74px; }
+  /* 좁은 화면에는 "다시 보기" 탭을 두지 않습니다. 손이 닿는 자리를 늘 한 줄
+     차지하면서, 정작 하는 일은 지도를 덮는 것뿐이었습니다. 닫은 영수증은
+     핀을 다시 치거나 뒤로가기로 돌아옵니다. */
+  .dock-tab {
     display: none;
   }
 }
@@ -1574,7 +2129,8 @@ a:focus-visible,
 /* 묵은 종이(#241E16) 위에서는 캐릭터의 짙은 외곽선이 배경에 먹혀 모자와 몸통
    실루엣이 사라집니다. 얇은 중간톤 테두리로 형태만 되살립니다 — 밝은 테두리를
    쓰면 종이에 인쇄된 그림이 아니라 오려 붙인 스티커로 보입니다. */
-[data-theme="dark"] .bibin img {
+[data-theme="warm"] .bibin img,
+[data-theme="cool"] .bibin img {
   filter: drop-shadow(1.5px 0 0 var(--ink-faint)) drop-shadow(-1.5px 0 0 var(--ink-faint))
     drop-shadow(0 1.5px 0 var(--ink-faint)) drop-shadow(0 -1.5px 0 var(--ink-faint));
 }
@@ -1600,47 +2156,40 @@ a:focus-visible,
   }
 }
 
-/* ── 카페 사진 자리 ── */
+/* ── 카페 사진 자리 (§03) ──
+   준비 중인 사진은 빈 상자가 아니라 빗금입니다. 인쇄 교정지에서 사진이 아직
+   안 들어온 자리를 표시하던 방식이고, 캡션이 그 위에 종이색으로 앉습니다. */
 .receipt__photo {
   position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 16 / 9;
-  margin: 16px 0 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* 발행 정보와 구분선이 비운 자리를 사진이 가져갑니다 — 카페를 고르는 건
+     결국 이 한 장이라, 세로를 가장 넓게 씁니다.
+     비율(aspect-ratio)로 잡으면 max-height 가 높이를 자를 때 폭까지 같이
+     줄어들어 오른쪽이 남습니다. 높이를 직접 적어 폭을 온전히 씁니다. */
+  height: 240px;
+  margin: 14px 0 0;
+  padding-bottom: 9px;
   overflow: hidden;
   border: 1px solid var(--rule);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--bean) 7%, transparent), transparent 55%), var(--paper-edge);
+  background: var(--hatch);
 }
-.receipt__photo::before,
-.receipt__photo::after {
-  content: "";
-  position: absolute;
-  width: 32px;
-  height: 32px;
-  border-color: color-mix(in srgb, var(--ink-faint) 55%, transparent);
-  pointer-events: none;
-}
-.receipt__photo::before { inset: 7px auto auto 7px; border-top: 1px solid; border-left: 1px solid; }
-.receipt__photo::after { inset: auto 7px 7px auto; border-right: 1px solid; border-bottom: 1px solid; }
-.receipt__photo img { width: min(42%, 132px); height: auto; filter: drop-shadow(0 8px 12px var(--shadow)); }
 .receipt__photo figcaption {
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
-  display: grid;
-  justify-items: end;
+  padding: 4px 7px;
+  background: var(--paper);
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  line-height: 1.25;
-  letter-spacing: 0.08em;
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
+  line-height: 1;
+  white-space: nowrap;
 }
-.receipt__photo figcaption span { font-size: 9px; }
-.receipt__photo figcaption small { font-size: 8px; letter-spacing: 0; }
-/* ── 다중 도감 ── */
+/* ── 다중 도감 — §08 TAG · CHIP 을 그대로 씁니다. 고른 탭은 잉크로 채웁니다. ── */
 .codex__collections {
   display: flex;
-  gap: 7px;
-  margin: 14px -2px 12px;
+  gap: 6px;
+  margin: 14px -2px 4px;
   padding: 2px 2px 6px;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -1650,88 +2199,116 @@ a:focus-visible,
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--codex-color) 42%, var(--rule));
-  border-radius: 5px 5px 2px 2px;
-  background: color-mix(in srgb, var(--paper) 86%, var(--codex-color) 14%);
-  color: var(--ink-soft);
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
   font-size: var(--t-micro);
+  letter-spacing: 0.06em;
   cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
+.codex-tab:hover { border-color: var(--ink-faint); }
+/* 표지 색은 탭 전체를 물들이지 않고 사각 표시 하나로만 나타납니다. */
+.codex-tab svg { color: var(--codex-color); }
 .codex-tab i {
-  min-width: 18px;
-  padding: 1px 5px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--codex-color) 15%, transparent);
-  color: var(--codex-color);
+  min-width: 17px;
+  padding: 1px 3px;
+  border: 1px solid currentColor;
   font-family: var(--font-mono);
   font-style: normal;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 .codex-tab.is-active {
-  border-color: var(--codex-color);
-  box-shadow: inset 0 -3px var(--codex-color);
-  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--desk);
 }
-.codex-tab.is-active svg { color: var(--codex-color); }
-.codex-tab--add { border-style: dashed; background: transparent; color: var(--ink-faint); }
+.codex-tab.is-active svg { color: var(--desk); }
+.codex-tab--add { border-style: dashed; }
 
-.codex-maker { display: grid; gap: 15px; padding: 8px 0 4px; }
-.codex-maker label, .codex-maker fieldset { display: grid; gap: 7px; border: 0; color: var(--ink-soft); font-size: var(--t-micro); }
-.codex-maker legend { margin-bottom: 7px; }
+.codex-maker { display: grid; gap: 15px; padding: 12px 0 4px; }
+.codex-maker label, .codex-maker fieldset { display: grid; gap: 8px; border: 0; padding: 0; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--t-micro); letter-spacing: var(--ls-label); }
+.codex-maker legend { margin-bottom: 8px; padding: 0; }
+/* §08 INPUT — 상자가 아니라 기입선 한 줄. */
 .codex-maker input {
   width: 100%;
-  padding: 10px 11px;
-  border: 1px solid var(--rule);
-  background: var(--paper-edge);
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
   color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--t-body);
+  letter-spacing: 0;
   outline: none;
 }
-.codex-maker input:focus { border-color: var(--bean); }
+.codex-maker input:focus { border-bottom-color: var(--accent); }
 .codex-maker__choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .codex-color, .codex-icon-choice {
-  width: 34px;
-  height: 34px;
-  border: 2px solid transparent;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--rule);
   cursor: pointer;
 }
-.codex-color.is-selected { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
-.codex-icon-choice { display: grid; place-items: center; border-radius: 5px; background: var(--paper-edge); color: var(--ink-soft); }
-.codex-icon-choice.is-selected { border-color: var(--bean); background: color-mix(in srgb, var(--bean) 12%, var(--paper)); color: var(--bean); }
-.codex__slip.is-active { box-shadow: inset 3px 0 var(--codex-color), 0 1px 0 var(--rule); }
-.codex-delete { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; border: 0; background: transparent; color: var(--ink-faint); font-size: var(--t-micro); cursor: pointer; }
-.codex-delete:hover { color: var(--stamp); }
+.codex-color.is-selected { border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--paper); }
+.codex-icon-choice { display: grid; place-items: center; background: transparent; color: var(--ink-faint); }
+.codex-icon-choice.is-selected { border-color: var(--ink); background: var(--ink); color: var(--desk); }
 
-.receipt__save-panel {
+/* 저장은 종이 본문에 끼어들지 않습니다. 연장 아래로 펴졌다가 접히는 쪽지입니다 —
+   고르는 동안에도 카페 이름과 사진이 그대로 보여야 합니다. */
+.save-drop {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 8px);
+  right: 0;
   display: grid;
-  gap: 9px;
-  margin-top: 10px;
-  padding: 12px;
-  border: 1px solid var(--rule);
-  background: var(--paper-edge);
-}
-.receipt__save-panel > p { color: var(--ink-soft); font-size: var(--t-micro); }
-.receipt__collection-list { display: grid; gap: 6px; }
-.receipt__collection-list button {
-  --codex-color: var(--bean);
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 6px 9px;
+  gap: 10px;
+  width: max-content;
+  min-width: 236px;
+  max-width: min(300px, 74vw);
+  padding: 13px 12px;
   border: 1px solid var(--rule);
   background: var(--paper);
-  color: var(--ink-soft);
+  box-shadow: var(--lift-2);
+  animation: drop-in 180ms var(--ease-paper) both;
+}
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.receipt__collection-list { display: grid; gap: 6px; }
+.receipt__collection-list button {
+  --codex-color: var(--accent);
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
   text-align: left;
   cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
 }
+.receipt__collection-list button:hover { border-color: var(--ink-faint); }
 .receipt__collection-list button.is-selected { border-color: var(--codex-color); box-shadow: inset 3px 0 var(--codex-color); color: var(--ink); }
-.receipt__collection-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: color-mix(in srgb, var(--codex-color) 14%, transparent); color: var(--codex-color); }
-.receipt__collection-list i { color: var(--codex-color); font-size: var(--t-micro); font-style: normal; }
+.receipt__collection-icon { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid var(--codex-color); color: var(--codex-color); }
+.receipt__collection-list b { font-weight: 600; }
+.receipt__collection-list i { color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--t-micro); font-style: normal; letter-spacing: 0.1em; }
+.receipt__collection-list button.is-selected i { color: var(--codex-color); }
 
 /* 카페의 등급 대신 사용자의 저장 여부만 지도에서 강조합니다. */
 .map-marker__dot {
@@ -1761,24 +2338,111 @@ a:focus-visible,
 /* ── 지도 확대와 카페 아이콘 ── */
 .map { cursor: grab; touch-action: none; }
 .map.is-dragging { cursor: grabbing; }
-.map__viewport {
-  --map-zoom: 1;
-  --map-pan-x: 0px;
-  --map-pan-y: 0px;
-  --map-inverse: 1;
+/* 지형 겹과 핀 겹.
+   확대는 CSS 변형이 아니라 SVG 의 viewBox 와 핀의 좌표가 맡습니다. transform:
+   scale() 로 키우면 브라우저는 이미 그려 둔 그림을 늘리고, 아이패드·모바일
+   사파리는 겹을 훨씬 적극적으로 이미지로 구워 두어서 배율을 올릴수록 경계선도
+   글자도 뭉갭니다. 늘려 붙이는 단계를 아예 없애야 어느 기기에서든 선이 삽니다. */
+/* 세 겹을 함께 옮기는 상자. 손짓이 이어지는 동안 여기에만 transform 이 붙습니다.
+   기준점은 왼쪽 위입니다 — MapCanvas 의 셈이 화면 좌표(0,0)를 기준으로 세운 식이라,
+   가운데를 기준으로 두면 늘릴 때마다 지도가 어긋납니다. */
+.map__pan {
   position: absolute;
   inset: 0;
-  transform: translate3d(var(--map-pan-x), var(--map-pan-y), 0) scale(var(--map-zoom));
   transform-origin: 0 0;
-  transition: transform 100ms cubic-bezier(.2, .75, .25, 1);
-  will-change: transform;
 }
-.map.is-dragging .map__viewport { transition: none; }
-.map__places span {
-  transform: translate(-50%, -50%) scale(var(--map-inverse));
-  transform-origin: center;
+/* 화면 밖으로 사방 25% 씩 더 그려 둡니다. 그 여유가 있어야 끄는 동안 창을
+   고쳐 쓰지 않고 겹을 밀기만 할 수 있습니다 — MapCanvas 의 OVERSCAN 과 같은 값. */
+.map__layer {
+  position: absolute;
+  inset: -25%;
 }
-.map-marker { transform: translate(-50%, -50%) scale(var(--marker-scale, 1)); }
+.map__pins {
+  z-index: 4;
+}
+/* 겹 자체는 지도 끌기를 막지 않습니다. 실제로 눌리는 건 마커뿐입니다. */
+.map__pins,
+.map__places,
+.map__regions {
+  pointer-events: none;
+}
+/* ── 마우스가 얹힌 시·구 ──
+   어느 동네인지 보이면 되는 것이지 여기를 보라는 게 아니라서, 채움은 종이가
+   한 겹 얹힌 정도로만 둡니다. 선도 실선 한 줄이면 충분합니다 — 지형의 점선
+   경계 위에 겹치는 것이라 같은 점선을 쓰면 두 줄이 어긋나 떨립니다. */
+.map__regions {
+  z-index: 3;
+}
+.map__regions svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.map__regions path {
+  fill: color-mix(in srgb, var(--bean) 8%, transparent);
+  stroke: color-mix(in srgb, var(--bean) 62%, transparent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  animation: region-in 160ms ease-out;
+}
+@keyframes region-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* ── 지금 보고 있는 칸 ──
+   채움 없이 선만 굵게 긋습니다. 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려지는데,
+   여기서 말하려는 건 "이 안이 다르다"가 아니라 "여기까지가 이 동네다"입니다.
+   짚어 본 칸과 겹칠 때 자연스럽게 포개지도록 한 겹 밑에 둡니다. */
+.map__regions--here {
+  z-index: 2;
+}
+.map__regions--here path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink) 46%, transparent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+/* 이름표는 배율을 되돌려 늘 같은 크기로 섭니다 — 마커·지명과 같은 규칙입니다. */
+.region-label {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 8px 5px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  transform: translate(-50%, -50%);
+  animation: region-in 160ms ease-out;
+  white-space: nowrap;
+}
+.region-label b {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.region-label i {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  color: var(--ink-faint);
+}
+/* 끄는 동안에는 짚은 동네가 커서를 따라 깜박입니다. 지도를 옮기는 중이지 고르는
+   중이 아니라서, 아예 내려 둡니다. 지금 보고 있는 칸의 테두리는 남깁니다 — 그건
+   커서가 아니라 창을 따라가고, 창은 손을 뗀 뒤에나 다시 셈하므로 안 떨립니다. */
+.map.is-dragging .map__regions:not(.map__regions--here) {
+  display: none;
+}
+.map-marker {
+  pointer-events: auto;
+}
+/* 이름표와 마커는 확대해도 같은 크기로 섭니다. 겹이 안 커지니 되돌릴 것도
+   없습니다 — 자리만 옮겨 놓으면 글자는 늘 제 크기로 그려집니다. */
+.map__places span { transform: translate(-50%, -50%); }
+.map-marker { transform: translate(-50%, -50%); }
 .map-marker--plain { width: 34px; height: 34px; }
 .map-marker__dot {
   position: relative;
@@ -1787,40 +2451,17 @@ a:focus-visible,
   border: 1.5px solid color-mix(in srgb, var(--ink-soft) 76%, var(--paper));
   background: color-mix(in srgb, var(--paper) 88%, transparent);
   color: var(--ink-soft);
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow) 65%, transparent);
+  /* 흐린 그림자는 핀 수만큼 곱해집니다. 테두리 한 줄이 이미 지도에서 떼어
+     주고 있으므로, 그림자는 바닥에 닿는 만큼만 남깁니다. */
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow) 45%, transparent);
 }
 .map-marker--plain:hover .map-marker__dot { background: var(--paper); color: var(--ink); }
 
-/* 협력업체 — 도장은 걷어냈지만 지도에서의 강조는 남습니다 (00 §2 Q4 "뱃지 정도",
-   03 §5.2 "지도 마커"). 인주 대신 도형을 뒤집습니다: 일반 카페가 종이 바탕에
-   잉크 아이콘이라면, 협력업체는 갈색 바탕에 종이색 아이콘. 같은 조형의 음영만
-   뒤집은 것이라 도장을 되살리지 않고도 한눈에 갈립니다. */
-.map-marker.is-partner { z-index: 6; }
-.map-marker.is-partner .map-marker__dot {
-  width: 26px;
-  height: 26px;
-  border-color: var(--bean);
-  background: var(--bean);
-  color: var(--paper);
-}
-.map-marker.is-partner:hover .map-marker__dot {
-  background: color-mix(in srgb, var(--bean) 82%, var(--paper));
-}
-.map-marker.is-partner .map-marker__name { color: var(--bean); }
+/* 지도에서 협력업체를 따로 강조하지 않습니다. 여든 곳 중 열여섯이 갈색으로
+   도드라지면 지도가 광고판이 되고, 정작 내가 뜯어 둔 곳이 그 사이에 묻힙니다.
+   등급은 영수증의 원두 마크가 말합니다. */
 
-/* 이름표는 기본적으로 접어 둡니다. 협력업체가 71곳이 되면 이름 71개가 겹쳐
-   아무것도 안 읽힙니다. 확대했거나, 가리켰거나, 열어 둔 것만 이름을 폅니다. */
-.map-marker.is-partner:not(.is-saved) .map-marker__name {
-  opacity: 0;
-  transition: opacity 140ms ease;
-  pointer-events: none;
-}
-.map.is-zoomed .map-marker.is-partner .map-marker__name,
-.map-marker.is-partner:hover .map-marker__name,
-.map-marker.is-partner:focus-visible .map-marker__name,
-.map-marker.is-partner.is-active .map-marker__name {
-  opacity: 1;
-}
+/* 이름표는 담아 둔 곳에만 답니다. 나머지는 점으로 서서 배경이 됩니다. */
 /* 가리킨 마커의 이름이 옆 마커에 가리지 않도록 잠깐 위로 올립니다. */
 .map-marker:hover,
 .map-marker.is-active {
@@ -1851,11 +2492,18 @@ a:focus-visible,
   to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
-.map__zoom {
+/* 지도를 다루는 것들은 한자리에 모입니다 — 축척 위, 확대·축소 아래. */
+.map__tools {
   position: absolute;
   z-index: 11;
-  top: 88px;
   right: var(--rail);
+  bottom: 26px;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.map__zoom {
   display: grid;
   grid-template-columns: 34px 48px 34px 30px;
   align-items: center;
@@ -1887,7 +2535,115 @@ a:focus-visible,
   .map-marker.is-active .map-marker__dot::after { animation: none; }
 }
 @media (max-width: 767px) {
-  .map__zoom { top: 76px; right: 14px; grid-template-columns: 38px 46px 38px; }
+  /* 오른쪽 아래. 엄지가 가장 쉽게 닿는 자리이고, 영수증을 편 동안에는 종이가
+     화면을 통째로 덮으므로 아래를 비워 둘 이유도 없습니다. */
+  .map__tools { right: 14px; bottom: 22px; }
+  /* 치워 둔 띠 위로 올라섭니다 — 아래끝에서 둘이 겹치면 어느 쪽을 눌러도
+     엉뚱한 것이 눌립니다. */
+  .app-shell[data-phase="peek"] .map__tools { bottom: 74px; }
+
+  /*
+   * 밀어 치워 둔 자리. 종이는 이름 한 줄만 남기고 화면 밖으로 내려가 있습니다.
+   * 아주 닫지 않는 건, 지도에서 자리를 확인하고 곧바로 되돌아오는 일이 잦기
+   * 때문입니다 — 그때마다 핀을 다시 찾아 눌러야 하면 치워 둔 게 아니라
+   * 잃어버린 것이 됩니다.
+   */
+  .dock.is-peek {
+    transform: translate3d(0, calc(100% - 44px), 0);
+    transition: transform 200ms var(--ease-paper);
+  }
+  .dock.is-peek .dock__scroll {
+    /* 띠만 남은 동안에는 안쪽이 흐르지 않습니다. 위로 미는 손짓이 스크롤로
+       먹히면 종이가 안 올라옵니다. */
+    overflow: hidden;
+  }
+  .dock__peek {
+    display: flex;
+    position: absolute;
+    z-index: 4;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 44px; /* useSheetPull 의 PEEK_HEIGHT 와 같은 값 */
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 var(--rail);
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+  }
+  .dock.is-peek .dock__peek {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .dock__peek span {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-align: left;
+    font-family: var(--font-display);
+    font-size: var(--t-label);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dock__peek svg {
+    flex: none;
+    color: var(--ink-faint);
+  }
+
+  /*
+   * 내린 직후에만 잠깐 뜨는 안내.
+   *
+   * 상시 띄워 두면 두 번째부터는 읽지 않는 글이 자리만 차지합니다. 띠가 생기는
+   * 순간(.is-peek) 한 번 돌고 끝나는 애니메이션이라, 켜고 끄는 상태를 따로
+   * 들고 있지 않아도 어긋나지 않습니다.
+   *
+   * 자리는 띠 바로 위 왼편입니다. 가운데에 두면 오른쪽 아래 확대 단추와 겹칩니다.
+   */
+  .dock__hint {
+    display: block;
+    position: absolute;
+    z-index: 26; /* 도크(25)보다 위 — 띠 바로 위에 얹힙니다 */
+    bottom: 54px; /* 띠 44px + 10px */
+    left: var(--rail);
+    padding: 5px 10px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    font-style: normal;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .app-shell[data-phase="peek"] .dock__hint {
+    animation: hint-say 1900ms var(--ease-paper) both;
+  }
+  @keyframes hint-say {
+    0% {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    16%,
+    64% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(0);
+    }
+  }
+  .map__zoom { grid-template-columns: 38px 46px 38px; }
   .map__zoom button { height: 38px; }
   .map__zoom-reset { display: none !important; }
 }

@@ -12,7 +12,8 @@ const ICONS: Record<CodexIconId, LucideIcon> = {
   compass: Compass,
 };
 
-export function CodexIcon({ name, size = 18 }: { name: CodexIconId; size?: number }) {
+/** 굵기는 적지 않습니다 — app/icons.ts 의 한 값을 layout 이 내려 줍니다. */
+export function CodexIcon({ name, size }: { name: CodexIconId; size?: number }) {
   const Icon = ICONS[name];
-  return <Icon size={size} strokeWidth={2.25} aria-hidden="true" />;
+  return <Icon size={size} aria-hidden="true" />;
 }

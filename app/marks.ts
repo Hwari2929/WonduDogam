@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { cafes } from "./data/cafes";
 
 /**
  * 도감 색.
@@ -38,7 +39,81 @@ export type Mark = { id: string; at: string; note: string; collectionIds: string
 export type CodexState = { collections: Collection[]; marks: Mark[] };
 
 export const MARKS_KEY = "wondudogam.marks";
+
+/**
+ * 도감 한 권은 열 곳까지입니다.
+ *
+ * 무한히 담기는 목록은 도감이 아니라 즐겨찾기입니다. 열 칸으로 끊어 두면
+ * 한 칸을 채울 때마다 무게가 생기고, 다 차면 새 도감을 여는 쪽이 자연스러워집니다.
+ * 관리판의 5×2 격자가 곧 이 열 칸입니다.
+ */
+export const COLLECTION_LIMIT = 10;
+
+/** 이 도감이 지금 몇 칸을 쓰고 있는지. 목록에 없는 카페도 칸은 차지합니다. */
+export function countInCollection(marks: Mark[], collectionId: string): number {
+  return marks.filter((mark) => mark.collectionIds.includes(collectionId)).length;
+}
 export const DEFAULT_COLLECTION_ID = "default";
+
+/* ── 큐레이터 픽 ────────────────────────────────────────────────────
+ * 매일 열 곳을 대신 골라 주는 도감입니다.
+ *
+ * 저장소에 쓰지 않고 날짜에서 계산해 냅니다. 그래야 "매일 바뀌고 지울 수 없다"가
+ * 규칙이 아니라 성질이 됩니다 — 지울 대상이 아예 없고, 날이 바뀌면 저절로 새 열
+ * 곳이 됩니다. 저장했다면 날마다 죽은 기록이 쌓이고 사용자 메모와 뒤엉킵니다.
+ */
+export const CURATOR_COLLECTION_ID = "curator";
+export const CURATOR_PARTNER_PICKS = 4;
+
+export const CURATOR_COLLECTION: Collection = {
+  id: CURATOR_COLLECTION_ID,
+  name: "큐레이터 픽",
+  color: "clay",
+  icon: "star",
+  createdAt: "",
+};
+
+/** 날짜만 있으면 누가 보든 같은 열 곳이 나오는 난수. */
+function seededRandom(seed: string) {
+  let state = [...seed].reduce((total, character) => (total * 31 + character.charCodeAt(0)) >>> 0, 7) || 1;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function shuffled<T>(items: readonly T[], random: () => number): T[] {
+  const list = [...items];
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+/**
+ * 협력업체에서 넷, 나머지는 아직 뽑히지 않은 곳에서 여섯.
+ * 사용자가 무엇을 담아 두었는지는 보지 않습니다 — 오늘의 픽은 누구에게나 같습니다.
+ */
+export function curatorPicks(dateLabel: string): string[] {
+  const random = seededRandom(dateLabel);
+  const partners = shuffled(cafes.filter((cafe) => cafe.partner), random).slice(0, CURATOR_PARTNER_PICKS);
+  const taken = new Set(partners.map((cafe) => cafe.id));
+  const rest = shuffled(cafes.filter((cafe) => !taken.has(cafe.id)), random)
+    .slice(0, COLLECTION_LIMIT - partners.length);
+  return [...partners, ...rest].map((cafe) => cafe.id);
+}
+
+/** 오늘의 픽을 저장된 기록에 겹쳐 놓습니다. 같은 카페는 한 장으로 합칩니다. */
+export function withCuratorPicks(marks: Mark[], dateLabel: string): Mark[] {
+  const merged = marks.map((mark) => ({ ...mark }));
+  for (const id of curatorPicks(dateLabel)) {
+    const existing = merged.find((mark) => mark.id === id);
+    if (existing) existing.collectionIds = [...existing.collectionIds, CURATOR_COLLECTION_ID];
+    else merged.push({ id, at: dateLabel, note: "", collectionIds: [CURATOR_COLLECTION_ID] });
+  }
+  return merged;
+}
 const CHANGE_EVENT = "wondudogam:marks";
 // 기본 도감은 브랜드 갈색으로. 모두의 첫 도감이 붉은색이면 화면에서 인주가
 // 가장 흔한 색이 되어 도장이 특별해지지 않습니다.
@@ -117,23 +192,28 @@ export function removeCollection(id: string): boolean {
   return true;
 }
 
-export function setCafeInCollection(id: string, collectionId: string, at: string, included: boolean): boolean {
+/** 넣었는지, 뺐는지, 자리가 없어 못 넣었는지 — 부르는 쪽은 이 셋을 구분해야 합니다. */
+export type SaveResult = "added" | "removed" | "full" | "unknown-codex";
+
+export function setCafeInCollection(id: string, collectionId: string, at: string, included: boolean): SaveResult {
   const current = readState();
-  if (!current.collections.some((entry) => entry.id === collectionId)) return false;
+  if (!current.collections.some((entry) => entry.id === collectionId)) return "unknown-codex";
   const existing = current.marks.find((mark) => mark.id === id);
   if (included) {
+    if (existing?.collectionIds.includes(collectionId)) return "added";
+    // 열한 번째는 들어가지 않습니다. 조용히 실패하면 저장한 줄 알고 떠납니다.
+    if (countInCollection(current.marks, collectionId) >= COLLECTION_LIMIT) return "full";
     if (existing) {
-      if (existing.collectionIds.includes(collectionId)) return true;
       write({ ...current, marks: current.marks.map((mark) => mark.id === id ? { ...mark, collectionIds: [...mark.collectionIds, collectionId] } : mark) });
     } else {
       write({ ...current, marks: [...current.marks, { id, at, note: "", collectionIds: [collectionId] }] });
     }
-    return true;
+    return "added";
   }
-  if (!existing) return false;
+  if (!existing) return "removed";
   const nextIds = existing.collectionIds.filter((value) => value !== collectionId);
   write({ ...current, marks: nextIds.length ? current.marks.map((mark) => mark.id === id ? { ...mark, collectionIds: nextIds } : mark) : current.marks.filter((mark) => mark.id !== id) });
-  return false;
+  return "removed";
 }
 
 export function removeMark(id: string, collectionId?: string) {
@@ -147,18 +227,30 @@ export function setNote(id: string, note: string) {
   write({ ...current, marks: current.marks.map((mark) => mark.id === id ? { ...mark, note: note.slice(0, 120) } : mark) });
 }
 
-export function mergeMarks(incoming: Mark[], collectionId = readState().collections[0].id): number {
+/**
+ * 받은 코드를 지금 도감에 합칩니다. 남은 칸만큼만 들어가고, 넘친 수는 돌려줍니다 —
+ * 열 곳 한도를 여기서만 비켜 가면 관리판의 칸 수가 거짓말을 하게 됩니다.
+ */
+export function mergeMarks(incoming: Mark[], collectionId = readState().collections[0].id): { added: number; skipped: number } {
   const current = readState();
   const knownCollections = new Set(current.collections.map((entry) => entry.id));
   let added = 0;
+  let skipped = 0;
   let marks = [...current.marks];
   for (const item of incoming) {
     const targetIds = (item.collectionIds ?? []).filter((id) => knownCollections.has(id));
-    const ids = targetIds.length ? targetIds : [collectionId];
+    // 저장되지 않는 도감(큐레이터 픽)으로는 아무것도 들어갈 수 없습니다.
+    const target = knownCollections.has(collectionId) ? collectionId : current.collections[0].id;
+    const ids = targetIds.length ? targetIds : [target];
     const existing = marks.find((mark) => mark.id === item.id);
-    if (!existing) { marks.push({ id: item.id, at: item.at ?? "", note: item.note ?? "", collectionIds: ids }); added += 1; }
-    else { const merged = [...new Set([...existing.collectionIds, ...ids])]; marks = marks.map((mark) => mark.id === item.id ? { ...mark, collectionIds: merged } : mark); }
+    // 이미 가진 곳은 칸을 새로 쓰지 않으므로 한도와 무관합니다.
+    const wanted = ids.filter((id) => !existing?.collectionIds.includes(id));
+    const room = wanted.filter((id) => countInCollection(marks, id) < COLLECTION_LIMIT);
+    if (room.length < wanted.length) skipped += 1;
+    if (!room.length) continue;
+    if (!existing) { marks.push({ id: item.id, at: item.at ?? "", note: item.note ?? "", collectionIds: room }); added += 1; }
+    else { marks = marks.map((mark) => mark.id === item.id ? { ...mark, collectionIds: [...new Set([...mark.collectionIds, ...room])] } : mark); }
   }
   if (incoming.length) write({ ...current, marks });
-  return added;
+  return { added, skipped };
 }
