@@ -694,8 +694,8 @@ test("목업 카페는 천 곳이고 협력업체는 다섯 중 하나다", asyn
 });
 
 test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리만 남는다", async () => {
-  const [canvas, page] = await Promise.all(
-    ["../app/components/MapCanvas.tsx", "../app/page.tsx"]
+  const [canvas, page, css] = await Promise.all(
+    ["../app/components/MapCanvas.tsx", "../app/page.tsx", "../app/globals.css"]
       .map((path) => readFile(new URL(path, import.meta.url), "utf8")),
   );
   // 좁혀 들어가는 건 그 동네의 카페를 한눈에 보려는 것인데 화면이 도리어 비면
@@ -705,9 +705,33 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /const REVEAL_POWER = 1\.8;/);
   assert.match(canvas, /clamp\(\(view\.zoom \/ REVEAL_ALL\) \*\* REVEAL_POWER, 0, 1\)/);
   assert.doesNotMatch(canvas, /REVEAL_FROM/);
-  assert.match(canvas, /if \(savedMarkers\[cafe\.id\] \|\| cafe\.id === activeId \|\| hoveredIds\?\.has\(cafe\.id\)\)/);
-  assert.match(canvas, /if \(\(revealOrder\.get\(cafe\.id\) \?\? 0\) >= revealed\) return false;/);
-  assert.match(canvas, /\{shownCafes\.map\(\(cafe\) => \{/);
+  assert.match(canvas, /\{shownCafes\.map\(\(\{ cafe, hidden \}\) => \{/);
+
+  // 겹쳐 선 핀은 솎아 냅니다. 핀 지름이 30px 이니 둘 사이에 핀 하나가 들어갈
+  // 만큼(60px) 떨어져야 둘 다 섭니다.
+  assert.match(canvas, /const MIN_GAP = 60;/);
+  assert.match(css, /\.map-marker--plain \{\s*\n\s*width: 30px;/);
+  assert.match(canvas, /if \(Math\.hypot\(pin\.px - px, pin\.py - py\) < MIN_GAP\) return pin;/);
+  // 이웃한 아홉 칸만 봅니다 — 전부와 재면 핀 수의 제곱이 됩니다.
+  assert.match(canvas, /const cellKey = \(px: number, py: number\) => `\$\{Math\.floor\(px \/ MIN_GAP\)\},\$\{Math\.floor\(py \/ MIN_GAP\)\}`;/);
+  assert.match(canvas, /for \(let ix = cx - 1; ix <= cx \+ 1; ix \+= 1\)/);
+  // 자리를 잡는 차례: 0 열어 둔 곳 · 1 담긴 곳 · 2 얹은 동네 · 3 나머지.
+  assert.match(canvas, /const tier = cafe\.id === activeId \? 0\s*\n\s*: savedMarkers\[cafe\.id\] \? 1\s*\n\s*: hoveredIds\?\.has\(cafe\.id\) \? 2\s*\n\s*: 3;/);
+  assert.match(canvas, /candidates\.sort\(\(a, b\) => a\.tier - b\.tier \|\| a\.rank - b\.rank\);/);
+  // 열어 둔 곳만 간격을 건너뜁니다. 담긴 곳도 얹은 동네도 서로 겹치면 안 됩니다.
+  assert.match(canvas, /const blocker = candidate\.tier === 0 \? null : blockerOf\(candidate\.px, candidate\.py\);/);
+  // 밀려난 만큼 뒷차례로 채웁니다 — 안 채우면 확대할수록 화면이 비던 문제가 돌아옵니다.
+  assert.match(canvas, /const budget = Math\.round\(revealed \* candidates\.filter\(\(one\) => one\.tier === 3\)\.length\);/);
+  assert.match(canvas, /if \(candidate\.tier === 3 && placed >= budget\) break;/);
+  // 무리의 얼굴은 협력업체가 먼저입니다. 앞차례가 잡은 자리는 안 건드리고,
+  // 자리를 물려받은 뒤 다른 핀과 겹치면 안 됩니다.
+  assert.match(canvas, /if \(candidate\.cafe\.partner && candidate\.tier >= blocker\.tier && blocker\.tier > 1/);
+  assert.match(canvas, /&& !blocker\.cafe\.partner && !blockerOf\(candidate\.px, candidate\.py, blocker\)\) \{/);
+  // 가린 수는 대표 핀에 적습니다.
+  assert.match(canvas, /blocker\.hidden \+= 1;/);
+  assert.match(canvas, /<i className="map-marker__more" aria-hidden="true">\+\{hidden > 99 \? 99 : hidden\}<\/i>/);
+  assert.match(canvas, /겹쳐 선 \$\{hidden\}곳을 대표합니다/);
+  assert.match(css, /\.map-marker__more \{[^}]*font-family: var\(--font-mono\);/s);
 
   // 해시값을 그대로 차례로 쓰면 몰린 구간에서 우르르 쏟아집니다. 줄을 세운 뒤
   // 등수를 매겨야 배율이 절반쯤 왔을 때 정확히 절반이 나와 있습니다.
@@ -773,7 +797,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /const CULL_MARGIN = 0\.2;/);
   assert.match(canvas, /function inView\(x: number, y: number\)/);
   assert.match(canvas, /if \(!size\) return true;/);
-  assert.match(canvas, /return inView\(x, y\);/);
+  assert.match(canvas, /if \(!inView\(spot\.x, spot\.y\)\) continue;/);
   assert.match(canvas, /new ResizeObserver/);
 
   // 곱해서 올립니다. 더하기로 올리면 배율이 높을수록 한 번의 체감이 줄어들어,
@@ -1440,6 +1464,8 @@ test("문서가 코드와 같은 값을 적고 있다", async () => {
   assert.ok(spec.includes("**65%**") && spec.includes("**35%**") && spec.includes("**60%**"),
     "이름표 문턱이 명세와 다릅니다");
   assert.ok(spec.includes("150% 아래"), "이름표를 쉬는 배율이 명세와 다릅니다");
+  assert.match(canvas, /const MIN_GAP = 60;/);
+  assert.ok(spec.includes("**중심 사이가 60px**"), "핀 간격이 명세와 다릅니다");
   assert.match(canvas, /const OVERSCAN = 0\.25;/);
   assert.ok(spec.includes("사방 25%"), "겹 여유가 명세와 다릅니다");
   assert.match(canvas, /const FOCUS_ZOOM = 6;/);
