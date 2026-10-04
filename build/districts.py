@@ -22,7 +22,6 @@ import math
 import os
 import sys
 
-import terrain
 
 SIZE = 100.0
 # app/data/geo.ts 의 BOUNDS 와 반드시 같아야 합니다.
@@ -302,6 +301,67 @@ def inside(ring, x, y):
     return hit
 
 
+# ── 격자 → 윤곽 ───────────────────────────────────────────────────────
+# 바다를 그릴 때만 씁니다. 예전에는 지형 생성기(build/terrain.py)에 같이 있었는데,
+# 그쪽이 그리던 강·지천·도로는 실제 데이터가 아니라 손으로 대강 잡은 것이라
+# 걷어 냈고, 여기서 쓰던 두 함수만 옮겨 왔습니다.
+
+def trace_loops(mask, width, height):
+    """참/거짓 격자의 경계를 닫힌 고리들로. 격자 칸 모서리를 따라가므로 계단 모양입니다."""
+    edges = {}
+
+    def add(a, b):
+        edges.setdefault(a, []).append(b)
+
+    for j in range(height):
+        row = mask[j]
+        for i in range(width):
+            if not row[i]:
+                continue
+            # 바깥쪽 이웃과 맞닿은 변만 경계입니다. 방향을 맞춰 넣어야 고리가 이어집니다.
+            if i == 0 or not row[i - 1]:
+                add((i, j + 1), (i, j))
+            if i == width - 1 or not row[i + 1]:
+                add((i + 1, j), (i + 1, j + 1))
+            if j == 0 or not mask[j - 1][i]:
+                add((i, j), (i + 1, j))
+            if j == height - 1 or not mask[j + 1][i]:
+                add((i + 1, j + 1), (i, j + 1))
+
+    loops = []
+    while edges:
+        start = next(iter(edges))
+        loop = [start]
+        node = start
+        while True:
+            outgoing = edges.get(node)
+            if not outgoing:
+                break
+            nxt = outgoing.pop()
+            if not outgoing:
+                del edges[node]
+            if nxt == start:
+                break
+            loop.append(nxt)
+            node = nxt
+        if len(loop) > 8:
+            loops.append(loop)
+    return loops
+
+
+def chaikin(points, iterations=3):
+    """계단을 깎아 유기적인 곡선으로. 자를수록 부드럽지만 디테일이 줄어듭니다."""
+    for _ in range(iterations):
+        out = []
+        count = len(points)
+        for i in range(count):
+            (x0, y0), (x1, y1) = points[i], points[(i + 1) % count]
+            out.append((0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1))
+            out.append((0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1))
+        points = out
+    return points
+
+
 def outside_loops(land_loops):
     """수도권도 바다도 아닌 자리 — 창 동쪽·남쪽 끝에 걸친 강원·충청 땅입니다.
 
@@ -358,11 +418,11 @@ def outside_loops(land_loops):
                         grown[j + dj][i + di] = True
 
     loops = []
-    for loop in terrain.trace_loops(grown, SEA_GRID, SEA_GRID):
+    for loop in trace_loops(grown, SEA_GRID, SEA_GRID):
         if len(loop) < 12:
             continue
         points = [(-PAD + gx * step, -PAD + gy * step) for gx, gy in loop]
-        points = simplify(terrain.chaikin(points, 2), EPSILON[1])
+        points = simplify(chaikin(points, 2), EPSILON[1])
         if len(points) >= 4:
             loops.append(points)
     return loops
