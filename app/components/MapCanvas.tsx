@@ -18,7 +18,6 @@ import { BASE_LEVEL, cafesIn, districtAt, districtById, districtInView, hasLevel
 import { project, SPAN_KM, UNIT_ASPECT } from "../data/geo";
 import { ICON } from "../icons";
 import { outside, sea, type District } from "../data/districts-data";
-import { minorRoads, river, tributaries, trunkRoads } from "../data/terrain";
 import type { CodexIconId } from "../marks";
 import { CodexIcon } from "./CodexIcon";
 
@@ -324,7 +323,11 @@ function windowOf(view: View, size: { width: number; height: number }) {
 }
 
 /**
- * 지형 그림. 끌거나 확대해도 **길 자체는 그대로**입니다 — 바뀌는 건 바깥 <svg> 의
+ * 지형 그림 — 행정경계, 바다, 수도권 밖. 셋 다 통계청 경계에서 나온 것이고, 손으로
+ * 대강 잡은 강·지천·도로는 두지 않습니다. 실제 위치와 어긋나는 선은 지도 위에서
+ * 정보가 아니라 잡음이고, 그 선을 따라 카페를 찾으려는 사람에게는 오답입니다.
+ *
+ * 끌거나 확대해도 **그림 자체는 그대로**입니다 — 바뀌는 건 바깥 <svg> 의
  * 창(viewBox) 하나뿐입니다.
  *
  * 그래서 여기를 떼어 memo 로 묶습니다. 안 묶으면 손가락이 움직이는 프레임마다
@@ -334,15 +337,11 @@ function windowOf(view: View, size: { width: number; height: number }) {
 const Terrain = memo(function Terrain({ pieces }: { pieces: DistrictPiece[] }) {
   return (
     <>
-      {minorRoads.map((d, index) => <path key={`minor-${index}`} className="terrain__road terrain__road--minor" d={d} />)}
-      {trunkRoads.map((d, index) => <path key={`trunk-${index}`} className="terrain__road" d={d} />)}
       {pieces.map((piece) => <path key={piece.id} className={`terrain__district terrain__district--${piece.tint}`} d={piece.path} />)}
-      {tributaries.map((d, index) => <path key={`stream-${index}`} className="terrain__stream" d={d} />)}
       {/* 바다는 창에서 뭍을 도려낸 모양이라 evenodd 로 칠합니다. 수도권 밖(강원·충청
           언저리)은 데이터가 없어 물색이 번지므로 뭍 색으로 덮습니다. */}
       <path className="terrain__sea" d={sea} fillRule="evenodd" />
       <path className="terrain__outside" d={outside} />
-      <path className="terrain__river" d={river} />
     </>
   );
 });
@@ -919,7 +918,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   /**
    * 지금 보고 있는 칸의 테두리. 이 하나만 굵게 덧그립니다.
    *
-   * 땅 색은 안 건드립니다 — 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려지는데,
+   * 땅 색은 안 건드립니다 — 옅게라도 채우면 칸마다 번갈아 깐 땅 색이 한 꺼풀 덮이는데,
    * 여기서 말하려는 건 "이 안이 다르다"가 아니라 "여기까지가 이 동네다"입니다.
    */
   const here_ = useMemo(
@@ -1245,7 +1244,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
       </div>
 
       {/* 얹힌 동네 하나만 그립니다. 지형 겹에 같이 넣으면 확대할 때 이 선까지
-          늘어나 뭉개지고, 옅은 채움이 강 위에도 얹힙니다. */}
+          늘어나 뭉개지고, 옅은 채움이 바다 위에도 얹힙니다. */}
       <div className="map__layer map__regions" aria-hidden="true">
         {hovered ? (
           <>

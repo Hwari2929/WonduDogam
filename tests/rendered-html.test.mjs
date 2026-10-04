@@ -329,6 +329,16 @@ test("primary map stays a local SVG editorial atlas", async () => {
   assert.doesNotMatch(surface, /KakaoMap|readMapKey|useSyncExternalStore/);
   assert.match(canvas, /className="map__terrain"/);
   assert.match(canvas, /terrain__district/);
+  // 지도에는 통계청 경계에서 나온 것만 그립니다. 손으로 대강 잡은 강·지천·도로는
+  // 실제 위치와 어긋나는 선이라 잡음이고, 그 선을 따라 찾으려는 사람에게는 오답입니다.
+  assert.doesNotMatch(canvas, /data\/terrain|terrain__river|terrain__stream|terrain__road/);
+  assert.doesNotMatch(css, /terrain__river|terrain__stream|terrain__road/);
+  await assert.rejects(readFile(new URL("../app/data/terrain.ts", import.meta.url)));
+  await assert.rejects(readFile(new URL("../build/terrain.py", import.meta.url)));
+  const districtsPy = await readFile(new URL("../build/districts.py", import.meta.url), "utf8");
+  assert.doesNotMatch(districtsPy, /^import terrain$/m);
+  assert.match(districtsPy, /^def trace_loops\(mask, width, height\):$/m);
+  assert.match(districtsPy, /^def chaikin\(points, iterations=3\):$/m);
   assert.match(canvas, /onWheel=\{onWheel\}/);
   assert.match(canvas, /onPointerMove=\{onPointerMove\}/);
   assert.match(canvas, /const MIN_SPAN = 0\.57;/);
@@ -785,7 +795,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   // 왼쪽 아래가 이름을 말하고, 지도가 그 자리를 가리킵니다.
   assert.match(canvas, /className="map__layer map__regions map__regions--here"/);
   assert.match(canvas, /className=\{one\.here \? "is-here" : undefined\}/);
-  // 채움 없이 선만 굵게 — 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려집니다.
+  // 채움 없이 선만 굵게 — 옅게라도 채우면 칸마다 번갈아 깐 땅 색이 한 꺼풀 덮입니다.
   assert.match(css, /\.map__regions--here path \{\s*\n\s*fill: none;\s*\n\s*stroke:[^;]*;\s*\n\s*stroke-width: 2\.5;/);
   // 지금 어디인지 말하는 글자가 핀(z-index 5) 뒤에 숨으면 강조한 뜻이 없습니다.
   assert.match(css, /\.map__names span\.is-here \{\s*\n\s*z-index: 6;/);
@@ -1016,7 +1026,7 @@ test("마우스를 얹은 시·구는 경계가 밝아지고 그 안의 카페�
   // 확대하다 단계가 바뀌면 짚어 둔 칸은 이제 지도에 없는 모양입니다.
   assert.match(canvas, /if \(!current \|\| current\.level === level\) return current;/);
 
-  // 강조 겹은 지형과 따로 둡니다 — 같이 두면 옅은 채움이 강 위에도 얹힙니다.
+  // 강조 겹은 지형과 따로 둡니다 — 같이 두면 옅은 채움이 바다 위에도 얹힙니다.
   assert.match(canvas, /<div className="map__layer map__regions"/);
   assert.match(css, /\.map__regions \{\s*\n\s*z-index: 3;/);
   assert.match(css, /\.map__pins,\s*\n\.map__places,\s*\n\.map__regions \{\s*\n\s*pointer-events: none;/);

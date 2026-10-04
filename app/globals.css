@@ -425,15 +425,10 @@ a:focus-visible,
   background: var(--desk);
 }
 .terrain__sea,
-.terrain__river,
-.terrain__stream,
-.terrain__district,
-.terrain__road {
+.terrain__district {
   vector-effect: non-scaling-stroke;
 }
 
-/* 물은 면으로 그립니다. 선으로 그리면 하구가 상류와 같은 굵기가 됩니다.
-   채움이 불투명해야 지천이 한강에 합류하는 자리가 겹쳐서 진해지지 않습니다. */
 /* 지도는 배경이고, 기록이 전경입니다 (§05). 물빛을 강조색에서 뽑으면 바다가
    화면에서 제일 진한 덩어리가 되므로, 괘선 색을 옅게 눕혀 씁니다 — 인쇄 지도에서
    물을 옅은 망점으로 찍던 방식과 같습니다. */
@@ -444,12 +439,8 @@ a:focus-visible,
 [data-theme="cool"] .map {
   --water: color-mix(in srgb, var(--rule) 40%, var(--desk));
 }
-.terrain__sea,
-.terrain__river,
-.terrain__stream {
-  fill: var(--water);
-}
 .terrain__sea {
+  fill: var(--water);
   stroke: color-mix(in srgb, var(--ink-faint) 62%, transparent);
   stroke-width: 1;
 }
@@ -474,16 +465,6 @@ a:focus-visible,
 
 .terrain__district--2 {
   fill: color-mix(in srgb, var(--ink-faint) 4%, transparent);
-}
-.terrain__road {
-  fill: none;
-  stroke: color-mix(in srgb, var(--ink-faint) 38%, transparent);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
-.terrain__road--minor {
-  stroke: color-mix(in srgb, var(--ink-faint) 22%, transparent);
-  stroke-width: 0.9;
 }
 
 /* 종이 결. 런타임 feTurbulence 대신 128px 타일을 반복시킵니다 (§4.3). */
@@ -2391,7 +2372,7 @@ a:focus-visible,
   to { opacity: 1; }
 }
 /* ── 지금 보고 있는 칸 ──
-   채움 없이 선만 굵게 긋습니다. 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려지는데,
+   채움 없이 선만 굵게 긋습니다. 옅게라도 채우면 칸마다 번갈아 깐 땅 색이 한 꺼풀 덮이는데,
    여기서 말하려는 건 "이 안이 다르다"가 아니라 "여기까지가 이 동네다"입니다.
    짚어 본 칸과 겹칠 때 자연스럽게 포개지도록 한 겹 밑에 둡니다. */
 .map__regions--here {
