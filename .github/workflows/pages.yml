@@ -1,0 +1,87 @@
+# 디자인을 실제 웹에서 보기 위한 정적 미리보기 배포.
+#
+# 서버가 필요한 진짜 배포는 .openai/hosting.json 이 가리키는 곳이 맡습니다.
+# 여기서 굽는 것은 화면만 확인하기 위한 클라이언트 번들이라, 카카오맵 SDK 키가
+# 없어도 앱이 스스로 그리는 지도로 그대로 돕니다.
+name: 정적 미리보기 배포
+
+on:
+  push:
+    branches:
+      - main
+      - claude/design-system-improvements-4tkhud
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 한 번에 하나만. 연달아 밀어 넣어도 마지막 것이 올라갑니다.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 화면이 깨진 채로 올라가지 않게, 굽기 전에 앱의 검증을 먼저 통과시킵니다.
+      - run: pnpm lint
+      - run: pnpm test
+
+      - name: 어느 자리에 서는지 정하기
+        id: site
+        # 사용자 도메인(CNAME)이 있으면 사이트는 그 도메인의 뿌리에 섭니다.
+        # 없으면 프로젝트 페이지라 /<저장소이름>/ 아래입니다. 이 한 값을
+        # index.html 의 <base> 와 app/page.tsx 의 BASE_PATH 가 같이 보므로,
+        # 도메인을 붙이고 떼는 데 고칠 곳은 CNAME 파일 하나뿐입니다.
+        run: |
+          if [ -f CNAME ]; then
+            echo "base=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=/${{ github.event.repository.name }}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 정적 미리보기 굽기
+        env:
+          PREVIEW_BASE: ${{ steps.site.outputs.base }}
+        run: pnpm exec vite build --config vite.preview.config.ts
+
+      - name: 깊은 링크와 도메인, Jekyll 우회 준비
+        # /c/{id} 로 새로고침해도 같은 앱이 뜨도록 404 를 index 로 둡니다.
+        # .nojekyll 이 없으면 _ 로 시작하는 파일이 통째로 사라집니다.
+        # CNAME 은 올리는 꾸러미 안에 있어야 합니다 — 저장소 뿌리에만 두면
+        # Actions 로 배포하는 순간 설정에서 도메인이 지워집니다.
+        run: |
+          cp dist-preview/index.html dist-preview/404.html
+          touch dist-preview/.nojekyll
+          if [ -f CNAME ]; then cp CNAME dist-preview/; fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-preview
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

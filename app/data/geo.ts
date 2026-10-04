@@ -10,17 +10,17 @@
  */
 
 /**
- * 목업 지도가 담는 범위.
+ * 지도가 담는 범위.
  *
- * 수도권을 담되 서울이 화면 왼쪽~가운데에 오도록 잡았습니다. 우측 도크(영수증·내
- * 도감)가 가로의 3분의 1을 덮으므로, 지리적으로 가운데 두면 정작 볼 곳이 카드
- * 뒤에 숨습니다. 바다도 인천 앞바다가 보일 만큼만 남깁니다.
+ * 서쪽은 강화도가 통째로 들어오는 자리까지, 동쪽은 경기도가 끝나는 자리까지입니다.
+ * 동쪽 끝을 경기 경계에 맞추면 데이터 없는 땅이 안 늘면서 서울이 가로 절반 자리에
+ * 옵니다 — 도크(영수증·내 도감)에 안 가리는 자리입니다.
  */
 export const BOUNDS = {
-  west: 126.42,
-  east: 127.64,
-  north: 37.8,
-  south: 37.02,
+  west: 126.12,
+  east: 127.85,
+  north: 37.85,
+  south: 37.0,
 } as const;
 
 export const CENTER: [number, number] = [
@@ -28,12 +28,30 @@ export const CENTER: [number, number] = [
   (BOUNDS.north + BOUNDS.south) / 2,
 ];
 
+/** 위도 37.4 언저리의 1도. 경도는 위도만큼 길지 않아 cos(위도) 만큼 짧습니다. */
+const KM_PER_LNG = 88.41;
+const KM_PER_LAT = 110.94;
+
+/** 이 창이 담는 실제 크기(km). */
+export const SPAN_KM = {
+  x: (BOUNDS.east - BOUNDS.west) * KM_PER_LNG,
+  y: (BOUNDS.north - BOUNDS.south) * KM_PER_LAT,
+};
+
+/**
+ * 0..100 공간에서 세로 한 칸이 가로 한 칸의 몇 배 길이인가.
+ *
+ * 창은 가로 153km · 세로 94km 인데 0..100 정사각형에 밀어 넣으므로, 이 공간 자체가
+ * 이미 세로로 눌려 있습니다. 화면에 그릴 때 이 값만큼 되돌리지 않으면 지도가
+ * 화면 비율을 그대로 따라 찌그러집니다 — 세로로 긴 폰에서는 2.8배까지 눌립니다.
+ */
+export const UNIT_ASPECT = SPAN_KM.y / SPAN_KM.x;
+
 /**
  * 경위도 → SVG/마커가 쓰는 0..100 공간.
  *
- * 이 축척에서는 등장방형(equirectangular)으로 충분합니다. 위도 37도에서
- * 경도 1도는 위도 1도보다 약 0.79배 짧지만, 그 보정은 `preserveAspectRatio="none"`
- * 으로 늘어나는 양에 이미 흡수됩니다 — 지형과 마커가 **같은 식**을 쓰는 것이
+ * 이 축척에서는 등장방형(equirectangular)으로 충분합니다. 세로로 눌리는 건
+ * 위 UNIT_ASPECT 로 그릴 때 되돌립니다 — 지형과 마커가 **같은 식**을 쓰는 것이
  * 정확한 도법보다 중요합니다.
  */
 export function project(lng: number, lat: number) {

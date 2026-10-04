@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowRight, ArrowUpRight, X } from "lucide-react";
 import { partnerRegions, partnerTotal } from "../data/cafes";
+import { ICON } from "../icons";
+import { THEMES, type Theme } from "../theme";
 import { CodexMark } from "./BeanArt";
 
 /** 서랍 (03_기능_명세 §7). --desk-deep 위에 종이가 아니라 책상 안쪽이 보이는 자리입니다. */
@@ -13,8 +16,8 @@ export function Drawer({
   onClose,
 }: {
   markCount: number;
-  theme: "light" | "dark";
-  onTheme: (next: "light" | "dark") => void;
+  theme: Theme;
+  onTheme: (next: Theme) => void;
   onOpenCodex: () => void;
   onClose: () => void;
 }) {
@@ -45,7 +48,7 @@ export function Drawer({
             <b>원두도감</b>
           </span>
           <button className="icon-button" type="button" onClick={onClose} aria-label="메뉴 닫기">
-            ×
+            <X aria-hidden="true" />
           </button>
         </div>
         <p className="drawer__tagline">수도권 개인 카페 지도</p>
@@ -68,32 +71,37 @@ export function Drawer({
                   <span>{region.label}</span>
                   <i className="drawer__leader" aria-hidden="true" />
                   <strong className="tabular">{region.count}</strong>
-                  {region.note ? <small>{region.note} · 지도 미표시</small> : null}
                 </li>
               ))}
             </ul>
           ) : null}
           <button type="button">
             <span>이런 느낌 찾기</span>
-            <strong aria-hidden="true">→</strong>
+            <ArrowRight className="drawer__nav-go" size={ICON.sm} aria-hidden="true" />
           </button>
           <button type="button">
             <span>원두도감이란</span>
-            <strong aria-hidden="true">→</strong>
+            <ArrowRight className="drawer__nav-go" size={ICON.sm} aria-hidden="true" />
           </button>
         </nav>
 
         <div className="dashed-rule" />
 
+        {/* 02_디자인_시스템 §01 — 세 테마는 같은 역할 이름을 공유합니다.
+            다크는 검정이 아니라 어두운 종이라서, 라벨도 밝기가 아니라 종이로 씁니다. */}
         <div className="drawer__setting">
-          <span className="label-ko">테마</span>
-          <div className="segmented" role="group" aria-label="테마">
-            <button type="button" aria-pressed={theme === "light"} onClick={() => onTheme("light")}>
-              밝게
-            </button>
-            <button type="button" aria-pressed={theme === "dark"} onClick={() => onTheme("dark")}>
-              어둡게
-            </button>
+          <span className="label-ko">종이</span>
+          <div className="segmented" role="group" aria-label="종이 고르기">
+            {THEMES.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                aria-pressed={theme === entry.id}
+                onClick={() => onTheme(entry.id)}
+              >
+                {entry.hint}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -105,14 +113,14 @@ export function Drawer({
               비빈 로스팅 팩토리
               <small>스페셜티 원두 로스터리</small>
             </span>
-            <i aria-hidden="true">↗</i>
+            <ArrowUpRight size={ICON.sm} aria-hidden="true" />
           </a>
           <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer">
             <span>
               로허들 커피교실
               <small>호주 워홀 바리스타 교육</small>
             </span>
-            <i aria-hidden="true">↗</i>
+            <ArrowUpRight size={ICON.sm} aria-hidden="true" />
           </a>
         </div>
 

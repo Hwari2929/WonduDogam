@@ -1,72 +1,192 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
-import { colorValue, type Collection } from "../marks";
-import { CodexMark } from "./BeanArt";
+import { ArrowUpRight, BookmarkCheck, BookmarkPlus, X } from "lucide-react";
+import { ICON } from "../icons";
+import { CURATOR_COLLECTION_ID, colorValue, type Collection } from "../marks";
+import { BeanMark } from "./BeanArt";
 import { CodexIcon } from "./CodexIcon";
+
+/** "과테말라 안티구아 · 에티오피아" 같은 한 줄을 §08 칩으로 끊습니다. */
+function beanTags(beans: string) {
+  return beans
+    .split(/[·,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
 
 export function Receipt({
   cafe,
-  dateLabel,
-  timeLabel,
-  serial,
+  note,
   collections,
+  fullCollectionIds,
   selectedCollectionIds,
   onToggleCollection,
   onClose,
+  sheet = false,
 }: {
   cafe: Cafe;
-  dateLabel: string;
-  timeLabel: string | null;
-  serial: string;
+  /** 이 카페에 사용자가 적어 둔 한 줄. 있으면 관리자 소개보다 이게 앞섭니다. */
+  note: string;
   collections: Collection[];
+  /** 열 칸을 다 쓴 도감. 이미 들어 있는 카페는 빼야 하므로 잠그지 않습니다. */
+  fullCollectionIds: string[];
   selectedCollectionIds: string[];
   onToggleCollection: (collectionId: string, included: boolean, event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
+  /**
+   * 하단 시트로 내려온 좁은 화면인가.
+   *
+   * 시트에서는 상세가 접힘의 대상이 아닙니다 — 종이가 이미 화면을 차지하고 있고,
+   * 밑으로 흐르는 것도 그것뿐이라 "펼치기"가 아낄 자리가 없습니다. 한 번 더
+   * 누르게 하는 것 말고는 하는 일이 없는 단추라 아예 두지 않습니다.
+   */
+  sheet?: boolean;
 }) {
   const [saveOpen, setSaveOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const showDetail = sheet || detailOpen;
+  const saveRef = useRef<HTMLDivElement>(null);
   const confirmed = cafe.partner;
   const saved = selectedCollectionIds.length > 0;
 
+  // 내가 적은 한 줄이 있으면 그게 이 카페의 요약입니다. 남이 써 준 소개보다
+  // 내가 마시고 적은 문장이 먼저 와야 도감입니다.
+  const mine = note.trim();
+  const summary = mine || (confirmed ? cafe.intro : cafe.guess);
+
+  // 드롭다운은 바깥을 누르거나 Esc 로 닫힙니다. Esc 를 여기서 멈춰 세우지 않으면
+  // 영수증까지 같이 닫혀서, 도감을 잘못 고른 사람이 카페를 통째로 잃습니다.
+  useEffect(() => {
+    if (!saveOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!saveRef.current?.contains(event.target as Node)) setSaveOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setSaveOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [saveOpen]);
+
   return (
     <article className={`receipt ${confirmed ? "receipt--confirmed" : "receipt--guess"}`}>
-      <header className="receipt__topline">
-        <span className="brand-lockup"><CodexMark size={18} /><b>{confirmed ? "비빈 파트너" : "원두도감"}</b></span>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="영수증 닫기">×</button>
-      </header>
-      <p className="receipt__issue"><span>{dateLabel}<i aria-hidden="true">{timeLabel ?? "--:--"}</i></span><span className="receipt__serial">NO.{serial}</span></p>
-      <div className="receipt__identity"><h1 className="receipt__name">{cafe.name}</h1><p className="romanized">{cafe.romanized}</p></div>
-      <figure className="receipt__photo">
-        <img src="/mascot/bibean-inspecting.webp" alt="" width="256" height="256" loading="lazy" decoding="async" />
-        <figcaption><span>CAFE PHOTO</span><small>사진 준비 중</small></figcaption>
-      </figure>
-      <p className="intro">{confirmed ? cafe.intro : cafe.guess}</p>
-      <div className="dashed-rule" />
-      <dl className="receipt__specs">
-        <div className="spec"><dt>지역</dt><dd>{cafe.area}</dd></div>
-        <div className="spec"><dt>주소</dt><dd>{cafe.address}</dd></div>
-        {confirmed ? <><div className="spec"><dt>영업시간</dt><dd className="tabular">{cafe.hours}</dd></div><div className="spec"><dt>취급원두</dt><dd>{cafe.beans}</dd></div></> : <div className="spec"><dt>전화</dt><dd className="tabular"><a href={`tel:${cafe.tel.replaceAll("-", "")}`}>{cafe.tel}</a></dd></div>}
-      </dl>
+      {/*
+        상호·주소와 연장 두 개는 한 덩어리입니다. 좁은 화면에서 이 덩어리가 종이
+        맨 위에 붙어 따라옵니다 — 내려 읽다가 닫으려고 도로 올라갈 일이 없고,
+        무엇을 보고 있었는지도 계속 남습니다.
+      */}
+      <div className="receipt__top">
+        <div className="receipt__tools">
+          <div className={`tool-slot ${saveOpen ? "is-open" : ""}`} ref={saveRef}>
+            <button
+              className={`tool-button has-tip ${saved ? "is-saved" : ""}`}
+              type="button"
+              onClick={() => setSaveOpen((value) => !value)}
+              aria-expanded={saveOpen}
+              aria-haspopup="true"
+              aria-label={saved ? `${selectedCollectionIds.length}개 도감에 저장됨. 저장할 도감 고치기` : "도감에 저장하기"}
+            >
+              {saved ? <BookmarkCheck aria-hidden="true" /> : <BookmarkPlus aria-hidden="true" />}
+              <span className="tip" aria-hidden="true">{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}</span>
+            </button>
 
-      <div className="receipt__actions">
-        <button className={`receipt-action save-button ${saved ? "is-saved" : ""}`} type="button" onClick={() => setSaveOpen((value) => !value)} aria-expanded={saveOpen}>
-          <span aria-hidden="true">{saved ? "✓" : "+"}</span>{saved ? `${selectedCollectionIds.length}개 도감에 저장됨` : "도감에 저장하기"}
-        </button>
-        <a className="receipt-action text-button" href={`https://map.kakao.com/?q=${encodeURIComponent(cafe.name)}`} target="_blank" rel="noopener noreferrer">카카오맵에서 보기 <span aria-hidden="true">↗</span></a>
+            {/* 종이에 끼어들지 않고 연장 아래로 펴집니다 — 고르는 동안 카페는 그대로 보여야 합니다. */}
+            {saveOpen ? (
+              <section className="save-drop" aria-label="저장할 도감 고르기">
+                <p className="meta">어느 도감에 넣을까</p>
+                <div className="receipt__collection-list">
+                  {/* 큐레이터 픽은 매일 저절로 뽑히므로 손으로 담을 자리가 없습니다. */}
+                  {collections.filter((collection) => collection.id !== CURATOR_COLLECTION_ID).map((collection) => {
+                    const included = selectedCollectionIds.includes(collection.id);
+                    const full = !included && fullCollectionIds.includes(collection.id);
+                    return <button key={collection.id} type="button" className={included ? "is-selected" : ""} disabled={full} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={ICON.sm} /></span><b>{collection.name}</b><i>{included ? "저장됨" : full ? "가득 참" : "담기"}</i></button>;
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </div>
+
+          <button className="tool-button has-tip" type="button" onClick={onClose} aria-label="영수증 닫기">
+            <X aria-hidden="true" />
+            <span className="tip" aria-hidden="true">닫기</span>
+          </button>
+        </div>
+
+        {/* 상호와 주소 두 줄. 발행 정보·영문명·구분선은 걷어냈습니다 — 카페를 고르는
+            사람에게 필요한 건 어디인지와 어떻게 생겼는지뿐입니다. */}
+        <header className="receipt__head">
+          <h1 className="receipt__name">
+            {cafe.name}
+            {confirmed ? (
+              <span
+                className="partner-mark has-tip"
+                tabIndex={0}
+                role="note"
+                aria-label="비빈 파트너. 카페가 직접 확인해 준 정보입니다."
+              >
+                <BeanMark size={19} />
+                <span className="tip" aria-hidden="true">
+                  <b>비빈 파트너</b>
+                  카페가 직접 확인해 준 정보
+                </span>
+              </span>
+            ) : null}
+          </h1>
+          <p className="receipt__address">{cafe.address}</p>
+        </header>
       </div>
 
-      {saveOpen ? <section className="receipt__save-panel" aria-label="저장할 도감 고르기">
-        <p>어느 도감에 넣을까?</p>
-        <div className="receipt__collection-list">
-          {collections.map((collection) => {
-            const included = selectedCollectionIds.includes(collection.id);
-            return <button key={collection.id} type="button" className={included ? "is-selected" : ""} style={{ "--codex-color": colorValue(collection.color) } as React.CSSProperties} onClick={(event) => onToggleCollection(collection.id, !included, event)} aria-pressed={included}><span className="receipt__collection-icon"><CodexIcon name={collection.icon} size={17} /></span><b>{collection.name}</b><i>{included ? "저장됨" : "담기"}</i></button>;
-          })}
-        </div>
-      </section> : null}
+      <figure className="receipt__photo">
+        <figcaption>PHOTO — 사진 준비 중</figcaption>
+      </figure>
 
-      {!confirmed ? <footer className="receipt__close"><p className="guess-note">상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.</p></footer> : null}
+      <p className={`intro ${mine ? "intro--mine" : ""}`}>
+        {mine ? <span className="meta intro__by">내가 적어 둔 한 줄</span> : null}
+        {summary}
+      </p>
+
+      {sheet ? null : (
+        <div className="receipt__actions">
+          <button className="receipt-action text-button" type="button" onClick={() => setDetailOpen((value) => !value)} aria-expanded={detailOpen}>
+            {detailOpen ? "접기" : "상세 보기"}
+          </button>
+        </div>
+      )}
+
+      {/* §06 — 요약은 문장(SUIT) 중심, 상세는 표(모노) 중심.
+          점선은 BEAN LIST 앞의 한 줄만 남깁니다. 표 하나에 구분선 셋이면
+          읽는 리듬이 아니라 격자가 됩니다. */}
+      {showDetail ? (
+        <section className="detail" aria-label={`${cafe.name} 상세 정보`}>
+          <dl className="detail__table">
+            <div><dt>지역</dt><dd>{cafe.area}</dd></div>
+            {confirmed ? <div><dt>영업시간</dt><dd>{cafe.hours}</dd></div> : null}
+            <div><dt>전화</dt><dd><a href={`tel:${cafe.tel.replaceAll("-", "")}`}>{cafe.tel}</a></dd></div>
+          </dl>
+
+          {confirmed ? (
+            <>
+              <div className="dashed-rule" />
+              <p className="meta">BEAN LIST</p>
+              <div className="bean-tags">
+                {beanTags(cafe.beans).map((bean) => <span key={bean} className="chip chip--accent">{bean}</span>)}
+              </div>
+            </>
+          ) : (
+            <p className="guess-note">상호명과 위치로 자동 추정한 정보입니다. 실제와 다를 수 있습니다.</p>
+          )}
+
+          <a className="receipt-action text-button" href={`https://map.kakao.com/?q=${encodeURIComponent(cafe.name)}`} target="_blank" rel="noopener noreferrer">카카오맵에서 보기 <ArrowUpRight size={ICON.sm} aria-hidden="true" /></a>
+        </section>
+      ) : null}
     </article>
   );
 }

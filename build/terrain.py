@@ -1,33 +1,32 @@
-"""수도권 지형 목업 생성기 — app/data/terrain.ts 를 만듭니다.
+"""수도권 지형 생성기 — app/data/terrain.ts 를 만듭니다.
 
-카카오맵 SDK는 04_착수_검증의 데이터 사용 승낙이 풀린 뒤에 붙습니다. 그 전까지
-지도 자리가 비어 있으면 "지도 위 UI"인지 판단할 수 없어서 골격만 그려 둡니다.
+이 지도는 임시가 아닙니다. 상용 지도 SDK를 붙여 보니 결국 그 지도가 되어 버려서,
+직접 그리는 쪽으로 갔습니다. 그러니 여기서 나오는 그림이 곧 제품의 지도입니다.
 
-손으로 쓴 다각형이 지도로 안 읽히는 이유는 단순합니다 — 실제 해안선과 행정경계는
-프랙탈이라 꼭짓점이 수백 개인데, 손으로 쓰면 여덟 개짜리 타원이 됩니다. 그래서
-경계를 직접 그리지 않고 **격자에서 영역을 키운 뒤 윤곽을 추출**합니다.
+해안선과 시군구 경계는 실제 데이터에서 나옵니다 (build/districts.py). 여기서는
+물길과 길만 만듭니다 — 한강·지천·간선도로는 공개 데이터를 받기 전까지 실제
+좌표를 손으로 찍어 그립니다.
 
-  1. 잡음을 섞은 거리장으로 땅/바다를 가른다        → 들쭉날쭉한 해안선
-  2. 잡음을 섞은 보로노이로 시군구를 나눈다          → 이웃과 변을 공유하는 경계
-  3. 한강 남/북을 건너면 벌점 → 경계가 강을 따라간다
-  4. 계단 모양 윤곽을 Chaikin 으로 부드럽게, D-P 로 솎아낸다
+땅/바다 판정은 남겨 두었습니다. 길이 바다로 뻗어 나가지 않게 하는 데 씁니다.
 
-시드가 고정이라 돌릴 때마다 같은 지형이 나옵니다.
+시드가 고정이라 돌릴 때마다 같은 그림이 나옵니다.
 
 실행:  node 없이 파이썬만 있으면 됩니다.
        python build/terrain.py app/data/terrain.ts
 """
 
 import math
+import os
 import random
+import re
 import sys
 
 SIZE = 100.0          # SVG 사용자 좌표. 마커의 % 좌표와 같은 공간입니다.
 
 # app/data/geo.ts 의 BOUNDS 와 반드시 같아야 합니다. 여기서 어긋나면 카페 마커가
 # 강 위에 떠 있거나 바다에 빠집니다.
-WEST, EAST = 126.42, 127.64
-NORTH, SOUTH = 37.80, 37.02
+WEST, EAST = 126.12, 127.85
+NORTH, SOUTH = 37.85, 37.00
 
 
 def px(lng):
@@ -42,7 +41,7 @@ def P(lng, lat):
     """경위도를 SVG 좌표로. 지형도 카페와 같은 식을 씁니다."""
     return (px(lng), py(lat))
 
-PAD = 9.0             # viewBox 바깥까지 만듭니다. 격자 끝을 따라 생기는 직선
+PAD = 22.0             # viewBox 바깥까지 만듭니다. 격자 끝을 따라 생기는 직선
                       # 경계가 화면 밖으로 밀려나 액자 같은 테두리가 안 남습니다.
 GRID = 300            # 격자 해상도. 높을수록 경계가 세밀해지고 파일이 커집니다.
 SEED = 20260727
@@ -127,16 +126,6 @@ COAST_LL = [
     (126.88, 37.05),
 ]
 
-# app/data/cafes.ts 의 좌표. 생성이 끝나면 전부 뭍에 있는지 확인합니다 —
-# 해안 잡음이 카페 하나를 바다에 빠뜨려도 눈으로는 잘 안 보입니다.
-CAFES_LL = [
-    ("책방그늘", 126.925, 37.563), ("느린파도", 127.056, 37.5445),
-    ("항구의 오후", 126.622, 37.474), ("모서리 커피", 127.011, 37.283),
-    ("종이컵 연구소", 126.770, 37.658), ("커피와 문장", 127.108, 37.380),
-    ("망원 미들", 126.902, 37.556), ("평화당", 126.956, 37.390),
-]
-
-
 def river_y(x):
     """주어진 x 에서 한강의 중심 y. 남/북 판정에 씁니다."""
     pts = RIVER
@@ -168,38 +157,6 @@ def ribbon(points, half_widths):
         right.append((x - nx * half, y - ny * half))
     return left + right[::-1]
 
-
-# ── 도시 씨앗 ─────────────────────────────────────────────────────────
-
-# 실제 수도권의 대략적인 배치. 이름은 쓰지 않고 경계를 만드는 데만 씁니다.
-# (x, y, 가중치). 가중치는 거리에서 빼는 값이라 클수록 구역이 넓어집니다.
-# 크기가 고르면 벌집이 됩니다 — 실제 수도권은 가운데가 잘게 쪼개져 있고
-# 바깥으로 갈수록 덩어리가 커집니다. 그 대비가 지도로 읽히게 하는 핵심입니다.
-SEOUL_W = -2.6
-INNER_W = 0.0
-OUTER_W = 5.2
-
-# (경도, 위도, 가중치). 실제 시군구 중심에 가깝게 두면 경계가 저절로 그럴듯해집니다.
-SEEDS_LL = [
-    # 서울 — 잘게. 25개 구를 열두 덩어리로 양식화했습니다.
-    (126.90, 37.58, SEOUL_W), (126.95, 37.60, SEOUL_W), (127.00, 37.60, SEOUL_W),
-    (127.06, 37.61, SEOUL_W), (126.89, 37.53, SEOUL_W), (126.96, 37.55, SEOUL_W),
-    (127.03, 37.55, SEOUL_W), (127.10, 37.55, SEOUL_W), (126.88, 37.49, SEOUL_W),
-    (126.95, 37.48, SEOUL_W), (127.03, 37.49, SEOUL_W), (127.11, 37.49, SEOUL_W),
-    # 접경 도시 — 중간 크기
-    (126.77, 37.50, INNER_W), (126.90, 37.42, INNER_W), (127.13, 37.41, INNER_W),
-    (126.72, 37.60, INNER_W),
-    # 외곽 경기·인천 — 크게
-    (126.76, 37.76, OUTER_W), (126.83, 37.66, OUTER_W), (127.05, 37.79, OUTER_W),
-    (127.21, 37.74, OUTER_W), (127.22, 37.64, OUTER_W), (127.35, 37.55, OUTER_W),
-    (126.63, 37.46, OUTER_W), (126.68, 37.38, OUTER_W), (127.20, 37.30, OUTER_W),
-    (127.03, 37.26, OUTER_W), (127.30, 37.15, OUTER_W), (127.38, 37.36, OUTER_W),
-    (126.83, 37.32, OUTER_W), (126.93, 37.15, OUTER_W), (127.12, 37.12, OUTER_W),
-    # 화면 밖 씨앗. 가장자리 구역이 프레임을 따라 잘린 것처럼 보이지 않게 합니다.
-    (127.55, 37.80, OUTER_W), (127.55, 37.10, OUTER_W), (126.60, 37.00, OUTER_W),
-    (127.30, 37.92, OUTER_W),
-]
-SEEDS = [(px(lng), py(lat), w) for lng, lat, w in SEEDS_LL]
 
 # 도로망은 도시 사이만 잇습니다. 서울 구 씨앗까지 전부 이으면 가운데가 거미줄이 됩니다.
 ROAD_NODES_LL = [
@@ -383,53 +340,7 @@ def build():
         return value
 
     land = [[landness(x, y) > 0 for x in center] for y in center]
-    sea_mask = [[not cell for cell in row] for row in land]
-
-    stranded = [name for name, lng, lat in CAFES_LL if landness(px(lng), py(lat)) <= 0]
-    if stranded:
-        raise SystemExit(f"바다에 빠진 카페: {', '.join(stranded)} — 해안선이나 좌표를 조정하세요.")
-
-    # 2) 시군구 — 가중치 보로노이에 잡음을 섞습니다. 가중치가 크기 대비를 만들고,
-    #    잡음이 직선 경계를 무너뜨리고, 한강 벌점이 경계를 강에 붙입니다.
-    seed_side = [1 if y > river_y(x) else -1 for x, y, _ in SEEDS]
-    seed_jitter = [rng.uniform(0, 100) for _ in SEEDS]
-    owner = [[-1] * GRID for _ in range(GRID)]
-    for j, y in enumerate(center):
-        for i, x in enumerate(center):
-            if not land[j][i]:
-                continue
-            side_here = 1 if y > river_y(x) else -1
-            best, best_index = 1e9, -1
-            for k, (sx, sy, weight) in enumerate(SEEDS):
-                cost = math.hypot(x - sx, y - sy) - weight
-                cost += region_noise(x + seed_jitter[k], y + seed_jitter[k]) * 5.0
-                if seed_side[k] != side_here:
-                    cost += 7.0
-                if cost < best:
-                    best, best_index = cost, k
-            owner[j][i] = best_index
-
-    # 3) 윤곽 추출
-    def loops_of(mask, chaikin_rounds=3, min_points=18):
-        result = []
-        for loop in trace_loops(mask, GRID, GRID):
-            if len(loop) < min_points:
-                continue
-            points = [(-PAD + px * step, -PAD + py * step) for px, py in loop]
-            points = simplify(chaikin(points, chaikin_rounds), EPSILON)
-            if len(points) >= 4:
-                result.append(points)
-        return result
-
-    # 바다는 섬을 구멍으로 갖습니다. 한 path 안에 서브패스로 넣고 evenodd 로 칠해야
-    # 섬이 바다색으로 덮이지 않습니다.
-    sea_loops = loops_of(sea_mask)
-    sea_path = "".join(to_path(loop) for loop in sea_loops)
-
-    districts = []
-    for k in range(len(SEEDS)):
-        mask = [[owner[j][i] == k for i in range(GRID)] for j in range(GRID)]
-        districts.extend(to_path(loop) for loop in loops_of(mask))
+    # 땅/바다 판정은 길이 바다로 뻗지 않게 하는 데만 씁니다.
 
     # 4) 물길
     river_points = [(x, y) for x, y, _ in RIVER]
@@ -482,11 +393,11 @@ def build():
     trunks = [road_path(a, b) for a, b in trunk_pairs]
     minors = [road_path(a, b) for a, b in minor_pairs]
 
-    return sea_path, districts, river_path, tributaries, trunks, minors
+    return river_path, tributaries, trunks, minors
 
 
 def main():
-    sea, districts, river, tributaries, trunks, minors = build()
+    river, tributaries, trunks, minors = build()
 
     def literal(values):
         return "[\n" + "".join(f'  "{v}",\n' for v in values) + "]"
@@ -496,15 +407,8 @@ def main():
  * 생성 방식과 이유는 build/terrain.py 의 설명을 보세요.
  *
  * 좌표계는 0..100 이고 마커의 % 좌표와 같은 공간입니다. viewBox 바깥까지 그려져
- * 있어서 화면 끝에서 자연스럽게 잘립니다. 카카오맵 SDK가 붙으면 이 파일과
- * MapCanvas 의 <svg> 는 통째로 없어집니다.
+ * 있어서 화면 끝에서 자연스럽게 잘립니다.
  */
-
-/** 서해. 섬은 같은 path 의 서브패스라 fill-rule: evenodd 로 구멍이 됩니다. */
-export const sea = "{sea}";
-
-/** 시군구 경계. 이름표를 달지 않는 건 실제 경계가 아니라 골격이기 때문입니다. */
-export const districts: string[] = {literal(districts)};
 
 /** 한강. 선이 아니라 면이라 하구로 갈수록 넓어집니다. */
 export const river = "{river}";
@@ -523,9 +427,9 @@ export const minorRoads: string[] = {literal(minors)};
     with open(target, "w", encoding="utf-8") as handle:
         handle.write(out)
     print(f"wrote {target}")
-    print(f"  districts {len(districts)} · tributaries {len(tributaries)} · "
-          f"trunk {len(trunks)} · minor {len(minors)}")
+    print(f"  tributaries {len(tributaries)} · trunk {len(trunks)} · minor {len(minors)}")
     print(f"  {len(out) / 1024:.1f} KB")
 
 
-main()
+if __name__ == "__main__":
+    main()
