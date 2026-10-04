@@ -367,7 +367,8 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
    */
   focus: { id: string; at: number } | null;
   savedMarkers: Record<string, SavedCafeMarker>;
-  onSelect: (id: string) => void;
+  /** `stack` 은 한 핀에 같이 묶여 있던 가게들입니다(대표 다음 차례부터). */
+  onSelect: (id: string, stack?: string[]) => void;
   onInteract: () => void;
 }) {
   const mapRef = useRef<HTMLElement>(null);
@@ -1004,7 +1005,9 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   const hoveredIds = hovered && zoomedIn ? new Set(hoveredCafes.map((cafe) => cafe.id)) : null;
 
   /**
-   * 화면에 세울 핀. `hidden` 은 그 핀이 가리고 선 이웃의 수입니다.
+   * 화면에 세울 핀. `members` 는 그 핀이 가리고 선 이웃들입니다 — 배지의 +n 이
+   * 이 수이고, 핀을 누르면 이 가게들이 영수증 뭉치로 펴집니다. 숫자와 장수가 늘
+   * 같아야 믿을 수 있으므로, 세는 그 자리에서 누가 묶였는지를 같이 적어 둡니다.
    *
    * 차례가 온 카페를 그대로 다 세우면, 한 골목에 여남은 곳이 몰린 자리에서는 핀이
    * 서로 물려 무엇이 몇 개인지도 안 보입니다. 겹치는 것들은 하나로 모으고, 그
@@ -1031,7 +1034,7 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
    * 곳을 담아 둔 자리. 여기서 간격을 놓으면 솎아 낸 뜻이 없습니다. 밀려난 곳은
    * 사라지는 게 아니라 이웃 핀의 셈에 얹히고, 조금만 좁히면 제자리로 돌아옵니다.
    */
-  type Pin = { cafe: Cafe; px: number; py: number; hidden: number; tier: number };
+  type Pin = { cafe: Cafe; px: number; py: number; members: { id: string; px: number; py: number }[]; tier: number };
   const shownCafes: Pin[] = [];
   {
     // 지도 단위 → 겹 위의 px. 창의 원점은 서로 빼면 사라지므로 배율만 곱합니다.
@@ -1085,22 +1088,31 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
       if (candidate.tier === 3 && placed >= budget) break;
       const blocker = candidate.tier === 0 ? null : blockerOf(candidate.px, candidate.py);
       if (!blocker) {
-        const pin: Pin = { cafe: candidate.cafe, px: candidate.px, py: candidate.py, hidden: 0, tier: candidate.tier };
+        const pin: Pin = { cafe: candidate.cafe, px: candidate.px, py: candidate.py, members: [], tier: candidate.tier };
         shownCafes.push(pin);
         put(pin);
         if (candidate.tier === 3) placed += 1;
         continue;
       }
-      blocker.hidden += 1;
       // 얼굴만 바꿔 답니다. 자리를 물려받고 나서 **다른** 핀과 겹치면 안 되고,
-      // 앞차례가 잡은 자리(열어 둔 곳·담긴 곳)는 건드리지 않습니다.
+      // 앞차례가 잡은 자리(열어 둔 곳·담긴 곳)는 건드리지 않습니다. 물러난 얼굴은
+      // 뭉치 안으로 들어갑니다 — 사라지는 게 아니라 순서만 바뀝니다.
       if (candidate.cafe.partner && candidate.tier >= blocker.tier && blocker.tier > 1
         && !blocker.cafe.partner && !blockerOf(candidate.px, candidate.py, blocker)) {
         drop(blocker);
+        blocker.members.push({ id: blocker.cafe.id, px: blocker.px, py: blocker.py });
         blocker.cafe = candidate.cafe;
         blocker.px = candidate.px;
         blocker.py = candidate.py;
         put(blocker);
+      } else {
+        blocker.members.push({ id: candidate.cafe.id, px: candidate.px, py: candidate.py });
+      }
+    }
+    // 뭉치는 대표에서 가까운 순으로 넘어갑니다. 넘길수록 핀에서 멀어집니다.
+    for (const pin of shownCafes) {
+      if (pin.members.length > 1) {
+        pin.members.sort((a, b) => Math.hypot(a.px - pin.px, a.py - pin.py) - Math.hypot(b.px - pin.px, b.py - pin.py));
       }
     }
   }
@@ -1134,8 +1146,8 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
     const scaleX = (size.width * spread) / draw.w;
     const scaleY = (size.height * spread) / draw.h;
     // 핀은 지름 30px, +n 이 붙은 핀은 오른쪽으로 배지만큼 더 깁니다.
-    const boxes: [number, number, number, number][] = shownCafes.map(({ px, py, hidden }) =>
-      [px - 15, py - 15, px + 15 + (hidden ? 12 : 0), py + 15]);
+    const boxes: [number, number, number, number][] = shownCafes.map(({ px, py, members }) =>
+      [px - 15, py - 15, px + 15 + (members.length ? 12 : 0), py + 15]);
     const left = window_.x * scaleX + LABEL_EDGE_PX / 2;
     const right = (window_.x + window_.w) * scaleX - LABEL_EDGE_PX / 2;
     const top = window_.y * scaleY + LABEL_EDGE_PX / 2;
@@ -1291,7 +1303,8 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
             style={{ left: `${x}%`, top: `${y}%` }}
           >{one.name}</span>;
         })}</div>
-        {shownCafes.map(({ cafe, hidden }) => {
+        {shownCafes.map(({ cafe, members }) => {
+          const hidden = members.length;
           const active = activeId === cafe.id;
           const saved = savedMarkers[cafe.id];
           const spot = project(cafe.pos[0], cafe.pos[1]);
@@ -1301,8 +1314,10 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
             className={["map-marker", "map-marker--plain", saved ? "is-saved" : "", active ? "is-active" : ""].filter(Boolean).join(" ")}
             style={{ left: `${x}%`, top: `${y}%`, "--codex-color": saved?.color } as CSSProperties}
             type="button"
-            onClick={() => onSelect(cafe.id)}
-            aria-label={`${cafe.name}, ${cafe.area}${saved ? `, ${saved.collectionName}에 저장됨` : ""}${hidden ? `, 겹쳐 선 ${hidden}곳을 대표합니다` : ""}`}
+            // 여럿이 한 핀에 묶였으면 그 가게들을 다 넘겨줍니다 — 대표 하나만 열면
+            // 나머지는 확대해서 갈라지기 전까지 볼 길이 없습니다.
+            onClick={() => onSelect(cafe.id, hidden ? members.map((member) => member.id) : undefined)}
+            aria-label={`${cafe.name}, ${cafe.area}${saved ? `, ${saved.collectionName}에 저장됨` : ""}${hidden ? `, 겹쳐 선 ${hidden}곳과 함께 열립니다` : ""}`}
             aria-pressed={active}
           >
             <MarkerFace icon={saved?.icon ?? null} />

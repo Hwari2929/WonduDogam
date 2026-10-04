@@ -8,6 +8,7 @@ import { Bibin, CodexMark } from "./components/BeanArt";
 import { Codex } from "./components/Codex";
 import { Drawer } from "./components/Drawer";
 import { MapSurface } from "./components/MapSurface";
+import { ReceiptStack } from "./components/ReceiptStack";
 import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
 import { COLLECTION_LIMIT, CURATOR_COLLECTION, CURATOR_COLLECTION_ID, colorValue, countInCollection, setCafeInCollection, useCodex, withCuratorPicks } from "./marks";
@@ -120,9 +121,14 @@ function readPathname() {
   return inside || "/";
 }
 
-function navigate(pathname: string) {
+/**
+ * `replace` 는 영수증 뭉치를 넘길 때 씁니다. 넘길 때마다 기록을 쌓으면 뒤로가기가
+ * 넘겨 본 장을 한 장씩 되짚어, 지도로 돌아가려던 사람이 다섯 번을 눌러야 합니다.
+ */
+function navigate(pathname: string, replace = false) {
   if (readPathname() === pathname) return;
-  window.history.pushState({}, "", `${BASE_PATH}${pathname}`);
+  if (replace) window.history.replaceState({}, "", `${BASE_PATH}${pathname}`);
+  else window.history.pushState({}, "", `${BASE_PATH}${pathname}`);
   window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
@@ -142,6 +148,13 @@ export default function Home() {
   const [tear, setTear] = useState<{ dx: number; dy: number; x: number; y: number; w: number; name: string } | null>(null);
   /** 지도에게 "여기로 가 달라"고 짚어 준 카페. 같은 곳을 다시 짚어도 다시 움직입니다. */
   const [focus, setFocus] = useState<{ id: string; at: number } | null>(null);
+  /**
+   * 영수증 뭉치 — 한 핀에 같이 묶여 있던 가게들(대표가 첫 장). 누른 그 순간의
+   * 묶음을 그대로 들고 있습니다. 넘기는 동안 지도가 다시 묶어도(지금 보는 가게가
+   * 따로 핀으로 서면 묶음이 바뀝니다) 손에 든 뭉치는 그대로여야 합니다.
+   * `opened` 는 펼친 시각이라, 같은 핀을 다시 눌러도 안내가 한 번 더 돕니다.
+   */
+  const [stack, setStack] = useState<{ ids: string[]; opened: number } | null>(null);
 
   const [cursor, setCursor] = useState(0);
   const marksButtonRef = useRef<HTMLButtonElement>(null);
@@ -173,6 +186,10 @@ export default function Home() {
   }, [dateLabel]);
 
   const displayedCafe = cafes.find((cafe) => cafe.id === selectedId) ?? dailyCafe;
+  // 뭉치는 지금 보는 가게가 그 안에 있을 때만 뭉치입니다. 뒤로가기로 다른 카페에
+  // 닿았거나 도감으로 넘어갔으면, 손에 든 뭉치는 더는 지금 화면의 것이 아닙니다.
+  const stackIndex = panel === "receipt" && stack ? stack.ids.indexOf(selectedId) : -1;
+  const activeStack = stackIndex >= 0 ? stack : null;
   const codexPreviewCafe = cafes.find((cafe) => cafe.id === codexPreviewId) ?? null;
 
   const matches = useMemo(() => {
@@ -330,7 +347,9 @@ export default function Home() {
 
   // 지도에 넘겨주는 손잡이라 렌더마다 새로 만들면 안 됩니다 — 새 함수는 곧
   // 새 props 이고, 그러면 MapSurface 를 memo 로 묶어 둔 뜻이 없어집니다.
-  const openCafe = useCallback((id: string) => {
+  const openCafe = useCallback((id: string, members?: string[]) => {
+    // 한 곳만 여는 길(검색·도감·홀로 선 핀)은 뭉치를 내려놓습니다.
+    setStack(members?.length ? { ids: [id, ...members], opened: Date.now() } : null);
     setCodexPreviewId(null);
     setPhase("docked");
     setQuery("");
@@ -339,6 +358,34 @@ export default function Home() {
     setSearchOpen(false);
     navigate(`/c/${encodeURIComponent(id)}`);
   }, []);
+
+  /**
+   * 뭉치에서 앞뒤로 한 장. 끝에서는 더 안 넘어갑니다 — "5 / 5" 다음이 "1 / 5" 면
+   * 몇 장을 봤는지 잃습니다. 주소는 바꾸되 기록은 쌓지 않습니다(navigate 의 replace).
+   */
+  const goStack = useCallback((delta: -1 | 1) => {
+    if (!activeStack) return;
+    const next = stackIndex + delta;
+    if (next < 0 || next >= activeStack.ids.length) return;
+    navigate(`/c/${encodeURIComponent(activeStack.ids[next])}`, true);
+  }, [activeStack, stackIndex]);
+
+  // 넓은 화면에서는 ← → 로 넘깁니다. 글을 쓰는 중이면 화살표는 커서 몫입니다.
+  useEffect(() => {
+    if (!activeStack) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      const active = document.activeElement;
+      const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+        || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable);
+      if (typing) return;
+      event.preventDefault();
+      goStack(event.key === "ArrowLeft" ? -1 : 1);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [activeStack, goStack]);
 
   /**
    * 화살표와 엔터는 화면에 적어 두지 않습니다 — 마우스와 손가락으로 오는 사람에게는
@@ -407,6 +454,23 @@ export default function Home() {
       setTear({ x: origin.left, y: origin.top, w: origin.width, dx: target.left + target.width / 2 - (origin.left + origin.width / 2), dy: target.top + target.height / 2 - (origin.top + origin.height / 2), name: cafe.name });
     }
   }
+  // 지도에서 연 영수증. 홀로 선 카페든 뭉치의 한 장이든 같은 종이이고, 뭉치일 때만
+  // 머리에 장수가 붙습니다 — 그래서 한 번만 만들고 뭉치일 때 감싸기만 합니다.
+  const receipt = (
+    <Receipt
+      key={displayedCafe.id}
+      cafe={displayedCafe}
+      note={marks.find((mark) => mark.id === displayedCafe.id)?.note ?? ""}
+      collections={collections}
+      fullCollectionIds={fullCollectionIds}
+      selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
+      onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
+      onClose={closePanel}
+      sheet={isSheet}
+      stack={activeStack ? { index: stackIndex, total: activeStack.ids.length, onPrev: () => goStack(-1), onNext: () => goStack(1) } : undefined}
+    />
+  );
+
   return (
     <main className="app-shell" data-phase={effectivePhase} data-search-open={searchOpen} data-touched={touched || panelOpen}>
       <a className="skip-link" href="#dock">
@@ -586,6 +650,7 @@ export default function Home() {
                     있다"고 말합니다. 서로 다른 것을 말하므로 둘 다 둡니다. */}
                 <History size={ICON.sm} aria-hidden="true" />
                 <span>{displayedCafe.name}</span>
+                {activeStack ? <i className="tabular">{stackIndex + 1} / {activeStack.ids.length}</i> : null}
                 <ChevronUp size={ICON.sm} aria-hidden="true" />
               </button>
             ) : null}
@@ -625,20 +690,24 @@ export default function Home() {
                   />
                 </div>
               </div>
-            ) : (
-              <Receipt
-                key={displayedCafe.id}
-                cafe={displayedCafe}
-                note={marks.find((mark) => mark.id === displayedCafe.id)?.note ?? ""}
-                collections={collections}
-                fullCollectionIds={fullCollectionIds}
-                selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
-                onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
-                onClose={closePanel}
-                sheet={isSheet}
-              />
-            )}
+            ) : activeStack ? (
+              // 한 핀에 여럿이 묶여 있었으면 뭉치째 폅니다. 대표 하나만 열면 나머지는
+              // 확대해서 갈라지기 전까지 볼 길이 없습니다.
+              <ReceiptStack index={stackIndex} total={activeStack.ids.length} onGo={goStack}>
+                {receipt}
+              </ReceiptStack>
+            ) : receipt}
             </div>
+            {/* 뭉치를 펼 때마다 한 번, 잠깐. 늘 띄워 두면 두 번째부터는 읽지 않는
+                글이 종이를 가립니다. 펼친 시각을 key 로 두어 같은 핀을 다시 눌러도
+                처음부터 다시 돕니다 — 넘길 때마다 도는 건 아닙니다. 도크 안쪽 아래에
+                두는 건, 넘기는 손이 닿는 그 종이 위에서 말해야 하기 때문입니다. */}
+            {activeStack ? (
+              <p key={activeStack.opened} className="dock__stack-hint" aria-hidden="true">
+                <span className="for-touch">좌우로 밀어 넘겨 보기</span>
+                <span className="for-pointer">좌우 방향키로 넘겨 보기</span>
+              </p>
+            ) : null}
           </div>
           {/* 안내는 내린 직후에만 잠깐 뜹니다. 상시 띄워 두면 두 번째부터는 읽지
               않는 글이 자리만 차지합니다. 뜨고 지는 것은 CSS 가 맡습니다 —

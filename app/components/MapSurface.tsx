@@ -15,7 +15,7 @@ export const MapSurface = memo(function MapSurface(props: {
   activeId: string | null;
   focus: { id: string; at: number } | null;
   savedMarkers: Record<string, SavedCafeMarker>;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, stack?: string[]) => void;
   onInteract: () => void;
 }) {
   return <MapCanvas cafes={props.cafes} activeId={props.activeId} focus={props.focus} savedMarkers={props.savedMarkers} onSelect={props.onSelect} onInteract={props.onInteract} />;
