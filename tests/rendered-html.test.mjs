@@ -759,12 +759,32 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /if \(\(bounds\[3\] - bounds\[1\]\) \* perUnitY < LABEL_MIN_PX\) return false;/);
   // 이름은 자리를 가운데로 잡고 좌우로 벌어집니다 — 가장자리에 두면 잘립니다.
   assert.match(canvas, /const padX = LABEL_EDGE_PX \/ perUnitX;/);
+  // 이름표도 핀처럼 솎습니다 — 다만 빼기 전에 옆자리로 옮겨 봅니다. 그냥 빼면
+  // 196%에서 열다섯이 하나로 줄었습니다(동네 가운데에 핀이 몰려 이름자리와 부딪힙니다).
+  assert.match(canvas, /const NAME_HANGUL_PX = 12\.3;/);
+  assert.match(canvas, /const NAME_OTHER_PX = 8;/);
+  assert.match(canvas, /const NAME_HEIGHT_PX = 18\.7;/);
+  assert.match(canvas, /const NAME_GAP = 4;/);
+  // 글자 폭은 화면에서 잰 값이라 글꼴·크기·자간이 바뀌면 다시 재야 합니다.
+  assert.match(css, /--t-micro: 0\.6875rem;/);
+  assert.match(css, /--ls-mono: 0\.12em;/);
+  assert.match(canvas, /width \+= \/\[\\uac00-\\ud7a3\]\/\.test\(char\) \? NAME_HANGUL_PX : NAME_OTHER_PX;/);
+  // 핀이 먼저 자리를 잡습니다 — 기록이 전경입니다.
+  assert.match(canvas, /const boxes: \[number, number, number, number\]\[\] = shownCafes\.map\(/);
+  // 제자리 → 위 → 아래 → 왼쪽 → 오른쪽 → 한 칸 더 위 → 한 칸 더 아래.
+  assert.match(canvas, /const slots: \[number, number\]\[\] = \[\[0, 0\], \[0, -step\], \[0, step\], \[-side, 0\], \[side, 0\], \[0, -step \* 1\.85\], \[0, step \* 1\.85\]\];/);
+  // 지금 보고 있는 칸이 맨 앞이고, 그다음은 넓은 칸입니다.
+  assert.match(canvas, /\.sort\(\(a, b\) => b\.area - a\.area\)/);
+  // 지금 보고 있는 칸의 이름은 빠지지 않습니다.
+  assert.match(canvas, /if \(!placed && one\.here\) placed = /);
+  assert.match(canvas, /<div className="map__names" aria-hidden="true">\{shownNames\.map\(/);
+
   // 구 이름이 나오기 시작하면 도시 이름표는 물러섭니다. 바다만 끝까지 남습니다.
   assert.match(canvas, /if \(!place\.sea && view\.zoom >= PLACES_UNTIL\) return null;/);
 
   // 왼쪽 아래가 이름을 말하고, 지도가 그 자리를 가리킵니다.
   assert.match(canvas, /className="map__layer map__regions map__regions--here"/);
-  assert.match(canvas, /className=\{one\.id === hereLabel\?\.id \? "is-here" : undefined\}/);
+  assert.match(canvas, /className=\{one\.here \? "is-here" : undefined\}/);
   // 채움 없이 선만 굵게 — 옅게라도 채우면 밑의 강과 길이 한 꺼풀 가려집니다.
   assert.match(css, /\.map__regions--here path \{\s*\n\s*fill: none;\s*\n\s*stroke:[^;]*;\s*\n\s*stroke-width: 2\.5;/);
   // 지금 어디인지 말하는 글자가 핀(z-index 5) 뒤에 숨으면 강조한 뜻이 없습니다.
@@ -1489,6 +1509,7 @@ test("문서가 코드와 같은 값을 적고 있다", async () => {
   assert.ok(spec.includes("**110px** 이상"), "이름을 다는 크기가 명세와 다릅니다");
   assert.ok(spec.includes("**44px** 안쪽"), "이름과 가장자리 사이가 명세와 다릅니다");
   assert.ok(spec.includes("160%까지만"), "도시 이름표가 물러서는 배율이 명세와 다릅니다");
+  assert.ok(spec.includes("옆자리로 옮겨"), "이름표 솎기가 명세에 없습니다");
   assert.match(canvas, /const REVEAL_ALL = 10;[\s\S]*?const REVEAL_POWER = 1\.8;/);
   assert.ok(spec.includes("`z^1.8`"), "표출 곡선이 명세와 다릅니다");
   // 왼쪽 아래 이름표의 세 문턱.

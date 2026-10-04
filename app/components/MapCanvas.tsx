@@ -124,6 +124,19 @@ const LABEL_MIN_PX = 110;
  */
 const LABEL_EDGE_PX = 44;
 /**
+ * 이름표 한 글자의 폭 (px). 화면에서 잰 값입니다 — MonoplexKR, --t-micro(11px),
+ * 자간 0.12em 을 다 얹은 폭이라, 이 셋 중 하나가 바뀌면 다시 재야 합니다.
+ *
+ * 한글은 한 자가 한 칸 반쯤이고, 숫자·가운뎃점·띄어쓰기는 한 칸입니다.
+ * "종로1·2·3·4가동"이 105px, "중구"가 25px 입니다 — 넷 차이가 나는 걸 같은 크기로
+ * 치면 긴 이름끼리는 겹치고 짧은 이름끼리는 쓸데없이 밀려납니다.
+ */
+const NAME_HANGUL_PX = 12.3;
+const NAME_OTHER_PX = 8;
+const NAME_HEIGHT_PX = 18.7;
+/** 이름표끼리, 이름표와 핀 사이에 이만큼은 비워 둡니다 (px). */
+const NAME_GAP = 4;
+/**
  * 도시 이름표(서울·인천·성남…)를 쓰는 배율의 끝.
  *
  * 구 이름이 나오기 시작하면 물러섭니다. 둘은 같은 것을 두 번 말하는 셈이고,
@@ -1094,6 +1107,90 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
   }
 
   /**
+   * 지도 위에 실제로 세울 이름표. 핀처럼 솎아 냅니다.
+   *
+   * "화면에 충분히 든 칸"만 골라도 이름끼리는 겹칠 수 있습니다 — 칸이 크다고
+   * 이름자리가 서로 멀리 떨어져 있는 건 아닙니다. 그리고 핀 밑에 깔린 이름은
+   * 반쯤 가려져 "관"이나 "과"만 남는데, 그건 이름이 아니라 얼룩입니다.
+   *
+   * 그래서 이름표마다 실제 글자 폭으로 네모를 잡고, 이미 선 이름표나 핀과 겹치면
+   * **옆자리로 옮겨 봅니다** — 위, 아래, 왼쪽, 오른쪽, 한 칸 더 위, 한 칸 더 아래.
+   * 어디에도 못 앉을 때만 세우지 않습니다. 핀이 먼저입니다 — 지도는 배경이고
+   * 기록이 전경입니다(02 §5). 이름 때문에 핀을 치우면 카페가 사라집니다.
+   *
+   * 옮기지 않고 그냥 빼 봤더니 196%에서 이름 열다섯이 하나로, 274%에서 열둘이
+   * 0으로 줄었습니다. 동네 가운데에 카페가 몰리는 건 흔한 일이라(목업은 아예 구
+   * 이름자리 둘레 1km 안에 흩뿌려져 있습니다) 이름자리와 핀은 늘 부딪힙니다.
+   * 옮길 자리는 많아야 한 줄 반(52px)이라, 110px 넘는 칸 안에서 멀리 안 벗어납니다.
+   *
+   * 차례는 지금 보고 있는 칸이 맨 앞이고(왼쪽 아래와 지도가 같은 이름을 말해야
+   * 합니다), 그다음은 화면에서 넓게 차지하는 칸입니다. 넓은 칸일수록 그 이름이
+   * 화면의 더 많은 부분을 설명하고, 좁은 칸은 조금만 좁히면 넓어집니다.
+   *
+   * 핀과 달리 +n 은 안 답니다 — 이름표가 가려졌다는 건 셀 만한 정보가 아닙니다.
+   */
+  const shownNames: { id: string; name: string; at: readonly [number, number]; here: boolean }[] = [];
+  if (size) {
+    const spread = 1 + OVERSCAN * 2;
+    const scaleX = (size.width * spread) / draw.w;
+    const scaleY = (size.height * spread) / draw.h;
+    // 핀은 지름 30px, +n 이 붙은 핀은 오른쪽으로 배지만큼 더 깁니다.
+    const boxes: [number, number, number, number][] = shownCafes.map(({ px, py, hidden }) =>
+      [px - 15, py - 15, px + 15 + (hidden ? 12 : 0), py + 15]);
+    const left = window_.x * scaleX + LABEL_EDGE_PX / 2;
+    const right = (window_.x + window_.w) * scaleX - LABEL_EDGE_PX / 2;
+    const top = window_.y * scaleY + LABEL_EDGE_PX / 2;
+    const bottom = (window_.y + window_.h) * scaleY - LABEL_EDGE_PX / 2;
+    const widthOf = (name: string) => {
+      let width = 0;
+      for (const char of name) width += /[\uac00-\ud7a3]/.test(char) ? NAME_HANGUL_PX : NAME_OTHER_PX;
+      return width;
+    };
+    const clear = (box: [number, number, number, number]) => boxes.every(([x0, y0, x1, y1]) =>
+      box[2] + NAME_GAP <= x0 || box[0] - NAME_GAP >= x1 || box[3] + NAME_GAP <= y0 || box[1] - NAME_GAP >= y1);
+    const queue = [
+      ...(hereLabel ? [{ ...hereLabel, here: true, area: Infinity }] : []),
+      ...labels
+        .filter((one) => one.id !== hereLabel?.id)
+        .map((one) => ({
+          id: one.id, name: one.name, at: one.at, here: false,
+          area: (one.bounds[2] - one.bounds[0]) * (one.bounds[3] - one.bounds[1]),
+        }))
+        .sort((a, b) => b.area - a.area),
+    ];
+    const halfH = NAME_HEIGHT_PX / 2;
+    for (const one of queue) {
+      const cx = one.at[0] * scaleX;
+      const cy = one.at[1] * scaleY;
+      const halfW = widthOf(one.name) / 2;
+      // 제자리, 그다음 핀 하나를 비켜 설 만큼씩 위·아래·옆으로.
+      const step = halfH + 15 + NAME_GAP;
+      const side = halfW + 15 + NAME_GAP;
+      const slots: [number, number][] = [[0, 0], [0, -step], [0, step], [-side, 0], [side, 0], [0, -step * 1.85], [0, step * 1.85]];
+      let placed: [number, number, number, number] | null = null;
+      for (const [dx, dy] of slots) {
+        const x = cx + dx;
+        const y = cy + dy;
+        const box: [number, number, number, number] = [x - halfW, y - halfH, x + halfW, y + halfH];
+        // 옮긴 자리가 화면 가장자리로 밀려나면 글자가 잘립니다.
+        if (box[0] < left || box[2] > right || box[1] < top || box[3] > bottom) continue;
+        if (clear(box)) { placed = box; break; }
+      }
+      // 지금 보고 있는 칸의 이름은 빠지지 않습니다 — 왼쪽 아래와 같은 이름을 말해야
+      // 합니다. 앉을 자리가 없으면 제자리에 서되, 핀 위로 올라서므로 가려지지 않습니다.
+      if (!placed && one.here) placed = [cx - halfW, cy - halfH, cx + halfW, cy + halfH];
+      if (!placed) continue;
+      boxes.push(placed);
+      shownNames.push({
+        id: one.id,
+        name: one.name,
+        at: [(placed[0] + placed[2]) / 2 / scaleX, (placed[1] + placed[3]) / 2 / scaleY],
+        here: one.here,
+      });
+    }
+  }
+
+  /**
    * 지금 보이는 땅의 창문. 겹을 CSS 로 확대하는 대신 이 창문을 좁힙니다.
    *
    * transform: scale() 로 키우면 브라우저는 이미 그려 둔 그림을 늘립니다 — 특히
@@ -1187,14 +1284,11 @@ export function MapCanvas({ cafes, activeId, focus, savedMarkers, onSelect, onIn
           return <span key={place.label} className={place.sea ? "map__sea-label" : undefined} style={{ left: `${x}%`, top: `${y}%` }}>{place.label}</span>;
         })}</div>
         {/* 동네 이름. 지금 보고 있는 칸만 진하게 적습니다. */}
-        <div className="map__names" aria-hidden="true">{[
-          ...labels.filter((one) => one.id !== hereLabel?.id).map((one) => ({ id: one.id, name: one.name, at: one.at })),
-          ...(hereLabel ? [hereLabel] : []),
-        ].map((one) => {
+        <div className="map__names" aria-hidden="true">{shownNames.map((one) => {
           const { x, y } = toScreen(one.at[0], one.at[1]);
           return <span
             key={one.id}
-            className={one.id === hereLabel?.id ? "is-here" : undefined}
+            className={one.here ? "is-here" : undefined}
             style={{ left: `${x}%`, top: `${y}%` }}
           >{one.name}</span>;
         })}</div>
