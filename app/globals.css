@@ -397,16 +397,20 @@ a:focus-visible,
   inset: 0;
   pointer-events: none;
   background:
-    /* 좌표 격자 — §05 지도 화면. 56px 눈금, 선은 --rule 을 35% 로 눕힌 것. */
+    /* 좌표 격자 — §05 지도 화면. 28px 눈금, 선은 --rule 을 11% 로 눕힌 것.
+       종이에 미리 인쇄된 모눈이지 지도의 일부가 아닙니다. 56px · 35% 였을 때는
+       칸 경계(점선)와 같은 무게로 읽혀, 어느 선이 동네 경계인지 한 번 더 따져야
+       했습니다. 촘촘하고 옅게 두면 선이 아니라 종이의 결로 물러납니다.
+       28px 은 축척 막대(56px)의 딱 절반이라, 막대가 늘 두 칸을 덮습니다. */
     repeating-linear-gradient(
       90deg,
-      color-mix(in srgb, var(--rule) 35%, transparent) 0 1px,
-      transparent 1px 56px
+      color-mix(in srgb, var(--rule) 11%, transparent) 0 1px,
+      transparent 1px 28px
     ),
     repeating-linear-gradient(
       0deg,
-      color-mix(in srgb, var(--rule) 35%, transparent) 0 1px,
-      transparent 1px 56px
+      color-mix(in srgb, var(--rule) 11%, transparent) 0 1px,
+      transparent 1px 28px
     ),
     radial-gradient(120% 90% at 50% 40%, var(--desk) 40%, var(--desk-deep) 100%);
   will-change: transform;

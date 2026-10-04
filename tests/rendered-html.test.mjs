@@ -1405,6 +1405,14 @@ test("손짓 중에는 겹을 GPU 에 올려 두고, 안 바뀌는 것은 따로
   // 책상과 눈금은 움직이지도 바뀌지도 않습니다 — 제 겹에 두어 한 번만 굽습니다.
   assert.match(canvas, /className="map__desk"/);
   assert.match(css, /\.map__desk \{[^}]*repeating-linear-gradient[\s\S]*?will-change: transform;/s);
+  // 모눈은 종이의 결입니다. 동네 경계(점선)와 같은 무게면 어느 선이 경계인지 따져야 합니다.
+  // 눈금은 축척 막대(56px)의 절반이라 막대가 늘 두 칸을 덮습니다.
+  const desk = css.match(/\.map__desk \{[\s\S]*?\n\}/)[0];
+  assert.equal((desk.match(/color-mix\(in srgb, var\(--rule\) 11%, transparent\) 0 1px,/g) ?? []).length, 2);
+  assert.equal((desk.match(/transparent 1px 28px/g) ?? []).length, 2);
+  assert.doesNotMatch(desk, /--rule\) 35%|1px 56px/);
+  const designDoc = await readFile(new URL("../docs/02_디자인_시스템.md", import.meta.url), "utf8");
+  assert.ok(designDoc.includes("28px 눈금 격자(`--rule` 11%)"), "모눈이 디자인 문서와 다릅니다");
   assert.doesNotMatch(css, /\.map \{\s*\n\s*position: absolute;[^}]*repeating-linear-gradient/s);
 
   // 섞기는 밑에 깔린 것을 매번 다시 읽습니다. 종이에는 남기고 지도에서만 뺍니다.
