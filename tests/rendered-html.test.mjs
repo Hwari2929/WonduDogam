@@ -1584,8 +1584,17 @@ test("뭉친 핀을 누르면 그 자리의 가게가 다 담긴 영수증 뭉�
   // ← → 는 글을 쓰는 중이면 커서 몫입니다.
   assert.match(page, /if \(event\.key !== "ArrowLeft" && event\.key !== "ArrowRight"\) return;/);
   assert.match(page, /active instanceof HTMLInputElement \|\| active instanceof HTMLTextAreaElement/);
-  // 영수증은 한 번만 만들고 뭉치일 때 감싸기만 합니다.
-  assert.match(page, /<ReceiptStack index=\{stackIndex\} total=\{activeStack\.ids\.length\} onGo=\{goStack\}>\s*\n\s*\{receipt\}/);
+  // 영수증은 한 손(receiptFor)으로 만듭니다 — 밑에 깔리는 앞뒤 장도 같은 종이입니다.
+  assert.match(page, /function receiptFor\(cafe: Cafe, at = -1\) \{/);
+  assert.match(page, /renderAt=\{\(id, at\) => receiptFor\(cafes\.find\(\(cafe\) => cafe\.id === id\) \?\? displayedCafe, at\)\}/);
+  assert.match(page, /\) : receiptFor\(displayedCafe\)\}/);
+
+  // 한 장짜리와 뭉치의 첫 장은 같은 크기입니다. 넓은 화면은 도크가 뒤 종이만큼
+  // 넓어지고, 좁은 화면은 영수증이 늘 같은 8px 을 비워 둡니다(한 장이면 책상이 비칩니다).
+  assert.match(page, /"--stack-room": `\$\{sheetsBehind\(activeStack\.ids\.length\) \* 4\}px`/);
+  assert.match(css, /width: min\(calc\(var\(--card-w\) \+ var\(--stack-room, 0px\)\), calc\(100vw - var\(--rail\) \* 2\)\);/);
+  assert.match(css, /\.dock__scroll > \.receipt \{\s*\n\s*min-height: calc\(100% - 8px\);\s*\n\s*margin: 0 8px 8px 0;/);
+  assert.match(css, /\.receipt-stack \{\s*\n\s*--room: 8px;/);
   // 안내는 펼 때마다 한 번 — 펼친 시각이 key 입니다. 넘길 때마다 도는 건 아닙니다.
   assert.match(page, /<p key=\{activeStack\.opened\} className="dock__stack-hint" aria-hidden="true">/);
   assert.match(page, /<span className="for-touch">좌우로 밀어 넘겨 보기<\/span>/);
@@ -1601,9 +1610,23 @@ test("뭉친 핀을 누르면 그 자리의 가게가 다 담긴 영수증 뭉�
   assert.match(receipt, /disabled=\{stack\.index === 0\} aria-label="앞 장"/);
   assert.match(receipt, /disabled=\{stack\.index === stack\.total - 1\} aria-label="다음 장"/);
 
-  // 뒤에 비치는 종이는 많아야 두 장. 앞 장이 내주는 폭은 뭉치 안에서 늘 같습니다.
-  assert.match(stack, /const behind = Math\.min\(total - 1, 2\);/);
-  assert.match(css, /\.receipt-stack \{[^}]*padding: 0 calc\(var\(--behind\) \* var\(--step\)\) calc\(var\(--behind\) \* var\(--step\)\) 0;/s);
+  // 뒤에 비치는 종이는 많아야 두 장. 도크도 같은 셈으로 넓어집니다.
+  assert.match(stack, /export function sheetsBehind\(total: number\) \{\s*\n\s*return Math\.min\(Math\.max\(total - 1, 0\), 2\);/);
+  assert.match(css, /\.receipt-stack \{[^}]*--room: calc\(var\(--behind\) \* var\(--step\)\);[^}]*padding: 0 var\(--room\) var\(--room\) 0;/s);
+
+  // 넘길 장은 미리 밑에 깔려 있습니다 — 위 장이 비켜 가면 이미 거기 있습니다.
+  // 예전에는 위 장이 다 빠져나간 뒤에야 다음 장을 만들어, 3분의 1초 동안 빈 화면이었습니다.
+  assert.match(stack, /const shown = \[\.\.\.new Set\(\[index - 1, index, index \+ 1, seen\.leaving \?\? index\]\)\]/);
+  // 늘 차례대로 그립니다 — 요소가 자리를 옮기면 진행 중인 움직임이 끊깁니다.
+  assert.match(stack, /\.sort\(\(a, b\) => a - b\);/);
+  assert.match(stack, /key=\{ids\[at\]\}/);
+  // 밑에 깔린 장은 보이기만 하고 만질 수 없습니다.
+  assert.match(stack, /inert=\{slot !== "face"\}/);
+  // 깔린 장은 위 장 크기로 자르되 clip 으로 — hidden 이면 그 장의 머리가 위에 안 붙습니다.
+  assert.match(css, /\.receipt-stack__card:not\(\[data-slot="face"\]\) \{[^}]*overflow: clip;/s);
+  assert.match(css, /\.receipt-stack\[data-toward="next"\] \.receipt-stack__card\[data-slot="next"\]/);
+  // 좁은 화면에서는 깔린 장도 화면 끝까지 채웁니다 — 올라오는 순간 늘어나지 않게.
+  assert.match(css, /\.receipt-stack__card \{\s*\n\s*display: flex;\s*\n\s*\}/);
   assert.match(css, /\.receipt-stack \{[^}]*touch-action: pan-y;/s);
 
   // 방향은 처음 몇 px 에서 한 번 정하고, 시트를 당기는 쪽과 같은 값을 씁니다.
@@ -1617,11 +1640,27 @@ test("뭉친 핀을 누르면 그 자리의 가게가 다 담긴 영수증 뭉�
   assert.match(stack, /const WHEEL_QUIET_MS = 260;/);
   assert.match(stack, /if \(wheelLocked\) return;/);
 
-  // 들어오는 장의 움직임에 채움을 두면 다음 장을 손으로 끌 때 종이가 안 따라옵니다.
-  assert.match(css, /animation: stack-in 190ms var\(--ease-paper\);/);
-  assert.doesNotMatch(css, /animation: stack-in [^;]*both/);
-  // 넘길 때는 찍혀 나오지 않습니다.
-  assert.match(css, /\.receipt-stack__face\.is-from-left \.receipt \{\s*\n\s*animation: none;/);
+  // 끄는 만큼 기울고, 밑 장은 작게 깔렸다가 비켜 간 만큼 올라옵니다.
+  assert.match(stack, /const TILT_DEG = 5;/);
+  assert.match(stack, /const UNDER_SCALE = 0\.965;/);
+  // 덜 끌고 놓으면 살짝 지나쳤다 돌아옵니다(반동).
+  assert.match(stack, /transform \$\{SPRING_MS\}ms var\(--ease-spring\)/);
+  assert.match(css, /--ease-spring: cubic-bezier\(0\.34, 1\.56, 0\.64, 1\);/);
+  // 넘어가면 위 장은 끌던 자리·기울기에서 이어서 날아갑니다. 다 날아간 자리에 붙들어
+  // 두어야(forwards) 내려앉기 전 한 프레임 동안 새 장을 덮지 않습니다.
+  assert.match(stack, /face\.style\.setProperty\("--from-x", `\$\{dx\}px`\);/);
+  assert.match(css, /animation: stack-leave 260ms cubic-bezier\(0\.3, 0\.55, 0\.4, 1\) forwards;/);
+  assert.match(css, /from \{\s*\n\s*transform: translate3d\(var\(--from-x, 0px\), 0, 0\) rotate\(var\(--from-rot, 0deg\)\);/);
+  // 올라온 장은 제 크기를 조금 지나쳤다 돌아옵니다. 곡선 하나로 튕기면 넘치는 양이
+  // 움직인 거리에 비례해 1.0016 — 안 보입니다. 지나치는 자리를 장면으로 박아 둡니다.
+  assert.match(css, /55% \{\s*\n\s*transform: scale\(1\.016\);/);
+  // 채움을 두면 이 장을 다시 끌 때 종이가 손을 안 따라옵니다.
+  assert.match(css, /animation: stack-arrive 440ms ease-out;/);
+  assert.doesNotMatch(css, /animation: stack-arrive [^;]*(both|forwards)/);
+  // 튕기는 중에 다시 잡으면 튕김을 끝냅니다.
+  assert.match(stack, /animation\.animationName === "stack-arrive"\) animation\.finish\(\);/);
+  // 예전 미끄러져 들어오기는 없습니다.
+  assert.doesNotMatch(css, /stack-in\b|receipt-stack__face/);
 
   assert.ok(spec.includes("영수증 뭉치"), "영수증 뭉치가 명세에 없습니다");
 });

@@ -8,7 +8,7 @@ import { Bibin, CodexMark } from "./components/BeanArt";
 import { Codex } from "./components/Codex";
 import { Drawer } from "./components/Drawer";
 import { MapSurface } from "./components/MapSurface";
-import { ReceiptStack } from "./components/ReceiptStack";
+import { ReceiptStack, sheetsBehind } from "./components/ReceiptStack";
 import { Receipt } from "./components/Receipt";
 import { cafes, type Cafe } from "./data/cafes";
 import { COLLECTION_LIMIT, CURATOR_COLLECTION, CURATOR_COLLECTION_ID, colorValue, countInCollection, setCafeInCollection, useCodex, withCuratorPicks } from "./marks";
@@ -455,21 +455,24 @@ export default function Home() {
     }
   }
   // 지도에서 연 영수증. 홀로 선 카페든 뭉치의 한 장이든 같은 종이이고, 뭉치일 때만
-  // 머리에 장수가 붙습니다 — 그래서 한 번만 만들고 뭉치일 때 감싸기만 합니다.
-  const receipt = (
-    <Receipt
-      key={displayedCafe.id}
-      cafe={displayedCafe}
-      note={marks.find((mark) => mark.id === displayedCafe.id)?.note ?? ""}
-      collections={collections}
-      fullCollectionIds={fullCollectionIds}
-      selectedCollectionIds={marks.find((mark) => mark.id === displayedCafe.id)?.collectionIds ?? []}
-      onToggleCollection={(collectionId, included, event) => onToggleCollection(displayedCafe, collectionId, included, event)}
-      onClose={closePanel}
-      sheet={isSheet}
-      stack={activeStack ? { index: stackIndex, total: activeStack.ids.length, onPrev: () => goStack(-1), onNext: () => goStack(1) } : undefined}
-    />
-  );
+  // 머리에 장수가 붙습니다. 뭉치는 지금 장의 앞뒤 장도 밑에 깔아 두므로(넘길 때
+  // 빈 자리가 안 생기게), 어느 카페든 같은 손으로 만듭니다.
+  function receiptFor(cafe: Cafe, at = -1) {
+    return (
+      <Receipt
+        key={cafe.id}
+        cafe={cafe}
+        note={marks.find((mark) => mark.id === cafe.id)?.note ?? ""}
+        collections={collections}
+        fullCollectionIds={fullCollectionIds}
+        selectedCollectionIds={marks.find((mark) => mark.id === cafe.id)?.collectionIds ?? []}
+        onToggleCollection={(collectionId, included, event) => onToggleCollection(cafe, collectionId, included, event)}
+        onClose={closePanel}
+        sheet={isSheet}
+        stack={activeStack && at >= 0 ? { index: at, total: activeStack.ids.length, onPrev: () => goStack(-1), onNext: () => goStack(1) } : undefined}
+      />
+    );
+  }
 
   return (
     <main className="app-shell" data-phase={effectivePhase} data-search-open={searchOpen} data-touched={touched || panelOpen}>
@@ -631,6 +634,9 @@ export default function Home() {
         <>
           <div
             className={["dock", peeking ? "is-peek" : "", panel === "codex" && codexPreviewCafe ? "has-preview" : ""].filter(Boolean).join(" ")}
+            // 뭉치의 뒤에 비치는 종이만큼 도크가 넓어집니다. 앞 장을 줄여 자리를 내면
+            // 한 장짜리 영수증보다 뭉치의 첫 장이 작아져, 같은 종이가 둘이 됩니다.
+            style={activeStack ? { "--stack-room": `${sheetsBehind(activeStack.ids.length) * 4}px` } as React.CSSProperties : undefined}
             id="dock"
             ref={setDock}
           >
@@ -693,10 +699,13 @@ export default function Home() {
             ) : activeStack ? (
               // 한 핀에 여럿이 묶여 있었으면 뭉치째 폅니다. 대표 하나만 열면 나머지는
               // 확대해서 갈라지기 전까지 볼 길이 없습니다.
-              <ReceiptStack index={stackIndex} total={activeStack.ids.length} onGo={goStack}>
-                {receipt}
-              </ReceiptStack>
-            ) : receipt}
+              <ReceiptStack
+                ids={activeStack.ids}
+                index={stackIndex}
+                onGo={goStack}
+                renderAt={(id, at) => receiptFor(cafes.find((cafe) => cafe.id === id) ?? displayedCafe, at)}
+              />
+            ) : receiptFor(displayedCafe)}
             </div>
             {/* 뭉치를 펼 때마다 한 번, 잠깐. 늘 띄워 두면 두 번째부터는 읽지 않는
                 글이 종이를 가립니다. 펼친 시각을 key 로 두어 같은 핀을 다시 눌러도
