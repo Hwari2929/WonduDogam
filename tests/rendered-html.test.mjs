@@ -716,7 +716,7 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   assert.match(canvas, /const REVEAL_POWER = 1\.8;/);
   assert.match(canvas, /clamp\(\(view\.zoom \/ REVEAL_ALL\) \*\* REVEAL_POWER, 0, 1\)/);
   assert.doesNotMatch(canvas, /REVEAL_FROM/);
-  assert.match(canvas, /\{shownCafes\.map\(\(\{ cafe, hidden \}\) => \{/);
+  assert.match(canvas, /\{shownCafes\.map\(\(\{ cafe, members \}\) => \{\s*\n\s*const hidden = members\.length;/);
 
   // 겹쳐 선 핀은 솎아 냅니다. 핀 지름이 30px 이니 40px 이면 사이가 10px 뜹니다 —
   // 서로 안 물리는 가장 좁은 간격입니다. 넉넉히 잡으면 끝까지 좁혀도 안 갈라지는
@@ -739,10 +739,13 @@ test("줌아웃하면 고른 도감의 카페만, 확대하면 보이는 자리�
   // 자리를 물려받은 뒤 다른 핀과 겹치면 안 됩니다.
   assert.match(canvas, /if \(candidate\.cafe\.partner && candidate\.tier >= blocker\.tier && blocker\.tier > 1/);
   assert.match(canvas, /&& !blocker\.cafe\.partner && !blockerOf\(candidate\.px, candidate\.py, blocker\)\) \{/);
-  // 가린 수는 대표 핀에 적습니다.
-  assert.match(canvas, /blocker\.hidden \+= 1;/);
+  // 가린 가게는 누구인지까지 적어 둡니다 — 배지의 수와 뭉치의 장수가 같아야 합니다.
+  // 얼굴이 협력업체로 바뀌면 물러난 얼굴이 뭉치에 들어갑니다(사라지지 않습니다).
+  assert.match(canvas, /blocker\.members\.push\(\{ id: blocker\.cafe\.id, px: blocker\.px, py: blocker\.py \}\);\s*\n\s*blocker\.cafe = candidate\.cafe;/);
+  assert.match(canvas, /\} else \{\s*\n\s*blocker\.members\.push\(\{ id: candidate\.cafe\.id, px: candidate\.px, py: candidate\.py \}\);/);
+  assert.doesNotMatch(canvas, /hidden \+= 1/);
   assert.match(canvas, /<i className="map-marker__more" aria-hidden="true">\+\{hidden > 99 \? 99 : hidden\}<\/i>/);
-  assert.match(canvas, /겹쳐 선 \$\{hidden\}곳을 대표합니다/);
+  assert.match(canvas, /겹쳐 선 \$\{hidden\}곳과 함께 열립니다/);
   assert.match(css, /\.map-marker__more \{[^}]*font-family: var\(--font-mono\);/s);
 
   // 해시값을 그대로 차례로 쓰면 몰린 구간에서 우르르 쏟아집니다. 줄을 세운 뒤
@@ -1302,7 +1305,7 @@ test("지도는 보이는 칸만 그리고, 한 프레임에 한 번만 다시 �
   // 검색어 한 글자마다 지도가 딸려 오지 않게 한 번 끊습니다.
   assert.match(surface, /export const MapSurface = memo\(function MapSurface/);
   // memo 는 넘겨주는 손잡이가 렌더마다 새로 만들어지지 않아야 뜻이 있습니다.
-  assert.match(page, /const openCafe = useCallback\(\(id: string\) => \{/);
+  assert.match(page, /const openCafe = useCallback\(\(id: string, members\?: string\[\]\) => \{/);
 });
 
 test("두 손가락으로 오므리고 벌려 배율을 바꾼다", async () => {
@@ -1464,7 +1467,7 @@ test("밀어 치워 둔 영수증은 이름 한 줄로 남고, 위로 밀면 다
   assert.match(page, /<button\s*\n\s*className="dock__peek"[\s\S]*?<span>\{displayedCafe\.name\}<\/span>/);
   assert.match(page, /onClick=\{restoreSheet\}/);
   // 시계는 "방금까지 보던 것", 화살표는 "올릴 수 있다" — 서로 다른 것을 말합니다.
-  assert.match(page, /<History size=\{ICON\.sm\} aria-hidden="true" \/>\s*\n\s*<span>\{displayedCafe\.name\}<\/span>\s*\n\s*<ChevronUp/);
+  assert.match(page, /<History size=\{ICON\.sm\} aria-hidden="true" \/>\s*\n\s*<span>\{displayedCafe\.name\}<\/span>\s*\n[^\n]*activeStack[^\n]*\n\s*<ChevronUp/);
 
   // 안내는 내린 직후에만 잠깐 뜹니다. 상시 띄워 두면 두 번째부터는 읽지 않는
   // 글이 자리만 차지합니다. 켜고 끄는 상태를 따로 들지 않고 CSS 가 맡습니다.
@@ -1548,4 +1551,116 @@ test("문서가 코드와 같은 값을 적고 있다", async () => {
   assert.ok(spec.includes("96px 또는 0.4px/ms"), "시트가 넘어가는 값이 명세와 다릅니다");
   assert.match(marks, /export const COLLECTION_LIMIT = 10;/);
   assert.ok(spec.includes("열 칸"), "도감 칸 수가 명세와 다릅니다");
+});
+
+test("뭉친 핀을 누르면 그 자리의 가게가 다 담긴 영수증 뭉치로 펴진다", async () => {
+  const [canvas, page, stack, receipt, pull, css, spec] = await Promise.all(
+    [
+      "../app/components/MapCanvas.tsx",
+      "../app/page.tsx",
+      "../app/components/ReceiptStack.tsx",
+      "../app/components/Receipt.tsx",
+      "../app/useSheetPull.ts",
+      "../app/globals.css",
+      "../docs/03_기능_명세.md",
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8")),
+  );
+
+  // 핀은 대표 하나만 세우지만, 누르면 같이 묶인 가게를 다 넘겨줍니다.
+  assert.match(canvas, /onClick=\{\(\) => onSelect\(cafe\.id, hidden \? members\.map\(\(member\) => member\.id\) : undefined\)\}/);
+  assert.match(canvas, /onSelect: \(id: string, stack\?: string\[\]\) => void;/);
+  // 뭉치는 대표에서 가까운 순입니다.
+  assert.match(canvas, /pin\.members\.sort\(\(a, b\) => Math\.hypot\(a\.px - pin\.px, a\.py - pin\.py\) - Math\.hypot\(b\.px - pin\.px, b\.py - pin\.py\)\)/);
+
+  // 검색·도감·홀로 선 핀은 뭉치를 내려놓습니다.
+  assert.match(page, /setStack\(members\?\.length \? \{ ids: \[id, \.\.\.members\], opened: Date\.now\(\) \} : null\);/);
+  // 지금 보는 가게가 뭉치 안에 있을 때만 뭉치입니다.
+  assert.match(page, /const stackIndex = panel === "receipt" && stack \? stack\.ids\.indexOf\(selectedId\) : -1;/);
+  // 넘길 때마다 기록을 쌓으면 뒤로가기가 넘긴 장을 하나씩 되짚습니다.
+  assert.match(page, /navigate\(`\/c\/\$\{encodeURIComponent\(activeStack\.ids\[next\]\)\}`, true\);/);
+  assert.match(page, /if \(replace\) window\.history\.replaceState\(/);
+  // 끝에서 더 안 넘어갑니다.
+  assert.match(page, /if \(next < 0 \|\| next >= activeStack\.ids\.length\) return;/);
+  // ← → 는 글을 쓰는 중이면 커서 몫입니다.
+  assert.match(page, /if \(event\.key !== "ArrowLeft" && event\.key !== "ArrowRight"\) return;/);
+  assert.match(page, /active instanceof HTMLInputElement \|\| active instanceof HTMLTextAreaElement/);
+  // 영수증은 한 손(receiptFor)으로 만듭니다 — 밑에 깔리는 앞뒤 장도 같은 종이입니다.
+  assert.match(page, /function receiptFor\(cafe: Cafe, at = -1\) \{/);
+  assert.match(page, /renderAt=\{\(id, at\) => receiptFor\(cafes\.find\(\(cafe\) => cafe\.id === id\) \?\? displayedCafe, at\)\}/);
+  assert.match(page, /\) : receiptFor\(displayedCafe\)\}/);
+
+  // 한 장짜리와 뭉치의 첫 장은 같은 크기입니다. 넓은 화면은 도크가 뒤 종이만큼
+  // 넓어지고, 좁은 화면은 영수증이 늘 같은 8px 을 비워 둡니다(한 장이면 책상이 비칩니다).
+  assert.match(page, /"--stack-room": `\$\{sheetsBehind\(activeStack\.ids\.length\) \* 4\}px`/);
+  assert.match(css, /width: min\(calc\(var\(--card-w\) \+ var\(--stack-room, 0px\)\), calc\(100vw - var\(--rail\) \* 2\)\);/);
+  assert.match(css, /\.dock__scroll > \.receipt \{\s*\n\s*min-height: calc\(100% - 8px\);\s*\n\s*margin: 0 8px 8px 0;/);
+  assert.match(css, /\.receipt-stack \{\s*\n\s*--room: 8px;/);
+  // 안내는 펼 때마다 한 번 — 펼친 시각이 key 입니다. 넘길 때마다 도는 건 아닙니다.
+  assert.match(page, /<p key=\{activeStack\.opened\} className="dock__stack-hint" aria-hidden="true">/);
+  assert.match(page, /<span className="for-touch">좌우로 밀어 넘겨 보기<\/span>/);
+  assert.match(page, /<span className="for-pointer">좌우 방향키로 넘겨 보기<\/span>/);
+  assert.match(css, /\.dock__stack-hint \{[^}]*animation: stack-hint 1900ms/s);
+  // 손가락인지 마우스인지는 화면 폭이 아니라 가리키는 것으로 가릅니다.
+  assert.match(css, /@media \(pointer: coarse\) \{[^}]*\.dock__stack-hint \.for-touch \{ display: inline; \}/s);
+  assert.match(css, /@media \(pointer: coarse\) \{[\s\S]*?\.receipt__flip \{ display: none; \}/);
+
+  // 머리의 "2 / 5" 와 ‹ › 단추. 끝에서는 잠깁니다.
+  assert.match(receipt, /stack\?: \{ index: number; total: number; onPrev: \(\) => void; onNext: \(\) => void \};/);
+  assert.match(receipt, /<span className="tabular" aria-hidden="true">\{stack\.index \+ 1\} \/ \{stack\.total\}<\/span>/);
+  assert.match(receipt, /disabled=\{stack\.index === 0\} aria-label="앞 장"/);
+  assert.match(receipt, /disabled=\{stack\.index === stack\.total - 1\} aria-label="다음 장"/);
+
+  // 뒤에 비치는 종이는 많아야 두 장. 도크도 같은 셈으로 넓어집니다.
+  assert.match(stack, /export function sheetsBehind\(total: number\) \{\s*\n\s*return Math\.min\(Math\.max\(total - 1, 0\), 2\);/);
+  assert.match(css, /\.receipt-stack \{[^}]*--room: calc\(var\(--behind\) \* var\(--step\)\);[^}]*padding: 0 var\(--room\) var\(--room\) 0;/s);
+
+  // 넘길 장은 미리 밑에 깔려 있습니다 — 위 장이 비켜 가면 이미 거기 있습니다.
+  // 예전에는 위 장이 다 빠져나간 뒤에야 다음 장을 만들어, 3분의 1초 동안 빈 화면이었습니다.
+  assert.match(stack, /const shown = \[\.\.\.new Set\(\[index - 1, index, index \+ 1, seen\.leaving \?\? index\]\)\]/);
+  // 늘 차례대로 그립니다 — 요소가 자리를 옮기면 진행 중인 움직임이 끊깁니다.
+  assert.match(stack, /\.sort\(\(a, b\) => a - b\);/);
+  assert.match(stack, /key=\{ids\[at\]\}/);
+  // 밑에 깔린 장은 보이기만 하고 만질 수 없습니다.
+  assert.match(stack, /inert=\{slot !== "face"\}/);
+  // 깔린 장은 위 장 크기로 자르되 clip 으로 — hidden 이면 그 장의 머리가 위에 안 붙습니다.
+  assert.match(css, /\.receipt-stack__card:not\(\[data-slot="face"\]\) \{[^}]*overflow: clip;/s);
+  assert.match(css, /\.receipt-stack\[data-toward="next"\] \.receipt-stack__card\[data-slot="next"\]/);
+  // 좁은 화면에서는 깔린 장도 화면 끝까지 채웁니다 — 올라오는 순간 늘어나지 않게.
+  assert.match(css, /\.receipt-stack__card \{\s*\n\s*display: flex;\s*\n\s*\}/);
+  assert.match(css, /\.receipt-stack \{[^}]*touch-action: pan-y;/s);
+
+  // 방향은 처음 몇 px 에서 한 번 정하고, 시트를 당기는 쪽과 같은 값을 씁니다.
+  assert.match(pull, /export const AXIS_LOCK_PX = 8;/);
+  assert.match(stack, /import \{ AXIS_LOCK_PX \} from "\.\.\/useSheetPull";/);
+  assert.match(stack, /axis = Math\.abs\(rawX\) > Math\.abs\(rawY\) \? "x" : "y";/);
+  assert.match(pull, /if \(Math\.abs\(dx\) > AXIS_LOCK_PX && Math\.abs\(dx\) > Math\.abs\(dy\)\) \{\s*\n\s*sideways = true;/);
+  // 넘길 장이 없는 쪽으로는 덜 따라옵니다.
+  assert.match(stack, /dx = canGo\(toward\) \? rawX : rawX \* EDGE_GIVE;/);
+  // 트랙패드 관성은 한 장으로 칩니다.
+  assert.match(stack, /const WHEEL_QUIET_MS = 260;/);
+  assert.match(stack, /if \(wheelLocked\) return;/);
+
+  // 끄는 만큼 기울고, 밑 장은 작게 깔렸다가 비켜 간 만큼 올라옵니다.
+  assert.match(stack, /const TILT_DEG = 5;/);
+  assert.match(stack, /const UNDER_SCALE = 0\.965;/);
+  // 덜 끌고 놓으면 살짝 지나쳤다 돌아옵니다(반동).
+  assert.match(stack, /transform \$\{SPRING_MS\}ms var\(--ease-spring\)/);
+  assert.match(css, /--ease-spring: cubic-bezier\(0\.34, 1\.56, 0\.64, 1\);/);
+  // 넘어가면 위 장은 끌던 자리·기울기에서 이어서 날아갑니다. 다 날아간 자리에 붙들어
+  // 두어야(forwards) 내려앉기 전 한 프레임 동안 새 장을 덮지 않습니다.
+  assert.match(stack, /face\.style\.setProperty\("--from-x", `\$\{dx\}px`\);/);
+  assert.match(css, /animation: stack-leave 260ms cubic-bezier\(0\.3, 0\.55, 0\.4, 1\) forwards;/);
+  assert.match(css, /from \{\s*\n\s*transform: translate3d\(var\(--from-x, 0px\), 0, 0\) rotate\(var\(--from-rot, 0deg\)\);/);
+  // 올라온 장은 제 크기를 조금 지나쳤다 돌아옵니다. 곡선 하나로 튕기면 넘치는 양이
+  // 움직인 거리에 비례해 1.0016 — 안 보입니다. 지나치는 자리를 장면으로 박아 둡니다.
+  assert.match(css, /55% \{\s*\n\s*transform: scale\(1\.016\);/);
+  // 채움을 두면 이 장을 다시 끌 때 종이가 손을 안 따라옵니다.
+  assert.match(css, /animation: stack-arrive 440ms ease-out;/);
+  assert.doesNotMatch(css, /animation: stack-arrive [^;]*(both|forwards)/);
+  // 튕기는 중에 다시 잡으면 튕김을 끝냅니다.
+  assert.match(stack, /animation\.animationName === "stack-arrive"\) animation\.finish\(\);/);
+  // 예전 미끄러져 들어오기는 없습니다.
+  assert.doesNotMatch(css, /stack-in\b|receipt-stack__face/);
+
+  assert.ok(spec.includes("영수증 뭉치"), "영수증 뭉치가 명세에 없습니다");
 });

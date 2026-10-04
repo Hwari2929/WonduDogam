@@ -164,6 +164,8 @@
   );
 
   --ease-paper: cubic-bezier(0.2, 0.86, 0.3, 1);
+  /* 제자리를 조금 지나쳤다 돌아오는 곡선. 손에서 놓인 종이의 반동입니다. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ══ 2. 바탕 ═══════════════════════════════════════════════════════ */
@@ -971,7 +973,9 @@ a:focus-visible,
   z-index: 25;
   top: var(--dock-top);
   right: var(--dock-right);
-  width: var(--card-w);
+  /* 뭉치의 뒤에 비치는 종이만큼(--stack-room, page.tsx) 넓어집니다. 앞 장을 줄여
+     자리를 내면 한 장짜리 영수증보다 뭉치의 첫 장이 작아져, 같은 종이가 둘이 됩니다. */
+  width: min(calc(var(--card-w) + var(--stack-room, 0px)), calc(100vw - var(--rail) * 2));
   /* 아래끝은 지도 연장(축척·확대축소) 몫으로 비웁니다. 종이는 안에서 스크롤되지만,
      닿지 않는 단추는 없는 단추라 그쪽을 먼저 지킵니다. */
   max-height: calc(100svh - var(--dock-top) - 104px);
@@ -1054,6 +1058,185 @@ a:focus-visible,
   color: var(--ink-faint);
   font-size: var(--t-label);
   word-break: keep-all;
+}
+
+/* ── 영수증 뭉치 ──
+   한 핀에 여럿이 묶여 있었을 때입니다. 뒤에 어긋나 비치는 종이로 뭉치라는 걸,
+   머리의 "2 / 5" 로 몇 번째 장인지를 압니다. */
+
+/* 몇 번째 장인가. 값이라 모노이고, 이름보다 한 단 작습니다 — 이름을 가리면 안
+   되고, 그렇다고 못 찾을 만큼 숨으면 넘길 수 있다는 걸 모릅니다. */
+.receipt__count {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: -4px 0 6px -6px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--ls-mono);
+}
+.receipt__count > span {
+  padding: 0 4px;
+}
+.receipt__flip {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.receipt__flip:hover:not(:disabled),
+.receipt__flip:focus-visible {
+  border-color: var(--rule);
+}
+.receipt__flip:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/*
+ * 뒤에 비치는 종이. 오른쪽 아래로 4px 씩 어긋난 종이가 많아야 두 장입니다 —
+ * 다섯 장이든 스무 장이든 "뭉치"라는 것만 전하면 되고, 몇 장인지는 숫자가 말합니다.
+ *
+ * 도크가 안쪽을 잘라 내므로(overflow: hidden) 종이가 밖으로 삐져나갈 수는 없습니다.
+ * 대신 앞 장이 그만큼 자리를 내줍니다. 내주는 폭은 뭉치 안에서 늘 같아야 합니다 —
+ * 장마다 폭이 바뀌면 넘길 때마다 줄바꿈이 달라져 글이 출렁입니다.
+ */
+.receipt-stack {
+  --step: 4px;
+  --room: calc(var(--behind) * var(--step));
+  position: relative;
+  padding: 0 var(--room) var(--room) 0;
+  /* 세로는 브라우저가 굴리고, 가로만 넘기는 손짓이 받습니다. */
+  touch-action: pan-y;
+}
+.receipt-stack__sheet {
+  position: absolute;
+  top: calc(var(--depth) * var(--step));
+  left: calc(var(--depth) * var(--step));
+  right: calc((var(--behind) - var(--depth)) * var(--step));
+  bottom: calc((var(--behind) - var(--depth)) * var(--step));
+  border: 1px solid var(--rule);
+  /* 뒤로 갈수록 한 겹씩 그늘이 집니다. 같은 종이색이면 테두리만 겹쳐 보여, 종이가
+     아니라 선 두 줄로 읽힙니다. */
+  background: color-mix(in srgb, var(--paper) calc(100% - var(--depth) * 4%), var(--ink-faint));
+  pointer-events: none;
+}
+
+/*
+ * 장 한 장. 지금 장은 제자리(흐름 안)에 앉아 뭉치의 높이를 정하고, 앞뒤 장은 그
+ * 밑에 같은 크기로 깔립니다. 깔린 장이 더 길어도 위 장의 크기로 잘라 둡니다 —
+ * 안 자르면 위 장 아래로 삐져나옵니다. 자르기는 clip 이어야 합니다: hidden 으로
+ * 자르면 그 장이 따로 스크롤 상자가 되어, 깔린 장의 머리가 맨 위에 붙지 않습니다.
+ *
+ * 끌 때 기우는 축은 종이 아래쪽입니다. 메모 패드에서 한 장을 뜯어 가는 손처럼,
+ * 위가 더 크게 돌아갑니다.
+ */
+.receipt-stack__card {
+  position: relative;
+  z-index: 3;
+  transform-origin: 50% 85%;
+}
+.receipt-stack__card:not([data-slot="face"]) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: var(--room);
+  bottom: var(--room);
+  z-index: 1;
+  overflow: clip;
+}
+/* 끄는 쪽의 밑 장이 위로 올라와, 위 장이 비켜 간 자리에 보입니다. */
+.receipt-stack[data-toward="next"] .receipt-stack__card[data-slot="next"],
+.receipt-stack[data-toward="prev"] .receipt-stack__card[data-slot="prev"] {
+  z-index: 2;
+}
+
+/* 비켜 가는 장. 끌던 자리·기울기(--from-*)에서 이어서 날아갑니다 — 단추나 키로
+   넘겼으면 제자리에서 출발합니다. 다 날아간 뒤에는 그 자리에 붙들어 둡니다
+   (forwards): 놓아 버리면 밑으로 내려앉기 전 한 프레임 동안 원래 자리에 돌아와
+   새 장을 덮습니다. */
+.receipt-stack__card[data-slot="leaving"] {
+  z-index: 4;
+  pointer-events: none;
+  animation: stack-leave 260ms cubic-bezier(0.3, 0.55, 0.4, 1) forwards;
+}
+.receipt-stack__card.to-left { --out: -1; }
+.receipt-stack__card.to-right { --out: 1; }
+@keyframes stack-leave {
+  from {
+    transform: translate3d(var(--from-x, 0px), 0, 0) rotate(var(--from-rot, 0deg));
+  }
+  to {
+    transform: translate3d(calc(var(--out) * 118%), 14px, 0) rotate(calc(var(--out) * 11deg));
+  }
+}
+
+/* 올라온 장은 살짝 튕기며 자리를 잡습니다 — 끌어 올라온 크기(--from-scale)에서
+   출발해 제 크기를 조금 지나쳤다 돌아옵니다. 채움(fill)은 두지 않습니다: 끝난
+   뒤에도 마지막 장면을 붙들고 있으면 인라인 자리보다 앞서서, 이 장을 다시 끌 때
+   종이가 손을 안 따라옵니다. 끝 장면이 원래 자리와 같으니 붙들 이유도 없습니다. */
+.receipt-stack__card.is-arriving {
+  animation: stack-arrive 440ms ease-out;
+}
+/* 곡선 하나(cubic-bezier 의 넘침)로 튕기게 하면 넘치는 양이 움직인 거리에 비례해,
+   0.98 에서 1 로 오는 장은 1.0016 까지밖에 안 넘칩니다 — 눈에 안 보입니다.
+   지나치는 자리를 장면으로 박아 둡니다. */
+@keyframes stack-arrive {
+  0% {
+    transform: scale(var(--from-scale, 0.965));
+  }
+  55% {
+    transform: scale(1.016);
+  }
+  80% {
+    transform: scale(0.996);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* 넘겨 보라는 말. 펼 때 한 번 떴다가 사라집니다(page.tsx 가 펼친 시각을 key 로
+   둡니다). 도크 안쪽 아래, 넘기는 손이 닿는 그 종이 위에서 말합니다. */
+.dock__stack-hint {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  /* 종이 아래 여백(절취선 자리)에 앉습니다. 더 올리면 넓은 화면에서 영수증이 짧아
+     "상세 보기" 단추를 2초 가까이 덮습니다. */
+  bottom: 6px;
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: stack-hint 1900ms var(--ease-paper) both;
+}
+@keyframes stack-hint {
+  0% { opacity: 0; transform: translate(-50%, 5px); }
+  16%, 64% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 0); }
+}
+/* 손가락 화면에서는 밀어 넘기고, 마우스 화면에서는 단추와 ← → 로 넘깁니다.
+   화면 폭이 아니라 무엇으로 가리키는지로 가릅니다 — 넓은 태블릿도 손가락입니다. */
+.dock__stack-hint .for-touch { display: none; }
+@media (pointer: coarse) {
+  .dock__stack-hint .for-touch { display: inline; }
+  .dock__stack-hint .for-pointer { display: none; }
+  .receipt__flip { display: none; }
+  .receipt__count { margin-left: 0; }
 }
 
 /* 아이콘만 남은 조작은 뜻을 잃기 쉽습니다. 가리키거나 포커스가 닿으면 이름을
@@ -2015,8 +2198,39 @@ a:focus-visible,
     flex: 1 1 auto;
   }
   .dock__scroll > .receipt,
-  .dock__scroll > .dock__pair {
+  .dock__scroll > .dock__pair,
+  .dock__scroll > .receipt-stack {
     min-height: 100%;
+  }
+  /*
+   * 좁은 화면의 도크는 화면 폭을 다 쓰므로 뭉치 쪽으로 넓어질 수 없습니다. 대신
+   * 영수증이 한 장이든 뭉치든 오른쪽·아래로 늘 같은 8px 을 비워 둡니다 — 뭉치일 때는
+   * 거기 뒤 종이가 비치고, 한 장일 때는 책상이 비칩니다. 장마다 폭이 다르면 같은
+   * 종이가 둘이 됩니다(한 장 390px, 뭉치 382px 이었습니다).
+   */
+  .dock {
+    background: var(--desk);
+  }
+  .dock__scroll > .receipt {
+    min-height: calc(100% - 8px);
+    margin: 0 8px 8px 0;
+  }
+  .receipt-stack {
+    --room: 8px;
+    display: flex;
+  }
+  /* 밑에 깔린 장도 위 장처럼 화면 끝까지 채웁니다. 안 그러면 끄는 동안 드러난
+     장이 내용 길이에서 끊겨 아래로 책상이 비치다가, 위로 올라오는 순간 늘어납니다. */
+  .receipt-stack__card {
+    display: flex;
+  }
+  .receipt-stack__card[data-slot="face"] {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .receipt-stack__card > .receipt {
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .dock.has-preview {
     width: 100%;
@@ -2581,6 +2795,15 @@ a:focus-visible,
   .dock__peek svg {
     flex: none;
     color: var(--ink-faint);
+  }
+  /* 치워 둔 뭉치. 몇 번째 장을 보다 내렸는지까지 남겨 둡니다. */
+  .dock__peek i {
+    flex: none;
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    font-style: normal;
+    letter-spacing: var(--ls-mono);
   }
 
   /*

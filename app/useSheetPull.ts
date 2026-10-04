@@ -21,6 +21,12 @@ const PASS_AT = 96;
 const FLICK = 0.4;
 /** 놓은 뒤 제자리로 돌아가거나 마저 넘어가는 시간(ms). */
 const SETTLE_MS = 200;
+/**
+ * 손짓의 방향을 정하기 전에 기다리는 거리(px). 손가락은 가만있어도 몇 px 은
+ * 흔들리므로, 그 흔들림으로 방향을 정하면 반쯤은 엉뚱한 쪽으로 정해집니다.
+ * 뭉치를 넘기는 쪽(ReceiptStack)과 같은 값을 써야 둘이 한 손짓을 나눠 갖지 않습니다.
+ */
+export const AXIS_LOCK_PX = 8;
 
 export function useSheetPull({ enabled, peeking, onDismiss, onRestore }: {
   enabled: boolean;
@@ -40,6 +46,7 @@ export function useSheetPull({ enabled, peeking, onDismiss, onRestore }: {
     const scroller = dock.querySelector<HTMLElement>(".dock__scroll");
     if (!scroller) return;
 
+    let startX = 0;
     let startY = 0;
     let lastY = 0;
     let lastAt = 0;
@@ -47,13 +54,22 @@ export function useSheetPull({ enabled, peeking, onDismiss, onRestore }: {
     let offset = 0;
     let base = 0;
     let pulling = false;
+    /**
+     * 옆으로 미는 손짓이었는가. 영수증 뭉치는 좌우로 넘기는데, 옆으로 밀다 손이
+     * 살짝 아래로 처지면 종이가 같이 끌려 내려갔습니다. 방향은 처음 몇 px 에서
+     * 한 번 정하고 손을 뗄 때까지 지킵니다 — 넘기는 쪽(ReceiptStack)도 같은 기준을
+     * 씁니다.
+     */
+    let sideways = false;
     let timer = 0;
 
     function begin(event: TouchEvent) {
       if (event.touches.length !== 1) return;
       window.clearTimeout(timer);
       dock.style.transition = "";
+      startX = event.touches[0].clientX;
       startY = lastY = event.touches[0].clientY;
+      sideways = false;
       lastAt = performance.now();
       velocity = 0;
       // 치워 둔 자리에서 시작하면 이미 그만큼 내려가 있습니다.
@@ -66,7 +82,13 @@ export function useSheetPull({ enabled, peeking, onDismiss, onRestore }: {
       if (event.touches.length !== 1) return;
       const y = event.touches[0].clientY;
       const dy = y - startY;
+      if (sideways) return;
       if (!pulling) {
+        const dx = event.touches[0].clientX - startX;
+        if (Math.abs(dx) > AXIS_LOCK_PX && Math.abs(dx) > Math.abs(dy)) {
+          sideways = true;
+          return;
+        }
         // 치워 둔 띠에서는 위로 미는 것만, 펴 놓은 종이에서는 종이가 맨 위에
         // 닿았을 때 아래로 끄는 것만 시트를 움직입니다. 그 전까지는 기준점을
         // 손가락에 붙여 두어, 다 올린 그 자리에서 이어서 끌리게 합니다.

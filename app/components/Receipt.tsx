@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Cafe } from "../data/cafes";
-import { ArrowUpRight, BookmarkCheck, BookmarkPlus, X } from "lucide-react";
+import { ArrowUpRight, BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { ICON } from "../icons";
 import { CURATOR_COLLECTION_ID, colorValue, type Collection } from "../marks";
 import { BeanMark } from "./BeanArt";
@@ -25,6 +25,7 @@ export function Receipt({
   onToggleCollection,
   onClose,
   sheet = false,
+  stack,
 }: {
   cafe: Cafe;
   /** 이 카페에 사용자가 적어 둔 한 줄. 있으면 관리자 소개보다 이게 앞섭니다. */
@@ -43,6 +44,14 @@ export function Receipt({
    * 누르게 하는 것 말고는 하는 일이 없는 단추라 아예 두지 않습니다.
    */
   sheet?: boolean;
+  /**
+   * 영수증 뭉치의 몇 번째 장인가. 한 핀에 여럿이 묶여 있을 때만 옵니다.
+   *
+   * 숫자는 머리에 둡니다 — 좁은 화면에서 머리는 종이 맨 위에 붙어 따라오므로,
+   * 내려 읽는 동안에도 몇 번째 장인지 안 잃습니다. 화살표 단추는 마우스로 오는
+   * 사람 몫이라 손가락 화면에서는 숨깁니다(globals.css) — 거기서는 밀어 넘깁니다.
+   */
+  stack?: { index: number; total: number; onPrev: () => void; onNext: () => void };
 }) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -123,6 +132,17 @@ export function Receipt({
         {/* 상호와 주소 두 줄. 발행 정보·영문명·구분선은 걷어냈습니다 — 카페를 고르는
             사람에게 필요한 건 어디인지와 어떻게 생겼는지뿐입니다. */}
         <header className="receipt__head">
+          {stack ? (
+            <p className="receipt__count" aria-label={`겹친 영수증 ${stack.total}장 중 ${stack.index + 1}번째`}>
+              <button className="receipt__flip" type="button" onClick={stack.onPrev} disabled={stack.index === 0} aria-label="앞 장">
+                <ChevronLeft size={ICON.sm} aria-hidden="true" />
+              </button>
+              <span className="tabular" aria-hidden="true">{stack.index + 1} / {stack.total}</span>
+              <button className="receipt__flip" type="button" onClick={stack.onNext} disabled={stack.index === stack.total - 1} aria-label="다음 장">
+                <ChevronRight size={ICON.sm} aria-hidden="true" />
+              </button>
+            </p>
+          ) : null}
           <h1 className="receipt__name">
             {cafe.name}
             {confirmed ? (
